@@ -1,4 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef } from "react";
+import { Capacitor } from "@capacitor/core";
+import { App as CapacitorApp } from "@capacitor/app";
 import YesodModule from "./YesodModule.jsx";
 import HodModule from "./HodModule.jsx";
 import TipharethModule from "./TipharethModule.jsx";
@@ -485,6 +487,30 @@ export default function App() {
   // Widget customizável — catálogo reduzido em 19/08/2026, ver comentário no WIDGET_DEFS.
   const [widgetConfig, setWidgetConfig] = useState(["finscore","diario"]);
   const [mWidgets,     setMWidgets]     = useState(false);
+
+  // ── BOTÃO/GESTO DE VOLTAR DO ANDROID ──────────────────────────────────────────
+  // Sem isso o Capacitor cai no comportamento padrão (sai do app direto, de qualquer
+  // tela) — bug reportado 22/08/2026 testando o APK no celular. Fecha um sheet do hub
+  // aberto, senão sai do módulo ativo pra árvore (mesma ação do botão "← Árvore" de
+  // cada módulo), senão (raiz do hub, nada aberto) sai do app de verdade. Não alcança
+  // sheets/páginas internas de cada módulo (ver plano) — um back-press de dentro de um
+  // módulo com algo aberto pula direto pra árvore, mas não sai mais do app sem querer.
+  const backBtnStateRef = useRef();
+  backBtnStateRef.current = { activeModule, mDiary, mEditArea, mEditSub, mBackup, mWidgets };
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const handle = CapacitorApp.addListener("backButton", () => {
+      const s = backBtnStateRef.current;
+      if (s.mDiary)      { setMDiary(null);      return; }
+      if (s.mEditArea)   { setMEditArea(null);   return; }
+      if (s.mEditSub)    { setMEditSub(null);    return; }
+      if (s.mBackup)     { setMBackup(false);    return; }
+      if (s.mWidgets)    { setMWidgets(false);   return; }
+      if (s.activeModule){ setActiveModule(null);return; }
+      CapacitorApp.exitApp();
+    });
+    return () => { handle.remove(); };
+  }, []);
 
   // ── COACH DE IA ──────────────────────────────────────────────────────────────
   const [coachMessages, setCoachMessages] = useState([]);

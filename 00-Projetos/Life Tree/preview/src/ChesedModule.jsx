@@ -835,7 +835,7 @@ export default function ChesedModule({ onBack, dark, setDark }) {
           {TABS.map(t=>{
             const a = currentTab===t.id;
             return (
-              <button key={t.id} onClick={()=>{setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}
+              <button key={t.id} onClick={()=>{if(t.id===TABS[0].id){onBack();return;}setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
                 onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
                 <div style={{width:36,height:30,borderRadius:9,background:a?ACCENT+"18":"transparent",border:a?`1px solid ${ACCENT}30`:"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>

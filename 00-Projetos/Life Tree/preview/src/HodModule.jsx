@@ -286,7 +286,7 @@ export default function HodModule({ onBack, dark, setDark }) {
         {TABS.map(t=>{
           const a=tab===t.id&&!page;
           return (
-            <button key={t.id} onClick={()=>{setTab(t.id);setPage(null);}}
+            <button key={t.id} onClick={()=>{if(t.id===TABS[0].id){onBack();return;}setTab(t.id);setPage(null);}}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}>
               <div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
                 <Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/>

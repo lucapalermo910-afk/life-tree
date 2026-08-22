@@ -549,7 +549,7 @@ export default function BinahModule({ onBack, dark, setDark }) {
         {TABS.map(t=>{
           const a = currentTab===t.id;
           return (
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}>
+            <button key={t.id} onClick={()=>t.id===TABS[0].id?onBack():setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}>
               <div style={{width:36,height:30,borderRadius:9,background:a?ACCENT+"18":"transparent",border:a?`1px solid ${ACCENT}30`:"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
                 <Ico n={t.icon} size={14} color={a?ACCENT:C.muted}/>
               </div>
