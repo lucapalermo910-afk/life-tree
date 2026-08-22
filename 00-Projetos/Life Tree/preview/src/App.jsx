@@ -490,6 +490,11 @@ export default function App() {
   const [coachMessages, setCoachMessages] = useState([]);
   const [coachInput,    setCoachInput]    = useState("");
   const [coachLoading,  setCoachLoading]  = useState(false);
+  // Balão da última resposta não tinha como ser fechado manualmente — um erro (ex: "problema
+  // de pagamento" da API) ficava preso na tela até o usuário mandar outra pergunta, o que só
+  // trocava um erro pelo próximo. `coachBubbleClosed` dá um X explícito; reseta pra false toda
+  // vez que uma nova resposta chega (ver sendToCoach/confirmPendingCoachAction/cancelPendingCoachAction).
+  const [coachBubbleClosed, setCoachBubbleClosed] = useState(false);
   // Ação proposta pelo coach, aguardando confirmação explícita do usuário — nenhuma ação
   // (de nenhuma skill) executa no primeiro turno, sempre fica pendente até Confirmar/Cancelar.
   const [pendingCoachAction, setPendingCoachAction] = useState(null); // {action, skillId} | null
@@ -666,6 +671,7 @@ export default function App() {
     }catch(e){
       setCoachMessages(p=>[...p,{role:"assistant",content:"Erro de conexão: "+e.message}]);
     }
+    setCoachBubbleClosed(false);
     setCoachLoading(false);
   };
 
@@ -752,10 +758,12 @@ export default function App() {
     const {action,skillId}=pendingCoachAction;
     const resultText=executeCoachAction(action,skillId);
     setCoachMessages(p=>[...p,{role:"assistant",content:resultText}]);
+    setCoachBubbleClosed(false);
     setPendingCoachAction(null);
   };
   const cancelPendingCoachAction=()=>{
     setCoachMessages(p=>[...p,{role:"assistant",content:"Ok, não fiz nada."}]);
+    setCoachBubbleClosed(false);
     setPendingCoachAction(null);
   };
 
@@ -1060,15 +1068,25 @@ export default function App() {
           <Icon name="back" size={14} color="#fff" style={{transform:"rotate(180deg)"}}/>
         </button>
       </div>
-      {/* balão com a última resposta do coach — some sozinho quando o usuário manda a próxima.
-          Antes desse fix a resposta nunca era exibida em lugar nenhum (só ficava em coachMessages). */}
-      {coachMessages.length>0 && coachMessages[coachMessages.length-1].role==="assistant" && (
+      {/* balão com a última resposta do coach — some sozinho quando o usuário manda a próxima,
+          ou fecha no X. Antes do X existir, uma resposta sem pendingCoachAction (ex: erro de
+          pagamento da API) ficava presa na tela até a próxima pergunta, que só trocava um erro
+          pelo próximo — reportado como bug 22/08/2026. */}
+      {coachMessages.length>0 && coachMessages[coachMessages.length-1].role==="assistant" && !coachBubbleClosed && (
         <div style={{position:"fixed",bottom:116,left:"50%",transform:"translateX(-50%)",
           width:"100%",maxWidth:430,zIndex:149,boxSizing:"border-box",padding:"0 16px"}}>
           <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,
             padding:"9px 12px",fontSize:11,lineHeight:1.5,color:C.text,maxHeight:160,overflowY:"auto",
-            boxShadow:"0 -4px 14px #0006"}}>
-            {coachMessages[coachMessages.length-1].content}
+            boxShadow:"0 -4px 14px #0006",position:"relative"}}>
+            {!pendingCoachAction && (
+              <button onClick={()=>setCoachBubbleClosed(true)} aria-label="Fechar"
+                style={{position:"absolute",top:6,right:6,width:20,height:20,borderRadius:99,
+                  background:C.b1,border:"none",cursor:"pointer",display:"flex",
+                  alignItems:"center",justifyContent:"center",color:C.muted,fontSize:12,lineHeight:1}}>
+                ✕
+              </button>
+            )}
+            <div style={{paddingRight:pendingCoachAction?0:22}}>{coachMessages[coachMessages.length-1].content}</div>
             {pendingCoachAction&&(
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={confirmPendingCoachAction} style={{flex:1,padding:"7px",borderRadius:8,
