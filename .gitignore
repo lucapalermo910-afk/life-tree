@@ -1,0 +1,11 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+
+# stray root-level npm install (not a real package)
+/node_modules
+
+# Obsidian vault local state (not shared content)
+Life Tree/.obsidian/workspace.json
+Life Tree/.obsidian/workspace-mobile.json
