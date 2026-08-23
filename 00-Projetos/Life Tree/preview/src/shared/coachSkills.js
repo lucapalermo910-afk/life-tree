@@ -169,31 +169,8 @@ export function buildYesodContext() {
       return out;
     })(),
 
-    // Cenários "esperado vs. real" persistidos (Yesod → aba Cenários) — cada item referencia
-    // uma caixinha/dívida/investimento; "esperado" é sempre recalculado (reta entre o valor
-    // na criação e a meta na data alvo), "atual" é lido ao vivo da entidade referenciada.
-    cenarios: (() => {
-      const scs = readJSON("lifetree_fin_scenarios", []);
-      return scs.map(sc => {
-        const t0 = new Date(sc.createdAt + "T12:00:00").getTime();
-        const t1 = new Date(sc.targetDate + "T12:00:00").getTime();
-        const tn = new Date(today + "T12:00:00").getTime();
-        const pct = t1 > t0 ? Math.min(1, Math.max(0, (tn - t0) / (t1 - t0))) : 1;
-        const items = sc.items.map(it => {
-          const actual = it.refType === "box" ? (boxes.find(b => b.id === it.refId)?.balance ?? 0)
-            : it.refType === "debt" ? (() => { const d = debts.find(x => x.id === it.refId); return d ? (d.totalParcelas - d.parcelasPagas) * d.valorParcela : 0; })()
-            : (invs.find(i => i.id === it.refId)?.balance ?? 0);
-          const expected = Math.round(it.startValue + (it.targetAmount - it.startValue) * pct);
-          const dir = it.refType === "debt" ? "down" : "up";
-          const onTrack = dir === "down" ? actual <= expected + 1 : actual >= expected - 1;
-          return { label: it.label, atual: Math.round(actual), esperado_hoje: expected, meta: it.targetAmount, no_ritmo: onTrack };
-        });
-        return { nome: sc.name, data_alvo: sc.targetDate, itens: items };
-      });
-    })(),
-
     // Eventos de "e se" ativos na Projeção de Fluxo de Caixa (aba Fluxo → Projeção) — cada
-    // um soma ao mês em que começa (fromM: 0=imediato). Não confundir com "cenarios" acima.
+    // um soma ao mês em que começa (fromM: 0=imediato).
     eventos_projecao: (() => {
       const events = readJSON("lifetree_fin_projevents", []);
       return events.map(e => ({ label: e.label || null, receita_extra_mes: e.deltaIn, reducao_custo_mes: e.deltaOut, a_partir_do_mes: e.fromM }));
@@ -582,11 +559,6 @@ DIVISÃO DE DESPESAS (ex: conta de luz 50/50 com a esposa — pessoas_divisao_de
 45. {"action":"mark_split_settled","match":"texto da descrição do lançamento","settled":true} — settled:false marca como pendente de novo
    - Pra criar um lançamento JÁ dividido, use create_transaction (ação 1) com "splitPerson":"nome" e "splitPercent":50 (% que a outra pessoa paga) — só vale pra saída em conta, não cartão.
 
-CENÁRIOS "ESPERADO VS. REAL" (cenarios no resumo — cada item já traz atual/esperado_hoje/no_ritmo calculados)
-46. {"action":"create_scenario","name":"...","targetDate":"YYYY-MM-DD","items":[{"refType":"box|debt|invest","ref":"nome da caixinha/dívida/investimento já cadastrado","targetAmount":10000}]} — cada item precisa referenciar algo que já existe (não cria caixinha/dívida nova); "targetAmount" é o valor esperado na data alvo (pra dívida, geralmente 0 = quitada)
-47. {"action":"delete_scenario","match":"..."}
-   - Use isso quando o usuário pedir pra "acompanhar" ou "criar um plano pra" bater múltiplas metas com prazo — não só responder de cabeça, registre um cenário de verdade se ele topar.
-
 PROJEÇÃO — EVENTOS DE CENÁRIO "E SE" (eventos_projecao no resumo — soma na Projeção de Fluxo de Caixa, aba Fluxo)
 48. {"action":"add_proj_event","label":"nome opcional, ex: Viagem","deltaIn":0,"deltaOut":0,"fromM":0} — fromM: 0=imediato, 6=em 6 meses, 12=em 1 ano; deltaIn/deltaOut em R$/mês
 49. {"action":"delete_proj_event","match":"label do evento"}
@@ -602,7 +574,6 @@ VOCÊ TAMBÉM ATUA COMO ANALISTA FINANCEIRO (sem precisar de ação — é racio
 - Múltiplos objetivos ao mesmo tempo: some a necessidade mensal de CADA caixinha/meta com prazo, compare a soma com capacidade_poupanca_media_mensal, e diga se cabe tudo junto. Se não couber, ajude a priorizar (qual meta tem prazo mais apertado, qual é mais importante pro usuário) usando o mesmo tipo de alternativa do item acima (máximo possível, renda extra necessária, ou quitar dívida primeiro) em vez de só dizer "não dá".
 - Sempre mostre a conta resumida (os números), não só a conclusão — mas sem virar uma aula, 4-6 linhas no máximo mesmo quando há alternativas.
 - Use alertas_vencimento_7dias pra avisar proativamente quando o usuário perguntar algo tipo "o que vence essa semana" ou "tenho compromisso chegando".
-- Se o usuário perguntar sobre progresso de metas com prazo (dívidas, poupança, investimento) e já existir algo em "cenarios", responda com base nesse cenário persistido (compare "atual" com "esperado_hoje" de cada item, diga se está "no_ritmo") em vez de recalcular do zero — só recalcule do zero se não houver cenário criado ainda, e nesse caso proponha criar um de verdade (ação 46, create_scenario) em vez de só responder de cabeça.
 - Se "divisoes_pendentes" não estiver vazio, avise proativamente quando o usuário perguntar sobre gastos ou saldo — são despesas divididas com alguém que ainda não foram marcadas como acertadas.
 
 REGRAS GERAIS:

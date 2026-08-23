@@ -635,48 +635,6 @@ export function markYesodSplitSettled(a) {
   return { ok: true, message: "'" + found.tx.desc + "' marcado como " + (settled ? "acertado" : "pendente") + "." };
 }
 
-// ── CENÁRIOS "ESPERADO VS. REAL" ─────────────────────────────────────────────────
-function scenarioActualValueFor(refType, refId, boxes, debts, invs) {
-  if (refType === "box") { const b = boxes.find(x => x.id === refId); return b ? b.balance : 0; }
-  if (refType === "debt") { const d = debts.find(x => x.id === refId); return d ? (d.totalParcelas - d.parcelasPagas) * d.valorParcela : 0; }
-  const i = invs.find(x => x.id === refId); return i ? i.balance : 0;
-}
-// a.items: [{refType:"box"|"debt"|"invest", ref:"nome pra resolver", targetAmount}] — itens
-// sem referência resolvível são descartados silenciosamente (não falham o cenário inteiro).
-export function createYesodScenario(a) {
-  const boxes = readJSON("boxes", []);
-  const debts = readJSON("debts", []);
-  const invs = readJSON("invs", []);
-  const scenarios = readJSON("scenarios", []);
-  const name = (a.name || "").trim();
-  if (!name) return { ok: false, message: "Nome do cenário vazio." };
-  if (!a.targetDate) return { ok: false, message: "Data alvo obrigatória (YYYY-MM-DD)." };
-  const rawItems = Array.isArray(a.items) ? a.items : [];
-  const items = [];
-  for (const it of rawItems) {
-    const refType = ["box", "debt", "invest"].includes(it.refType) ? it.refType : "box";
-    const list = refType === "box" ? boxes : refType === "debt" ? debts : invs;
-    const ref = findByField(list, "name", it.ref);
-    if (!ref) continue;
-    items.push({
-      id: "si"+uid(), label: ref.name, refType, refId: ref.id,
-      startValue: scenarioActualValueFor(refType, ref.id, boxes, debts, invs),
-      targetAmount: Number(it.targetAmount) || 0,
-    });
-  }
-  if (!items.length) return { ok: false, message: "Nenhum item válido — cada item precisa referenciar uma caixinha/dívida/investimento que já existe." };
-  writeJSON("scenarios", [...scenarios, { id: "sc"+uid(), name, createdAt: todayS(), targetDate: a.targetDate, items }]);
-  notifyYesodUpdated();
-  return { ok: true, message: "Cenário '" + name + "' criado com " + items.length + " meta(s)." };
-}
-export function deleteYesodScenario(a) {
-  const scenarios = readJSON("scenarios", []);
-  const found = findByField(scenarios, "name", a.match);
-  if (!found) return { ok: false, message: "Não encontrei cenário com '" + a.match + "'." };
-  writeJSON("scenarios", scenarios.filter(s => s.id !== found.id));
-  notifyYesodUpdated();
-  return { ok: true, message: "Cenário '" + found.name + "' removido." };
-}
 
 // ── PROJEÇÃO — eventos de cenário ("e se") ───────────────────────────────────────
 export function addYesodProjEvent(a) {
@@ -770,8 +728,6 @@ export const YESOD_ACTION_HANDLERS = {
   create_split_person: createYesodSplitPerson,
   delete_split_person: deleteYesodSplitPerson,
   mark_split_settled: markYesodSplitSettled,
-  create_scenario: createYesodScenario,
-  delete_scenario: deleteYesodScenario,
   add_proj_event: addYesodProjEvent,
   delete_proj_event: deleteYesodProjEvent,
   clear_proj_events: clearYesodProjEvents,

@@ -76,7 +76,7 @@ const TABS = [{id:"yesod",icon:"treelife",label:"Yesod"},{id:"orc",icon:"alvo",l
 // aqui num controle segmentado (não carrossel de swipe) porque a seção Fluxo já tem seu
 // próprio carrossel interno por swipe (as 6 views) — dois swipes aninhados brigariam pelo
 // mesmo gesto. Ver decisão de reorganização de navegação, 01/08/2026.
-const YESOD_SECTIONS = [{id:"geral",l:"Visão Geral"},{id:"fluxo",l:"Fluxo"},{id:"if",l:"IF"},{id:"cenarios",l:"Cenários"}];
+const YESOD_SECTIONS = [{id:"geral",l:"Visão Geral"},{id:"fluxo",l:"Fluxo"},{id:"if",l:"IF"}];
 // Horizontes da Projeção de Fluxo de Caixa (view "projecao" dentro de Fluxo) — dias<=90
 // usam granularidade diária no gráfico, acima disso vira mensal (ver buildProjSeries).
 const PROJ_HORIZONS = [
@@ -184,7 +184,22 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const [catsOut, setCatsOut] = useState(D_CATS_OUT);
   const [catsIn, setCatsIn] = useState(D_CATS_IN);
   const [recurrings, setRecurrings] = useState([]);
+  // Gráfico realizado+esperado do Fluxo de Caixa (substituiu HISTÓRICO 6 MESES, 23/08/2026).
+  // recurringOverrides: ajuste pontual de UMA ocorrência futura de uma recorrência ("<ym>|<recurringId>" -> valor),
+  // não muda o valor padrão da recorrência. plannedItems: categoria esperada futura sem recorrência por trás.
+  const [recurringOverrides, setRecurringOverrides] = useState({});
+  const [plannedItems, setPlannedItems] = useState([]);
+  const [chartHorizon, setChartHorizon] = useState(3);
+  const [selChartYm, setSelChartYm] = useState(null); // null = mês atual, calculado on-the-fly
+  const [drillOpen, setDrillOpen] = useState(false);
+  const [drillType, setDrillType] = useState("out");
   const [txSearch, setTxSearch] = useState("");
+  // Extrato Geral (aba Orçamento → Ver tudo) — filtros próprios, não reusa txSearch pra não
+  // herdar busca deixada em Fluxo/detalhe de conta ao entrar aqui de outro lugar.
+  const [extSearch, setExtSearch] = useState("");
+  const [extType, setExtType] = useState("todos");
+  const [extCat, setExtCat] = useState("");
+  const [extPeriod, setExtPeriod] = useState("mes");
   const [projHorizonId, setProjHorizonId] = useState("90d");
   // Ajustes de cenário da Projeção — camada só de exibição, nunca escreve em nenhuma
   // entidade real (contas/dívidas/etc). Persistido à parte pra sobreviver a reload sem
@@ -195,10 +210,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // Pessoas com quem despesas recorrentes são divididas (ex: cônjuge) — split fica dentro
   // da própria transação (accs[].txs[].split), não aqui; esta lista só guarda quem existe.
   const [splitPeople, setSplitPeople] = useState([]);
-  // Cenários "esperado vs. real": cada item referencia uma caixinha/dívida/investimento já
-  // existente, guarda o valor no momento da criação (startValue) e a data/valor alvo —
-  // "esperado" é sempre calculado on-the-fly (interpolação linear), nunca persistido de novo.
-  const [scenarios, setScenarios] = useState([]);
   const F = v => setF(x => ({...x,...v}));
   const toast_ = (msg, color) => { setToast({msg,color:color||ACCENT}); setTimeout(()=>setToast(null),2400); };
 
@@ -224,12 +235,13 @@ export default function YesodModule({ onBack, dark, setDark }) {
         const r_catsout=load("fin_catsout"); if(r_catsout) setCatsOut(r_catsout);
         const r_catsin=load("fin_catsin"); if(r_catsin) setCatsIn(r_catsin);
         const r_recurrings=load("fin_recurrings"); if(r_recurrings) setRecurrings(r_recurrings);
+        const r_recoverrides=load("fin_recoverrides"); if(r_recoverrides) setRecurringOverrides(r_recoverrides);
+        const r_plannedItems=load("fin_plannedItems"); if(r_plannedItems) setPlannedItems(r_plannedItems);
         const r_yesodcards=load("fin_yesodcards"); if(r_yesodcards) setYesodCards(r_yesodcards);
         const r_projevents=load("fin_projevents");
         if(r_projevents) setProjEvents(r_projevents);
         else { const r_projscn_old=load("fin_projscenario"); if(r_projscn_old&&((Number(r_projscn_old.deltaIn)||0)!==0||(Number(r_projscn_old.deltaOut)||0)!==0)) setProjEvents([{id:"pe"+uid(),label:"",deltaIn:r_projscn_old.deltaIn||0,deltaOut:r_projscn_old.deltaOut||0,fromM:r_projscn_old.fromM||0}]); }
         const r_splitpeople=load("fin_splitpeople"); if(r_splitpeople) setSplitPeople(r_splitpeople);
-        const r_scenarios=load("fin_scenarios"); if(r_scenarios) setScenarios(r_scenarios);
     } finally { setStorageLoaded(true); }
   };
   useEffect(() => { loadFromStorage(); }, []);
@@ -250,6 +262,8 @@ export default function YesodModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_catsout",JSON.stringify(catsOut));}catch(_){} }, [catsOut,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_catsin",JSON.stringify(catsIn));}catch(_){} }, [catsIn,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_recurrings",JSON.stringify(recurrings));}catch(_){} }, [recurrings,storageLoaded]);
+  useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_recoverrides",JSON.stringify(recurringOverrides));}catch(_){} }, [recurringOverrides,storageLoaded]);
+  useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_plannedItems",JSON.stringify(plannedItems));}catch(_){} }, [plannedItems,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_yesodcards",JSON.stringify(yesodCards));}catch(_){} }, [yesodCards,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_ifgoal",JSON.stringify(ifGoal));}catch(_){} }, [ifGoal,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_ifmonthly",JSON.stringify(ifMonthly));}catch(_){} }, [ifMonthly,storageLoaded]);
@@ -257,7 +271,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_patrimsnaps",JSON.stringify(patrimSnaps));}catch(_){} }, [patrimSnaps,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_projevents",JSON.stringify(projEvents));}catch(_){} }, [projEvents,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_splitpeople",JSON.stringify(splitPeople));}catch(_){} }, [splitPeople,storageLoaded]);
-  useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_scenarios",JSON.stringify(scenarios));}catch(_){} }, [scenarios,storageLoaded]);
   // Migração pra quem já tinha dados salvos antes da Carteira existir — sem isso,
   // usuários antigos ficariam sem destino pra lançamentos em dinheiro até um "novo" seed.
   useEffect(() => { if(!storageLoaded) return; setAccs(p => p.some(a=>a.id===CASH_ACC_ID) ? p : [...p,{id:CASH_ACC_ID,bankId:null,name:"Carteira",isCash:true,txs:[]}]);
@@ -284,7 +297,12 @@ export default function YesodModule({ onBack, dark, setDark }) {
       if (!dates.length) return r;
       generated += dates.length;
       dates.forEach(date => {
-        const base = { desc: r.desc, amount: r.amount, type: r.type, date, cat: r.cat };
+        // Se o usuário ajustou o valor esperado desse mês no drilldown do Fluxo antes da
+        // recorrência disparar (recurringOverrides), o lançamento gerado usa esse valor —
+        // senão o ajuste seria só decoração no gráfico, sem refletir no que é registrado.
+        const overrideKey = date.slice(0,7) + "|" + r.id;
+        const amount = Object.prototype.hasOwnProperty.call(recurringOverrides,overrideKey) ? Number(recurringOverrides[overrideKey]) : r.amount;
+        const base = { desc: r.desc, amount, type: r.type, date, cat: r.cat };
         if (r.method === "credito" && r.cardId) {
           setCards(p => p.map(c => c.id === r.cardId ? { ...c, txs: [...c.txs, { id: "ct"+uid(), ...base, installments: 1 }] } : c));
         } else if (r.accId) {
@@ -313,6 +331,50 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const monthLabel2 = ym => { const [y,m]=ym.split("-"); return MTHS[parseInt(m)-1]+"/"+y.slice(2); };
   const allTxs = () => { const txs=[]; accs.forEach(a=>(a.txs||[]).forEach(t=>txs.push({...t,source:"conta",sourceName:accLabel(a,banks)}))); cards.forEach(c=>(c.txs||[]).forEach(t=>txs.push({...t,type:t.type||"out",source:"cartao",sourceName:c.name}))); return txs; };
   const cashflowMonth = offset => { const ym=getMonthStr(offset); const txs=allTxs().filter(t=>t.date&&t.date.startsWith(ym)); const ins=txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0); const outs=txs.filter(t=>t.type==="out").reduce((s,t)=>s+t.amount,0); return {ym,ins,outs,balance:ins-outs,txs}; };
+
+  // ── GRÁFICO REALIZADO+ESPERADO (Fluxo de Caixa) ───────────────────────────────
+  // ym > mês atual = futuro (projetado a partir de recorrências + plannedItems, editável);
+  // ym <= mês atual = realizado (somatório de lançamentos de verdade, só leitura).
+  const isFutureYm = ym => ym > getMonthStr(0);
+  const monthRange = ym => { const [y,m]=ym.split("-").map(Number); return [ym+"-01", new Date(y,m,0).toISOString().slice(0,10)]; };
+  const recurringAmountFor = (r,ym) => { const key=ym+"|"+r.id; return Object.prototype.hasOwnProperty.call(recurringOverrides,key) ? Number(recurringOverrides[key]) : r.amount; };
+  // Retorna { [categoria]: {amount, fromRecurring, recDesc, recId} } pra um mês futuro —
+  // cada categoria some as ocorrências de recorrências ativas daquele tipo nesse mês (via
+  // stepping de freqAdd, mesmo padrão de projUpcoming) + plannedItems daquele mês/tipo.
+  const futureCategoryTotals = (ym,type) => {
+    const [mStart,mEnd] = monthRange(ym);
+    const totals = {};
+    recurrings.filter(r=>r.active&&r.type===type).forEach(r=>{
+      let d=r.nextDate, guard=0;
+      while (d<=mEnd && guard<60) {
+        if (d>=mStart) {
+          if (!totals[r.cat]) totals[r.cat]={amount:0,fromRecurring:true,recDesc:r.desc,recId:r.id};
+          totals[r.cat].amount += recurringAmountFor(r,ym);
+        }
+        d=freqAdd(d,r.freq); guard++;
+      }
+    });
+    plannedItems.filter(p=>p.ym===ym&&p.type===type).forEach(p=>{
+      if (!totals[p.cat]) totals[p.cat]={amount:0,fromRecurring:false,plannedId:p.id};
+      totals[p.cat].amount += Number(p.amount)||0;
+    });
+    return totals;
+  };
+  // Pra mês realizado: mesma agregação por categoria que "Gastos por Categoria" já fazia,
+  // generalizada pra receita também — direto de allTxs(), sem projeção nenhuma.
+  const pastCategoryTotals = (ym,type) => {
+    const totals = {};
+    allTxs().filter(t=>t.date&&t.date.startsWith(ym)&&(t.type||"out")===type).forEach(t=>{ totals[t.cat]=(totals[t.cat]||0)+t.amount; });
+    return totals;
+  };
+  const monthTotals = ym => {
+    if (!isFutureYm(ym)) {
+      const txs = allTxs().filter(t=>t.date&&t.date.startsWith(ym));
+      return { ins: txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0), outs: txs.filter(t=>t.type==="out").reduce((s,t)=>s+t.amount,0) };
+    }
+    const sumOf = totals => Object.values(totals).reduce((s,v)=>s+v.amount,0);
+    return { ins: sumOf(futureCategoryTotals(ym,"in")), outs: sumOf(futureCategoryTotals(ym,"out")) };
+  };
   const budgetSpend = cat => { const ym=getMonthStr(0); return allTxs().filter(t=>t.type==="out"&&t.cat===cat&&t.date&&t.date.startsWith(ym)).reduce((s,t)=>s+t.amount,0); };
   const retroPatrimData = useMemo(() => {
     const months=[]; for(let i=-5;i<=0;i++){const d=new Date();d.setMonth(d.getMonth()+i);const ym=d.toISOString().slice(0,7);const endDate=ym+"-31";const accTotal=accs.reduce((s,a)=>s+(a.txs||[]).filter(t=>t.date<=endDate).reduce((ss,t)=>t.type==="in"?ss+t.amount:ss-t.amount,0),0);const debtTotal=debts.reduce((s,d2)=>{const paid=Math.min(d2.totalParcelas,Math.round((new Date(endDate)-new Date(d2.startDate+"T00:00:00"))/(1000*60*60*24*30)));return s+Math.max(0,d2.totalParcelas-paid)*d2.valorParcela;},0);months.push({ym,net:accTotal+totBox+totInv-debtTotal});}const snaps=[...patrimSnaps];months.forEach(m=>{if(!snaps.some(s=>s.ym===m.ym))snaps.push(m);});return snaps.sort((a,b)=>a.ym.localeCompare(b.ym));
@@ -484,42 +546,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const delSplitPerson=id=>setSplitPeople(p=>p.filter(x=>x.id!==id));
   const toggleSplitSettled=(accId,txId)=>setAccs(p=>p.map(a=>a.id===accId?{...a,txs:a.txs.map(t=>t.id===txId?{...t,split:{...t.split,settled:!t.split.settled}}:t)}:a));
   const pendingSplits=()=>{const out=[];accs.forEach(a=>(a.txs||[]).forEach(t=>{if(t.split)out.push({...t,accId:a.id,accName:accLabel(a,banks)});}));return out.sort((a,b)=>(a.split.settled===b.split.settled?0:a.split.settled?1:-1)||b.date.localeCompare(a.date));};
-  // ── CENÁRIOS "ESPERADO VS. REAL" ─────────────────────────────────────────────────
-  // Cada item referencia uma entidade viva (caixinha/dívida/investimento) — "atual" é
-  // sempre lido dela, nunca duplicado. "esperado" é interpolação linear entre o valor no
-  // momento da criação (startValue, congelado) e o alvo (targetAmount), na data alvo.
-  const scenarioActualValue=it=>{
-    if(it.refType==="box"){const b=boxes.find(x=>x.id===it.refId);return b?b.balance:0;}
-    if(it.refType==="debt"){const d=debts.find(x=>x.id===it.refId);return d?(d.totalParcelas-d.parcelasPagas)*d.valorParcela:0;}
-    if(it.refType==="invest"){const i=invs.find(x=>x.id===it.refId);return i?i.balance:0;}
-    return 0;
-  };
-  const scenarioExpected=(it,sc)=>{
-    const t0=new Date(sc.createdAt+"T12:00:00").getTime(),t1=new Date(sc.targetDate+"T12:00:00").getTime(),tn=new Date(today+"T12:00:00").getTime();
-    const total=t1-t0;const pct=total>0?Math.min(1,Math.max(0,(tn-t0)/total)):1;
-    return it.startValue+(it.targetAmount-it.startValue)*pct;
-  };
-  const scenarioItemStatus=(it,sc)=>{
-    const actual=scenarioActualValue(it);const expected=scenarioExpected(it,sc);
-    const dir=it.refType==="debt"?"down":"up";
-    const onTrack=dir==="down"?actual<=expected+0.01:actual>=expected-0.01;
-    return{actual,expected,onTrack,dir};
-  };
-  const refOptsFor=type=>type==="box"?boxes.map(b=>({v:b.id,l:b.name})):type==="debt"?debts.map(d=>({v:d.id,l:d.name})):invs.map(i=>({v:i.id,l:i.name}));
-  const scenarioRefDefault=(type,refId)=>{
-    if(type==="box"){const b=boxes.find(x=>x.id===refId);return{label:b?.name||"",targetAmount:b?.goal||0};}
-    if(type==="debt"){const d=debts.find(x=>x.id===refId);return{label:d?.name||"",targetAmount:0};}
-    const i=invs.find(x=>x.id===refId);return{label:i?.name||"",targetAmount:i?.balance||0};
-  };
-  const addScenario=()=>{
-    const items=(f.items||[]).filter(it=>it.refId);
-    if(!f.name||!f.targetDate||!items.length){toast_("Preencha nome, data alvo e pelo menos 1 item","#ef4444");return;}
-    const built=items.map(it=>({id:"si"+uid(),label:it.label,refType:it.refType,refId:it.refId,startValue:scenarioActualValue(it),targetAmount:Number(it.targetAmount)||0}));
-    setScenarios(p=>[...p,{id:"sc"+uid(),name:f.name,createdAt:today,targetDate:f.targetDate,items:built}]);
-    toast_("Cenário criado",ACCENT);close();
-  };
-  const delScenario=id=>{setScenarios(p=>p.filter(s=>s.id!==id));toast_("Cenário removido");};
-
   const launch=()=>{
     if(!f.desc||!f.amount)return;
     // Split só se aplica a saídas em conta (não cartão, não transferência) — cobre o caso
@@ -639,6 +665,51 @@ export default function YesodModule({ onBack, dark, setDark }) {
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><div style={{width:8,height:8,borderRadius:"50%",background:cat.color}}/><span style={{fontSize:15,fontWeight:800,color:cat.color}}>{cat.label}</span></div>
               {cat.sub.map(sub=>{const si=ci.filter(i=>i.subCat===sub.id);if(!si.length)return null;return(<div key={sub.id} style={{marginBottom:14}}><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>{sub.label.toUpperCase()}</div>{si.map(inv=>{const gain=inv.balance-inv.invested;const gp=inv.invested>0?((gain/inv.invested)*100).toFixed(1):"0.0";return(<div key={inv.id} style={{background:C.card,border:"1px solid "+cat.color+"22",borderRadius:14,padding:14,marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontSize:12,fontWeight:700}}>{inv.name}</div><div style={{fontSize:9,color:C.muted}}>{bkOf(inv.bankId)?.name}{inv.rate?" · "+inv.rate:""}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:900,color:cat.color}}>{fmt(inv.balance)}</div><div style={{fontSize:9,fontWeight:600,color:gain>=0?"#10b981":"#ef4444"}}>{gain>=0?"+":""}{fmt(gain)} ({gp}%)</div></div></div><div style={{display:"flex",gap:6}}><Btn sm full={false} outline color={cat.color} style={{flex:1}} onClick={()=>openSh("checkin",{invId:inv.id,balance:inv.balance})}><Ico n="refresh" size={11}/> Atualizar saldo</Btn><button onClick={()=>openSh("editInv",{id:inv.id,name:inv.name,invested:inv.invested,balance:inv.balance,rate:inv.rate,maturity:inv.maturity})} style={{background:C.b1,border:"none",borderRadius:8,width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={()=>delInv(inv.id)} style={{background:C.b1,border:"none",borderRadius:8,width:30,height:30,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="x" size={12} color="#ef4444"/></button></div></div>);})}</div>);})}
               {ci.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum ativo</div>}
+            </div>);
+          }
+
+          if(page.type==="extrato"){
+            // Único lugar que junta lançamentos de todas as contas E cartões, sem limite de
+            // mês — antes só existia por conta (EXTRATO acima) ou o mês selecionado no Fluxo.
+            const q=extSearch.trim().toLowerCase();
+            const nowYm=today.slice(0,7);
+            const monthsBack=ds=>{const[y,m]=ds.slice(0,7).split("-").map(Number);const[ny,nm]=nowYm.split("-").map(Number);return(ny-y)*12+(nm-m);};
+            const list=allTxs().filter(tx=>{
+              if(extType!=="todos"&&tx.type!==extType)return false;
+              if(extCat&&tx.cat!==extCat)return false;
+              const mb=monthsBack(tx.date);
+              if(extPeriod==="mes"&&mb!==0)return false;
+              if(extPeriod==="3m"&&(mb<0||mb>2))return false;
+              if(q&&!(tx.desc+" "+tx.cat).toLowerCase().includes(q))return false;
+              return true;
+            }).sort((a,b)=>b.date.localeCompare(a.date));
+            const total=list.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-tx.amount),0);
+            const allCats=[...new Set([...catsOut,...catsIn])];
+            return(<div style={{animation:"slideUp .3s ease"}}><BackBtn label="Orçamento"/>
+              <div style={{fontSize:15,fontWeight:800,marginBottom:12}}>Extrato Geral</div>
+              <input value={extSearch} onChange={e=>setExtSearch(e.target.value)} placeholder="Buscar por descrição ou categoria..." style={{width:"100%",background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 12px",color:C.text,fontSize:12,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
+              <div style={{display:"flex",gap:6,marginBottom:8}}>
+                {[{v:"todos",l:"Todos"},{v:"in",l:"Receitas"},{v:"out",l:"Custos"}].map(o=>(
+                  <button key={o.v} onClick={()=>setExtType(o.v)} style={{flex:1,padding:"7px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:10,border:"1.5px solid "+(extType===o.v?ACCENT:C.b2),background:extType===o.v?ACCENT+"18":"transparent",color:extType===o.v?ACCENT:C.muted}}>{o.l}</button>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:6,marginBottom:14}}>
+                <select value={extPeriod} onChange={e=>setExtPeriod(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
+                  <option value="mes">Este mês</option>
+                  <option value="3m">Últimos 3 meses</option>
+                  <option value="tudo">Tudo</option>
+                </select>
+                <select value={extCat} onChange={e=>setExtCat(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
+                  <option value="">Todas categorias</option>
+                  {allCats.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 14px",marginBottom:14}}>
+                <span style={{fontSize:9,color:C.muted,fontWeight:600}}>{list.length} lançamento{list.length===1?"":"s"}</span>
+                <span style={{fontSize:14,fontWeight:900,color:total>=0?"#16a34a":"#ef4444"}}>{total>=0?"+":"-"}{fmt(Math.abs(total))}</span>
+              </div>
+              {list.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum lançamento encontrado com esses filtros.</div>}
+              {list.map((tx,i)=>(<div key={tx.id+i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:26,height:26,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={12} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.sourceName} · {tx.date.split("-").reverse().join("/")}</div></div><div style={{fontSize:12,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444",flexShrink:0}}>{tx.type==="in"?"+":"-"}{fmt(tx.amount)}</div></div>))}
             </div>);
           }
           return null;
@@ -778,12 +849,10 @@ export default function YesodModule({ onBack, dark, setDark }) {
 
         {/* ══ YESOD — FLUXO ══ */}
         {!page&&tab==="yesod"&&yesodSection==="fluxo"&&(function FluxoTab(){
-          const VIEWS=["fluxo","categorias","poupanca","dividas-rel","invest-rel","patrimonio","projecao"];
-          const VIEW_LABELS=["Fluxo de Caixa","Gastos por Categoria","Taxa de Poupança","Progresso Dívidas","Rendimento Invest.","Evolução Patrimonial","Projeção"];
+          const VIEWS=["fluxo","poupanca","dividas-rel","invest-rel","patrimonio","projecao"];
+          const VIEW_LABELS=["Fluxo de Caixa","Taxa de Poupança","Progresso Dívidas","Rendimento Invest.","Evolução Patrimonial","Projeção"];
           const vIdx=typeof fluxoView==="number"?fluxoView:0;
-          const cf=cashflowMonth(overMonth);const months6=[-5,-4,-3,-2,-1,0].map(o=>cashflowMonth(overMonth+o));const maxVal=Math.max(...months6.map(m=>Math.max(m.ins,m.outs)),1);
-          const catSpend={};cf.txs.filter(t=>t.type==="out").forEach(t=>{catSpend[t.cat]=(catSpend[t.cat]||0)+t.amount;});const catEntries=Object.entries(catSpend).sort((a,b)=>b[1]-a[1]);const catMax=catEntries.length?catEntries[0][1]:1;
-          const CAT_COLORS=["#10b981","#3b82f6","#8b5cf6","#f59e0b","#ef4444","#06b6d4","#ec4899","#84cc16","#f97316","#64748b"];
+          const cf=cashflowMonth(overMonth);const months6=[-5,-4,-3,-2,-1,0].map(o=>cashflowMonth(overMonth+o));
           const savingsRate=cf.ins>0?Math.max(0,Math.round(((cf.ins-cf.outs)/cf.ins)*100)):0;
           const totDebtNow=debts.reduce((s,d)=>s+(d.totalParcelas-d.parcelasPagas)*d.valorParcela,0);
           const investPerf=invs.map(i=>({name:i.name.length>16?i.name.slice(0,14)+"...":i.name,gain:i.balance-i.invested,pct:i.invested>0?((i.balance-i.invested)/i.invested*100).toFixed(1):"0.0",color:ICAT.find(c=>c.sub.some(s=>s.id===i.subCat))?.color||ACCENT})).sort((a,b)=>b.gain-a.gain);
@@ -793,12 +862,62 @@ export default function YesodModule({ onBack, dark, setDark }) {
                 <span style={{fontSize:13,fontWeight:800}}>{VIEW_LABELS[vIdx]}</span>
                 {vIdx===0&&(<div style={{display:"flex",gap:4,alignItems:"center"}}><button onClick={()=>setOverMonth(m=>m-1)} style={{background:C.b1,border:"none",borderRadius:6,width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="back" size={10} color={C.muted}/></button><span style={{fontSize:10,fontWeight:700,minWidth:44,textAlign:"center"}}>{monthLabel2(cf.ym)}</span><button onClick={()=>setOverMonth(m=>Math.min(0,m+1))} style={{background:C.b1,border:"none",borderRadius:6,width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:overMonth===0?0.3:1}}><Ico n="chev" size={10} color={C.muted}/></button></div>)}
               </div>
+              {vIdx===0&&(function FluxoCaixaView(){
+                const chartYm=selChartYm||getMonthStr(0);
+                const curYm=getMonthStr(0);const[curY,curMo]=curYm.split("-").map(Number);
+                const realizedYms=[];for(let m=1;m<=curMo;m++)realizedYms.push(curY+"-"+String(m).padStart(2,"0"));
+                const futureYms=[];{let y=curY,m=curMo;for(let i=0;i<chartHorizon;i++){m++;if(m>12){m=1;y++;}futureYms.push(y+"-"+String(m).padStart(2,"0"));}}
+                const chartMonths=[...realizedYms,...futureYms].map(ym=>({ym,...monthTotals(ym),future:isFutureYm(ym)}));
+                const chartMax=Math.max(...chartMonths.map(m=>Math.max(m.ins,m.outs)),1);
+                const selTotals=monthTotals(chartYm);const selFuture=isFutureYm(chartYm);const selBalance=selTotals.ins-selTotals.outs;
+                const drillTotals=selFuture?futureCategoryTotals(chartYm,drillType):pastCategoryTotals(chartYm,drillType);
+                const drillRows=selFuture
+                  ?Object.entries(drillTotals).map(([cat,v])=>({cat,...v}))
+                  :Object.entries(drillTotals).sort((a,b)=>b[1]-a[1]).map(([cat,amount])=>({cat,amount,fromRecurring:false}));
+                return(<div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1}}>REALIZADO (YTD) + ESPERADO</span>
+                    <div style={{display:"flex",gap:4}}>{[3,6,12].map(h=>(<button key={h} onClick={()=>setChartHorizon(h)} style={{padding:"4px 9px",borderRadius:99,cursor:"pointer",fontWeight:700,fontSize:9,border:"1.5px solid "+(chartHorizon===h?ACCENT:C.b2),background:chartHorizon===h?ACCENT+"18":"transparent",color:chartHorizon===h?ACCENT:C.muted}}>{h}m</button>))}</div>
+                  </div>
+                  <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:12}}>
+                    <div style={{display:"flex",gap:5,alignItems:"flex-end",height:70,marginBottom:8,overflowX:"auto"}}>{chartMonths.map(m=>(<div key={m.ym} onClick={()=>setSelChartYm(m.ym)} style={{flex:"0 0 26px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer"}}><div style={{width:"100%",display:"flex",gap:2,alignItems:"flex-end",height:56}}><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#16a34a55":"#16a34a",height:Math.max(2,(m.ins/chartMax)*56)+"px"}}/><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#ef444455":"#ef4444",height:Math.max(2,(m.outs/chartMax)*56)+"px"}}/></div><div style={{fontSize:6,color:m.ym===chartYm?ACCENT:(m.future?C.dim:C.muted),fontWeight:m.ym===chartYm?700:400,whiteSpace:"nowrap"}}>{monthLabel2(m.ym)}{m.future?"(E)":""}</div></div>))}</div>
+                    <div style={{display:"flex",gap:12,fontSize:8,color:C.muted}}><span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:2,background:"#16a34a",display:"inline-block"}}/>Realizado</span><span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:2,background:"#16a34a55",display:"inline-block"}}/>Esperado (E)</span></div>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:11,fontWeight:700}}>{monthLabel2(chartYm)}</span>
+                    {selFuture&&<span style={{fontSize:8,fontWeight:700,color:"#f59e0b",background:"#f59e0b18",padding:"3px 8px",borderRadius:99}}>projeção editável</span>}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
+                    <div onClick={()=>{setDrillType("in");setDrillOpen(true);}} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center",cursor:"pointer"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Receitas</div><div style={{fontSize:13,fontWeight:900,color:"#16a34a"}}>{fmt(selTotals.ins)}</div></div>
+                    <div onClick={()=>{setDrillType("out");setDrillOpen(true);}} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center",cursor:"pointer"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Custos</div><div style={{fontSize:13,fontWeight:900,color:"#ef4444"}}>{fmt(selTotals.outs)}</div></div>
+                    <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Saldo</div><div style={{fontSize:13,fontWeight:900,color:selBalance>=0?ACCENT:"#ef4444"}}>{fmt(selBalance)}</div></div>
+                  </div>
+                  <div style={{fontSize:9,color:C.muted,lineHeight:1.6,marginBottom:14}}>Toque numa barra pra selecionar o mês · toque em Receitas/Custos pra ver o detalhe por categoria — editável quando o mês é futuro.</div>
+                  {drillOpen&&(<Sheet title={(drillType==="in"?"Receitas":"Custos")+" · "+monthLabel2(chartYm)} onClose={()=>setDrillOpen(false)} C={C}>
+                    {selFuture&&<div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Mês futuro — valores vêm das recorrências ativas. Edite pra ajustar só {monthLabel2(chartYm)} (a recorrência continua com o valor padrão nos outros meses); some uma categoria nova se precisar.</div>}
+                    {!selFuture&&<div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Mês já realizado — somatório dos lançamentos de verdade por categoria.</div>}
+                    {drillRows.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:12}}>Nenhuma categoria {selFuture?"esperada":"lançada"} ainda.</div>}
+                    {drillRows.map((row,i)=>(<div key={row.cat+i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",background:C.b1,borderRadius:10,marginBottom:7}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:11,fontWeight:700}}>{row.cat}</div>
+                        {row.fromRecurring&&<div style={{fontSize:8,color:C.muted}}>da recorrência "{row.recDesc}"</div>}
+                      </div>
+                      {selFuture?(
+                        row.fromRecurring
+                          ?<input type="number" value={row.amount} onChange={e=>setRecurringOverrides(p=>({...p,[chartYm+"|"+row.recId]:e.target.value}))} style={{width:78,background:C.surface,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>
+                          :<input type="number" value={row.amount} onChange={e=>setPlannedItems(p=>p.map(it=>it.id===row.plannedId?{...it,amount:e.target.value}:it))} style={{width:78,background:C.surface,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>
+                      ):(
+                        <div style={{fontSize:12,fontWeight:800}}>{fmt(row.amount)}</div>
+                      )}
+                    </div>))}
+                    {selFuture&&(<Btn outline sm color={ACCENT} onClick={()=>{
+                      const opts=drillType==="in"?catsIn:catsOut;
+                      setPlannedItems(p=>[...p,{id:"pi"+uid(),ym:chartYm,cat:opts[0],type:drillType,amount:0}]);
+                    }}><Ico n="plus" size={11}/> Adicionar categoria esperada</Btn>)}
+                  </Sheet>)}
+                </div>);
+              })()}
               {vIdx===0&&(<div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>{[{l:"Entradas",v:cf.ins,c:"#16a34a"},{l:"Saídas",v:cf.outs,c:"#ef4444"},{l:"Saldo",v:cf.balance,c:cf.balance>=0?ACCENT:"#ef4444"}].map(s=>(<div key={s.l} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>{s.l}</div><div style={{fontSize:13,fontWeight:900,color:s.c}}>{fmt(s.v)}</div></div>))}</div>
-                <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:12}}>
-                  <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>HISTÓRICO 6 MESES</div>
-                  <div style={{display:"flex",gap:6,alignItems:"flex-end",height:70,marginBottom:8}}>{months6.map(m=>(<div key={m.ym} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{width:"100%",display:"flex",gap:2,alignItems:"flex-end",height:56}}><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.ym===cf.ym?"#16a34a":"#16a34a55",height:Math.max(2,(m.ins/maxVal)*56)+"px"}}/><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.ym===cf.ym?"#ef4444":"#ef444455",height:Math.max(2,(m.outs/maxVal)*56)+"px"}}/></div><div style={{fontSize:7,color:m.ym===cf.ym?ACCENT:C.muted,fontWeight:m.ym===cf.ym?700:400}}>{monthLabel2(m.ym)}</div></div>))}</div>
-                </div>
                 <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>LANÇAMENTOS</div>
                 <input value={txSearch} onChange={e=>setTxSearch(e.target.value)} placeholder="Buscar por descrição ou categoria..." style={{width:"100%",background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 12px",color:C.text,fontSize:12,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
                 {(()=>{const q=txSearch.trim().toLowerCase();const list=[...cf.txs].sort((a,b)=>b.date.localeCompare(a.date)).filter(tx=>!q||(tx.desc+" "+tx.cat).toLowerCase().includes(q));
@@ -808,12 +927,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
                   </>);
                 })()}
               </div>)}
-              {vIdx===1&&(<div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:4}}>MÊS ATUAL — SAÍDAS</div><div style={{fontSize:22,fontWeight:900,color:"#ef4444",marginBottom:12}}>{fmt(cf.outs)}</div>{catEntries.length===0&&<div style={{textAlign:"center",padding:16,color:C.muted,fontSize:12}}>Sem gastos registrados</div>}{catEntries.map(([cat,val],i)=>{const pct=Math.round((val/cf.outs)*100);const color=CAT_COLORS[i%CAT_COLORS.length];return(<div key={cat} style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,fontWeight:600}}>{cat}</span><div style={{display:"flex",gap:8}}><span style={{fontSize:9,color:C.muted}}>{pct}%</span><span style={{fontSize:12,fontWeight:700,color}}>{fmt(val)}</span></div></div><div style={{height:5,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:Math.round((val/catMax)*100)+"%",background:color,borderRadius:99}}/></div></div>);})}</div>)}
-              {vIdx===2&&(<div><div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:18,marginBottom:10,textAlign:"center"}}><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>TAXA DE POUPANÇA</div><div style={{fontSize:52,fontWeight:900,color:savingsRate>=20?ACCENT:savingsRate>=10?"#f59e0b":"#ef4444",lineHeight:1}}>{savingsRate}%</div><div style={{fontSize:11,color:C.muted,marginTop:6}}>Meta saudável: 20%+</div><div style={{height:8,background:C.b1,borderRadius:99,overflow:"hidden",margin:"16px 0 8px"}}><div style={{height:"100%",width:Math.min(100,savingsRate)+"%",background:savingsRate>=20?ACCENT:savingsRate>=10?"#f59e0b":"#ef4444",borderRadius:99}}/></div></div><div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:12}}>HISTÓRICO</div>{months6.slice().reverse().map(m=>{const rate=m.ins>0?Math.max(0,Math.round(((m.ins-m.outs)/m.ins)*100)):0;return(<div key={m.ym} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:10,minWidth:40,color:m.ym===cf.ym?ACCENT:C.text,fontWeight:m.ym===cf.ym?700:400}}>{monthLabel2(m.ym)}</span><div style={{flex:1,height:5,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:Math.min(100,rate)+"%",background:rate>=20?ACCENT:rate>=10?"#f59e0b":"#ef4444",borderRadius:99}}/></div><span style={{fontSize:10,fontWeight:700,color:rate>=20?ACCENT:rate>=10?"#f59e0b":"#ef4444",minWidth:30,textAlign:"right"}}>{rate}%</span></div>);})}</div></div>)}
-              {vIdx===3&&(<div><div style={{background:"linear-gradient(135deg,#ef444418,#ef444406)",border:"1px solid #ef444433",borderRadius:14,padding:16,marginBottom:10,textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:4}}>TOTAL EM DÍVIDAS</div><div style={{fontSize:28,fontWeight:900,color:"#ef4444"}}>{fmt(totDebtNow)}</div></div>{debts.map(d=>{const pct=Math.min(100,Math.round((d.parcelasPagas/d.totalParcelas)*100));return(<div key={d.id} style={{background:C.card,border:"1px solid "+d.color+"22",borderRadius:14,padding:14,marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontSize:12,fontWeight:700}}>{d.name}</div>{d.credor&&<div style={{fontSize:9,color:d.color}}>{d.credor}</div>}</div><div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:900,color:d.color}}>{fmt((d.totalParcelas-d.parcelasPagas)*d.valorParcela)}</div><div style={{fontSize:9,color:C.muted}}>restante</div></div></div><div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:5}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>{d.parcelasPagas}/{d.totalParcelas} ({pct}%)</div></div>);})}{debts.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhuma dívida cadastrada</div>}</div>)}
-              {vIdx===4&&(<div><div style={{background:"linear-gradient(135deg,"+ACCENT+"18,"+ACCENT+"06)",border:"1px solid "+ACCENT+"33",borderRadius:14,padding:16,marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>TOTAL INVESTIDO</div><div style={{fontSize:22,fontWeight:900,color:ACCENT}}>{fmt(invs.reduce((s,i)=>s+i.invested,0))}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>RENDIMENTO</div><div style={{fontSize:22,fontWeight:900,color:invs.reduce((s,i)=>s+(i.balance-i.invested),0)>=0?ACCENT:"#ef4444"}}>{fmt(invs.reduce((s,i)=>s+(i.balance-i.invested),0))}</div></div></div></div>{investPerf.map((inv,i)=>{const positive=inv.gain>=0;return(<div key={i} style={{background:C.card,border:"1px solid "+inv.color+"22",borderRadius:12,padding:"11px 13px",marginBottom:7}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:7}}><div style={{width:6,height:6,borderRadius:"50%",background:inv.color}}/><span style={{fontSize:12,fontWeight:600}}>{inv.name}</span></div><div style={{display:"flex",gap:10}}><span style={{fontSize:9,padding:"2px 7px",borderRadius:99,background:positive?ACCENT+"22":"#ef444422",color:positive?ACCENT:"#ef4444",fontWeight:700}}>{positive?"+":""}{inv.pct}%</span><span style={{fontSize:12,fontWeight:700,color:positive?ACCENT:"#ef4444"}}>{positive?"+":""}{fmt(inv.gain)}</span></div></div></div>);})}</div>)}
-              {vIdx===5&&(function InlineBlock(){const ptsAll=retroPatrim();const pts=ptsAll.slice(-24);const maxP=Math.max(...pts.map(p=>Math.abs(p.net)),1);const nowYm=new Date().toISOString().slice(0,7);const totalGain=pts.length>1?pts[pts.length-1].net-pts[0].net:0;return(<div><div style={{background:"linear-gradient(135deg,"+ACCENT+"18,"+ACCENT+"06)",border:"1px solid "+ACCENT+"33",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>PATRIMÔNIO ATUAL</div><div style={{fontSize:26,fontWeight:900,color:ACCENT}}>{fmt(net)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>VARIAÇÃO</div><div style={{fontSize:16,fontWeight:800,color:totalGain>=0?ACCENT:"#ef4444"}}>{totalGain>=0?"+":""}{fmt(totalGain)}</div></div></div></div><div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:12}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:12}}>EVOLUÇÃO — {pts.length} {pts.length===1?"MÊS":"MESES"}{ptsAll.length>pts.length?" (últimos 24 de "+ptsAll.length+")":""}</div><div style={{display:"flex",gap:6,alignItems:"flex-end",height:90}}>{pts.map((p,i)=>{const h=Math.max(4,(Math.abs(p.net)/maxP)*82);const color=p.net>=0?(p.ym===nowYm?ACCENT:ACCENT+"66"):"#ef4444";return(<div key={p.ym} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{width:"100%",borderRadius:"4px 4px 0 0",background:color,height:h+"px"}}/><div style={{fontSize:7,color:p.ym===nowYm?ACCENT:C.muted,fontWeight:p.ym===nowYm?700:400,whiteSpace:"nowrap"}}>{monthLabel2(p.ym)}</div></div>);})}</div></div><div style={{fontSize:9,color:C.muted,lineHeight:1.6}}>Cada mês é gravado uma vez e não muda mais depois (só o mês corrente segue ao vivo) — histórico cresce mês a mês a partir de {ptsAll[0]?monthLabel2(ptsAll[0].ym):"agora"}.</div></div>);})()}
-              {vIdx===6&&(function InlineBlock(){
+              {vIdx===1&&(<div><div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:18,marginBottom:10,textAlign:"center"}}><div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>TAXA DE POUPANÇA</div><div style={{fontSize:52,fontWeight:900,color:savingsRate>=20?ACCENT:savingsRate>=10?"#f59e0b":"#ef4444",lineHeight:1}}>{savingsRate}%</div><div style={{fontSize:11,color:C.muted,marginTop:6}}>Meta saudável: 20%+</div><div style={{height:8,background:C.b1,borderRadius:99,overflow:"hidden",margin:"16px 0 8px"}}><div style={{height:"100%",width:Math.min(100,savingsRate)+"%",background:savingsRate>=20?ACCENT:savingsRate>=10?"#f59e0b":"#ef4444",borderRadius:99}}/></div></div><div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:12}}>HISTÓRICO</div>{months6.slice().reverse().map(m=>{const rate=m.ins>0?Math.max(0,Math.round(((m.ins-m.outs)/m.ins)*100)):0;return(<div key={m.ym} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:10,minWidth:40,color:m.ym===cf.ym?ACCENT:C.text,fontWeight:m.ym===cf.ym?700:400}}>{monthLabel2(m.ym)}</span><div style={{flex:1,height:5,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:Math.min(100,rate)+"%",background:rate>=20?ACCENT:rate>=10?"#f59e0b":"#ef4444",borderRadius:99}}/></div><span style={{fontSize:10,fontWeight:700,color:rate>=20?ACCENT:rate>=10?"#f59e0b":"#ef4444",minWidth:30,textAlign:"right"}}>{rate}%</span></div>);})}</div></div>)}
+              {vIdx===2&&(<div><div style={{background:"linear-gradient(135deg,#ef444418,#ef444406)",border:"1px solid #ef444433",borderRadius:14,padding:16,marginBottom:10,textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:4}}>TOTAL EM DÍVIDAS</div><div style={{fontSize:28,fontWeight:900,color:"#ef4444"}}>{fmt(totDebtNow)}</div></div>{debts.map(d=>{const pct=Math.min(100,Math.round((d.parcelasPagas/d.totalParcelas)*100));return(<div key={d.id} style={{background:C.card,border:"1px solid "+d.color+"22",borderRadius:14,padding:14,marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><div><div style={{fontSize:12,fontWeight:700}}>{d.name}</div>{d.credor&&<div style={{fontSize:9,color:d.color}}>{d.credor}</div>}</div><div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:900,color:d.color}}>{fmt((d.totalParcelas-d.parcelasPagas)*d.valorParcela)}</div><div style={{fontSize:9,color:C.muted}}>restante</div></div></div><div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:5}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>{d.parcelasPagas}/{d.totalParcelas} ({pct}%)</div></div>);})}{debts.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhuma dívida cadastrada</div>}</div>)}
+              {vIdx===3&&(<div><div style={{background:"linear-gradient(135deg,"+ACCENT+"18,"+ACCENT+"06)",border:"1px solid "+ACCENT+"33",borderRadius:14,padding:16,marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>TOTAL INVESTIDO</div><div style={{fontSize:22,fontWeight:900,color:ACCENT}}>{fmt(invs.reduce((s,i)=>s+i.invested,0))}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>RENDIMENTO</div><div style={{fontSize:22,fontWeight:900,color:invs.reduce((s,i)=>s+(i.balance-i.invested),0)>=0?ACCENT:"#ef4444"}}>{fmt(invs.reduce((s,i)=>s+(i.balance-i.invested),0))}</div></div></div></div>{investPerf.map((inv,i)=>{const positive=inv.gain>=0;return(<div key={i} style={{background:C.card,border:"1px solid "+inv.color+"22",borderRadius:12,padding:"11px 13px",marginBottom:7}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:7}}><div style={{width:6,height:6,borderRadius:"50%",background:inv.color}}/><span style={{fontSize:12,fontWeight:600}}>{inv.name}</span></div><div style={{display:"flex",gap:10}}><span style={{fontSize:9,padding:"2px 7px",borderRadius:99,background:positive?ACCENT+"22":"#ef444422",color:positive?ACCENT:"#ef4444",fontWeight:700}}>{positive?"+":""}{inv.pct}%</span><span style={{fontSize:12,fontWeight:700,color:positive?ACCENT:"#ef4444"}}>{positive?"+":""}{fmt(inv.gain)}</span></div></div></div>);})}</div>)}
+              {vIdx===4&&(function InlineBlock(){const ptsAll=retroPatrim();const pts=ptsAll.slice(-24);const maxP=Math.max(...pts.map(p=>Math.abs(p.net)),1);const nowYm=new Date().toISOString().slice(0,7);const totalGain=pts.length>1?pts[pts.length-1].net-pts[0].net:0;return(<div><div style={{background:"linear-gradient(135deg,"+ACCENT+"18,"+ACCENT+"06)",border:"1px solid "+ACCENT+"33",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>PATRIMÔNIO ATUAL</div><div style={{fontSize:26,fontWeight:900,color:ACCENT}}>{fmt(net)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>VARIAÇÃO</div><div style={{fontSize:16,fontWeight:800,color:totalGain>=0?ACCENT:"#ef4444"}}>{totalGain>=0?"+":""}{fmt(totalGain)}</div></div></div></div><div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:12}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:12}}>EVOLUÇÃO — {pts.length} {pts.length===1?"MÊS":"MESES"}{ptsAll.length>pts.length?" (últimos 24 de "+ptsAll.length+")":""}</div><div style={{display:"flex",gap:6,alignItems:"flex-end",height:90}}>{pts.map((p,i)=>{const h=Math.max(4,(Math.abs(p.net)/maxP)*82);const color=p.net>=0?(p.ym===nowYm?ACCENT:ACCENT+"66"):"#ef4444";return(<div key={p.ym} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{width:"100%",borderRadius:"4px 4px 0 0",background:color,height:h+"px"}}/><div style={{fontSize:7,color:p.ym===nowYm?ACCENT:C.muted,fontWeight:p.ym===nowYm?700:400,whiteSpace:"nowrap"}}>{monthLabel2(p.ym)}</div></div>);})}</div></div><div style={{fontSize:9,color:C.muted,lineHeight:1.6}}>Cada mês é gravado uma vez e não muda mais depois (só o mês corrente segue ao vivo) — histórico cresce mês a mês a partir de {ptsAll[0]?monthLabel2(ptsAll[0].ym):"agora"}.</div></div>);})()}
+              {vIdx===5&&(function InlineBlock(){
                 const horizon=PROJ_HORIZONS.find(h=>h.id===projHorizonId)||PROJ_HORIZONS[2];
                 const scenarioActive=projEvents.length>0;
                 const base=buildProjSeries(horizon.days,null);
@@ -877,24 +995,34 @@ export default function YesodModule({ onBack, dark, setDark }) {
         {/* ══ ORÇAMENTO ══ */}
         {!page&&tab==="orc"&&(
           <div style={{animation:"slideUp .3s ease"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:13,fontWeight:800}}>Orçamento — {monthLabel2(getMonthStr(0))}</span><button onClick={()=>openSh("addBudget",{cat:catsOut[0],limit:0})} style={{background:"none",border:"1px solid "+ACCENT,borderRadius:7,padding:"5px 11px",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10}/> Categoria</button></div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontSize:13,fontWeight:800}}>Orçamento — {monthLabel2(getMonthStr(0))}</span>
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>nav("extrato")} style={{background:"none",border:"1px solid "+C.b2,borderRadius:7,padding:"5px 11px",cursor:"pointer",color:C.muted,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="bank" size={10}/> Extrato</button>
+                <button onClick={()=>openSh("addBudget",{cat:catsOut[0],limit:0})} style={{background:"none",border:"1px solid "+ACCENT,borderRadius:7,padding:"5px 11px",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10}/> Categoria</button>
+              </div>
+            </div>
             {budgets.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum orçamento definido</div>}
             {budgets.map(bg=>{const spent=budgetSpend(bg.cat);const pct=Math.min(100,Math.round((spent/bg.limit)*100));const over=spent>bg.limit;const color=over?"#ef4444":pct>75?"#f59e0b":ACCENT;return(<div key={bg.id} style={{background:C.card,border:"1px solid "+(over?"#ef444433":C.b1),borderRadius:12,padding:"11px 13px",marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:12,fontWeight:600}}>{bg.cat}</span>{over&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"#fee2e2",color:"#ef4444",fontWeight:700}}>ACIMA</span>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,fontWeight:700,color}}>{fmt(spent)}</span><span style={{fontSize:9,color:C.muted}}>/ {fmt(bg.limit)}</span><button onClick={()=>openSh("editBudget",{id:bg.id,cat:bg.cat,limit:bg.limit})} style={{background:C.b1,border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="edit" size={10} color={C.muted}/></button><button onClick={()=>setBudgets(p=>p.filter(x=>x.id!==bg.id))} style={{background:C.b1,border:"none",borderRadius:99,width:18,height:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={9} color={C.muted}/></button></div></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:pct+"%",background:color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>{pct}% usado {over?"— "+fmt(spent-bg.limit)+" acima":"— "+fmt(bg.limit-spent)+" disponível"}</div></div>);})}
           </div>
         )}
 
-        {/* ══ BOLSOS ══ — Contas/Caixinhas/Cartões/Investimentos, com editar/apagar inline
-            (antes só em Config, que agora só guarda o que não tem outro lugar) */}
+        {/* ══ BOLSOS ══ — Contas (com Cartões aninhado dentro)/Caixinhas/Investimentos,
+            com editar/apagar inline (antes só em Config, que agora só guarda o que não
+            tem outro lugar) */}
         {!page&&tab==="bolsos"&&(
           <div style={{animation:"slideUp .3s ease"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Contas</span><div style={{display:"flex",gap:6}}><Btn sm full={false} outline color={C.muted} onClick={()=>openSh("addBank",{name:"",color:ACCENT})}><Ico n="bank" size={11}/> Banco</Btn><Btn sm full={false} onClick={()=>openSh("addAcc",{bankId:banks[0]?.id||"",name:""})}><Ico n="plus" size={11}/> Conta</Btn></div></div>
             {accs.map(ac=>{const bk2=bkOf(ac.bankId);const accColor=ac.isCash?"#f59e0b":(bk2?.color||ACCENT);const bal=accBal(ac);return(<div key={ac.id} onClick={()=>nav("account",ac.id)} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:36,height:36,borderRadius:10,background:accColor+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n={ac.isCash?"wallet":"bank"} size={16} color={accColor}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{ac.isCash?"Carteira":bk2?.name}</div><div style={{fontSize:10,color:C.muted}}>{ac.isCash?"Dinheiro":ac.name}</div></div><div style={{fontSize:16,fontWeight:900,color:bal>=0?ACCENT:"#ef4444"}}>{fmt(bal)}</div>{!ac.isCash&&(<><button onClick={e=>{e.stopPropagation();openSh("editAcc",{id:ac.id,bankId:ac.bankId,name:ac.name});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delAcc(ac.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></>)}</div></div>);})}
+            {/* Cartões aninhado dentro de Contas (reorganização 23/08/2026, ver 04 Bugs
+                Conhecidos) — divisor mais leve que o das outras seções, pra ler como
+                subseção de Contas em vez de seção irmã */}
+            <div style={{height:1,background:C.b1,margin:"12px 0",opacity:.6}}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:11,fontWeight:800,color:C.muted}}>Cartões</span><Btn sm full={false} onClick={()=>openSh("addCard",{bankId:banks[0]?.id||"",name:"",limit:5000,closeDay:10,dueDay:25,color:ACCENT})}><Ico n="plus" size={11}/> Cartão</Btn></div>
+            {cards.map(cd=>{const stmts=getStmts(cd);const debt=stmts.reduce((s,st)=>s+st.total,0);const used=Math.min(100,Math.round((debt/cd.limit)*100));return(<div key={cd.id} onClick={()=>nav("card",cd.id)} style={{background:C.card,border:"1px solid "+cd.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:cd.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="card" size={16} color={cd.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{cd.name}</div><div style={{fontSize:9,color:C.muted}}>Fecha {cd.closeDay} · Vence {cd.dueDay}</div></div><button onClick={e=>{e.stopPropagation();openSh("editCard",{id:cd.id,bankId:cd.bankId,name:cd.name,limit:cd.limit,closeDay:cd.closeDay,dueDay:cd.dueDay,color:cd.color});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delCard(cd.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:5}}><div style={{height:"100%",width:used+"%",background:used>80?"#ef4444":used>50?"#f59e0b":cd.color,borderRadius:99}}/></div><div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted}}><span>Usado: {fmt(debt)}</span><span>Limite: {fmt(cd.limit)}</span></div></div>);})}
             <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Caixinhas</span><Btn sm full={false} onClick={()=>openSh("addBox",{name:"",goal:0,color:ACCENT})}><Ico n="plus" size={11}/> Caixinha</Btn></div>
             {boxes.map(bx=>{const pct=Math.min(100,Math.round((bx.balance/bx.goal)*100));return(<div key={bx.id} onClick={()=>nav("box",bx.id)} style={{background:C.card,border:"1px solid "+bx.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:bx.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="piggy" size={16} color={bx.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{bx.name}</div><div style={{fontSize:9,color:C.muted}}>Meta: {fmt(bx.goal)}{bx.targetDate?" · até "+bx.targetDate.split("-").reverse().join("/"):""}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:15,fontWeight:900,color:bx.color}}>{fmt(bx.balance)}</div><div style={{fontSize:9,color:C.muted}}>{pct}%</div></div><button onClick={e=>{e.stopPropagation();openSh("editBox",{id:bx.id,name:bx.name,goal:bx.goal,targetDate:bx.targetDate||"",color:bx.color});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delBox(bx.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:bx.color,borderRadius:99}}/></div></div>);})}
-            <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Cartões</span><Btn sm full={false} onClick={()=>openSh("addCard",{bankId:banks[0]?.id||"",name:"",limit:5000,closeDay:10,dueDay:25,color:ACCENT})}><Ico n="plus" size={11}/> Cartão</Btn></div>
-            {cards.map(cd=>{const stmts=getStmts(cd);const debt=stmts.reduce((s,st)=>s+st.total,0);const used=Math.min(100,Math.round((debt/cd.limit)*100));return(<div key={cd.id} onClick={()=>nav("card",cd.id)} style={{background:C.card,border:"1px solid "+cd.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:cd.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="card" size={16} color={cd.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{cd.name}</div><div style={{fontSize:9,color:C.muted}}>Fecha {cd.closeDay} · Vence {cd.dueDay}</div></div><button onClick={e=>{e.stopPropagation();openSh("editCard",{id:cd.id,bankId:cd.bankId,name:cd.name,limit:cd.limit,closeDay:cd.closeDay,dueDay:cd.dueDay,color:cd.color});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delCard(cd.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:5}}><div style={{height:"100%",width:used+"%",background:used>80?"#ef4444":used>50?"#f59e0b":cd.color,borderRadius:99}}/></div><div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted}}><span>Usado: {fmt(debt)}</span><span>Limite: {fmt(cd.limit)}</span></div></div>);})}
             <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Investimentos</span><Btn sm full={false} onClick={()=>openSh("addInv",{bankId:banks[0]?.id||"",subCat:"rf_pub",name:"",invested:0,balance:0,rate:"",maturity:""})}><Ico n="plus" size={11}/> Ativo</Btn></div>
             {ICAT.map(cat=>{const ci=invs.filter(i=>cat.sub.some(s=>s.id===i.subCat));const tot=ci.reduce((s,i)=>s+i.balance,0);const gain=tot-ci.reduce((s,i)=>s+i.invested,0);return(<div key={cat.id} onClick={()=>nav("inv",cat.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px",background:C.card,border:"1px solid "+(ci.length?cat.color+"22":C.b1),borderRadius:12,marginBottom:8,cursor:"pointer",opacity:ci.length?1:.5}}><div style={{width:10,height:10,borderRadius:"50%",background:cat.color}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:700}}>{cat.label}</div>{ci.length>0&&<div style={{fontSize:9,color:gain>=0?"#10b981":"#ef4444",fontWeight:600}}>{gain>=0?"+":""}{fmt(gain)}</div>}{ci.length===0&&<div style={{fontSize:9,color:C.muted}}>Nenhum ativo</div>}</div>{ci.length>0&&<div style={{fontSize:14,fontWeight:800,color:cat.color}}>{fmt(tot)}</div>}<Ico n="chev" size={12} color={C.muted}/></div>);})}
@@ -923,49 +1051,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>{[{l:"POUPANÇA MÉDIA/MÊS",v:fmt(avgSaving),sub:"últimos 3 meses",c:avgSaving>0?ACCENT:"#ef4444"},{l:"PROJEÇÃO",v:yearsLeft?yearsLeft+" anos":"—",sub:monthsLeft?monthsLeft+" meses":"sem dados",c:ACCENT},{l:"RENDA MENSAL (4%)",v:fmt(ifNeeded/300),sub:"ao atingir a meta",c:"#f59e0b"},{l:"PATRIMÔNIO ALVO",v:fmt(ifNeeded),sub:"regra dos 4%",c:C.text}].map(s=>(<div key={s.l} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:14,textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:4}}>{s.l}</div><div style={{fontSize:18,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>{s.sub}</div></div>))}</div>
             <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:14}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:12}}>TAXA DE POUPANÇA — 6 MESES</div>{savRates.map(s=>{const color=s.rate>=20?ACCENT:s.rate>=10?"#f59e0b":"#ef4444";return(<div key={s.ym} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:10,minWidth:40,color:s.ym===getMonthStr(0)?ACCENT:C.text,fontWeight:s.ym===getMonthStr(0)?700:400}}>{monthLabel2(s.ym)}</span><div style={{flex:1,height:5,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:Math.min(100,s.rate)+"%",background:color,borderRadius:99}}/></div><span style={{fontSize:10,fontWeight:700,color,minWidth:30,textAlign:"right"}}>{s.rate}%</span></div>);})}</div>
             <Btn outline color={ACCENT} onClick={()=>openSh("editIF",{ifGoal:ifNeeded,ifMonthly})}><Ico n="edit" size={14}/> Editar meta</Btn>
-          </div>);
-        })()}
-
-        {/* ══ YESOD — CENÁRIOS ══ — "esperado vs. real" persistido: cada item referencia uma
-            caixinha/dívida/investimento já existente; "esperado" é sempre recalculado (linear,
-            entre o valor no momento da criação e a data/valor alvo), "atual" é lido ao vivo da
-            entidade — nunca duplica dado, só compara. Resolve a limitação de o Coach só
-            raciocinar isso ao vivo, sem nenhum registro que sobrevivesse à conversa. */}
-        {!page&&tab==="yesod"&&yesodSection==="cenarios"&&(function CenariosTab(){
-          return(<div style={{animation:"slideUp .3s ease"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <span style={{fontSize:13,fontWeight:800}}>Cenários — Esperado vs. Real</span>
-              <Btn sm full={false} onClick={()=>openSh("addScenario",{name:"",targetDate:addM(today,12),items:[{refType:"box",refId:"",label:"",targetAmount:0}]})}><Ico n="plus" size={11}/> Cenário</Btn>
-            </div>
-            {scenarios.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12,lineHeight:1.6}}>Nenhum cenário — crie um pra acompanhar, por exemplo, "quitar dívidas + guardar pra viagem + investir" até uma data, mês a mês.</div>}
-            {scenarios.map(sc=>{
-              const daysLeft=Math.round((new Date(sc.targetDate+"T12:00:00")-new Date(today+"T12:00:00"))/864e5);
-              const allOnTrack=sc.items.every(it=>scenarioItemStatus(it,sc).onTrack);
-              return(<div key={sc.id} style={{background:C.card,border:"1px solid "+(allOnTrack?ACCENT+"33":"#ef444433"),borderRadius:14,padding:14,marginBottom:10}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                  <div><div style={{fontSize:13,fontWeight:700}}>{sc.name}</div><div style={{fontSize:9,color:C.muted}}>até {sc.targetDate.split("-").reverse().join("/")} · {daysLeft>=0?daysLeft+" dias restantes":"prazo vencido"}</div></div>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:9,padding:"3px 8px",borderRadius:99,background:allOnTrack?ACCENT+"22":"#ef444422",color:allOnTrack?ACCENT:"#ef4444",fontWeight:700}}>{allOnTrack?"No ritmo":"Atrasado"}</span>
-                    <button onClick={()=>delScenario(sc.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Ico n="x" size={13} color={C.muted}/></button>
-                  </div>
-                </div>
-                {sc.items.map(it=>{
-                  const st=scenarioItemStatus(it,sc);
-                  const pctActual=it.targetAmount!==it.startValue?Math.min(100,Math.max(0,Math.round(((st.dir==="down"?it.startValue-st.actual:st.actual-it.startValue)/(it.targetAmount-it.startValue))*100))):100;
-                  return(<div key={it.id} style={{marginBottom:10}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                      <span style={{fontSize:11,fontWeight:600}}>{it.label}</span>
-                      <span style={{fontSize:10,color:st.onTrack?ACCENT:"#ef4444",fontWeight:700}}>{fmt(st.actual)} <span style={{color:C.muted,fontWeight:400}}>/ esperado {fmt(st.expected)}</span></span>
-                    </div>
-                    <div style={{height:5,background:C.b1,borderRadius:99,overflow:"hidden",position:"relative"}}>
-                      <div style={{height:"100%",width:pctActual+"%",background:st.onTrack?ACCENT:"#ef4444",borderRadius:99}}/>
-                    </div>
-                    <div style={{fontSize:9,color:C.muted,marginTop:2}}>Meta: {fmt(it.targetAmount)}</div>
-                  </div>);
-                })}
-              </div>);
-            })}
-            <div style={{fontSize:9,color:C.muted,lineHeight:1.6,marginTop:4}}>"Esperado" é uma reta entre o valor no dia em que o cenário foi criado e a meta na data alvo — não é a mesma conta da Projeção de Fluxo de Caixa (aba Fluxo), que projeta saldo em conta a partir da média histórica.</div>
           </div>);
         })()}
 
@@ -1090,29 +1175,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
       {sh==="addCatIn"&&(<Sheet title="Nova Categoria de Entrada" onClose={close} C={C}><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Dividendos" C={C}/><Btn color={ACCENT} onClick={addCatIn}>Adicionar</Btn></Sheet>)}
       {sh==="addSplitPerson"&&(<Sheet title="Nova Pessoa" onClose={close} C={C}><div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.6}}>Pra dividir despesas recorrentes (ex: conta de luz 50/50) e acompanhar o que já foi acertado.</div><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Esposa" C={C}/><Btn color={ACCENT} onClick={addSplitPerson}>Adicionar</Btn></Sheet>)}
 
-      {sh==="addScenario"&&(<Sheet title="Novo Cenário" onClose={close} C={C}>
-        <div style={{fontSize:11,color:C.muted,marginBottom:14,lineHeight:1.6}}>Ex: "quero quitar minhas dívidas, guardar pra uma viagem e investir X até dezembro" — cada meta abaixo referencia algo que você já cadastrou (caixinha, dívida ou investimento).</div>
-        <FI label="Nome do cenário" value={f.name||""} onChange={v=>F({name:v})} placeholder='Ex: "Fechar o ano no azul"' C={C}/>
-        <FI label="Data alvo" value={f.targetDate||addM(today,12)} onChange={v=>F({targetDate:v})} type="date" C={C}/>
-        <div style={{fontSize:10,color:C.muted,margin:"4px 0 8px",fontWeight:700,letterSpacing:.8}}>METAS DESTE CENÁRIO</div>
-        {(f.items||[]).map((it,idx)=>{
-          const opts=refOptsFor(it.refType);
-          return(<div key={idx} style={{background:C.b1,borderRadius:10,padding:10,marginBottom:8}}>
-            <div style={{display:"flex",gap:6,marginBottom:8}}>
-              {[{v:"box",l:"Caixinha"},{v:"debt",l:"Dívida"},{v:"invest",l:"Investimento"}].map(o=>(
-                <button key={o.v} onClick={()=>{const items=[...f.items];items[idx]={refType:o.v,refId:"",label:"",targetAmount:0};F({items});}}
-                  style={{flex:1,padding:"6px 2px",borderRadius:7,cursor:"pointer",fontWeight:600,fontSize:9,border:"1.5px solid "+(it.refType===o.v?ACCENT:C.b2),background:it.refType===o.v?ACCENT+"18":"transparent",color:it.refType===o.v?ACCENT:C.text}}>{o.l}</button>
-              ))}
-            </div>
-            <FS label="" value={it.refId} onChange={v=>{const d=scenarioRefDefault(it.refType,v);const items=[...f.items];items[idx]={...it,refId:v,label:d.label,targetAmount:d.targetAmount};F({items});}} opts={[{v:"",l:"Selecione..."},...opts]} C={C}/>
-            {it.refId&&<FI label={it.refType==="debt"?"Quanto deve restar (R$, 0 = quitada)":"Valor alvo (R$)"} value={it.targetAmount||0} onChange={v=>{const items=[...f.items];items[idx]={...it,targetAmount:v};F({items});}} type="number" min={0} C={C}/>}
-            {f.items.length>1&&<button onClick={()=>F({items:f.items.filter((_,i)=>i!==idx)})} style={{background:"none",border:"none",color:"#ef4444",fontSize:10,fontWeight:700,cursor:"pointer",padding:0}}>Remover</button>}
-          </div>);
-        })}
-        <Btn outline sm color={ACCENT} onClick={()=>F({items:[...(f.items||[]),{refType:"box",refId:"",label:"",targetAmount:0}]})}><Ico n="plus" size={11}/> Adicionar meta</Btn>
-        <div style={{height:10}}/>
-        <Btn color={ACCENT} onClick={addScenario}>Criar Cenário</Btn>
-      </Sheet>)}
       {(sh==="addAcc"||sh==="editAcc")&&(<Sheet title={sh==="addAcc"?"Nova Conta":"Editar Conta"} onClose={close} C={C}><FS label="Banco" value={f.bankId||""} onChange={v=>F({bankId:v})} opts={bankOpts()} C={C}/><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Conta Corrente" C={C}/><Btn onClick={sh==="addAcc"?addAcc:editAcc}>Salvar</Btn></Sheet>)}
       {(sh==="addCard"||sh==="editCard")&&(<Sheet title={sh==="addCard"?"Novo Cartão":"Editar Cartão"} onClose={close} C={C}><FS label="Banco" value={f.bankId||""} onChange={v=>F({bankId:v})} opts={bankOpts()} C={C}/><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Visa Platinum" C={C}/><FI label="Limite (R$)" value={f.limit||5000} onChange={v=>F({limit:v})} type="number" min={0} C={C}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FI label="Dia fechamento" value={f.closeDay||10} onChange={v=>F({closeDay:v})} type="number" min={1} C={C}/><FI label="Dia vencimento" value={f.dueDay||25} onChange={v=>F({dueDay:v})} type="number" min={1} C={C}/></div><ColorPicker value={f.color||ACCENT} onChange={c=>F({color:c})} C={C}/><Btn color={f.color||ACCENT} onClick={sh==="addCard"?addCard:editCard}>Salvar</Btn></Sheet>)}
       {(sh==="addBox"||sh==="editBox")&&(<Sheet title={sh==="addBox"?"Nova Caixinha":"Editar Caixinha"} onClose={close} C={C}><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Viagem Europa" C={C}/><FI label="Meta (R$)" value={f.goal||0} onChange={v=>F({goal:v})} type="number" min={0} C={C}/><FI label="Data alvo (opcional)" value={f.targetDate||""} onChange={v=>F({targetDate:v})} type="date" C={C}/><ColorPicker value={f.color||ACCENT} onChange={c=>F({color:c})} C={C}/><Btn color={f.color||ACCENT} onClick={sh==="addBox"?addBox:editBox}>Salvar</Btn></Sheet>)}
