@@ -170,7 +170,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const [boxes, setBoxes] = useState(D_BOXES);
   const [debts, setDebts] = useState(D_DEBTS);
   const [budgets, setBudgets] = useState([{id:"bg1",cat:"Alimentação",limit:800},{id:"bg2",cat:"Moradia",limit:3000},{id:"bg3",cat:"Transporte",limit:400},{id:"bg4",cat:"Lazer",limit:300},{id:"bg5",cat:"Saude",limit:500}]);
-  const [overMonth, setOverMonth] = useState(0);
+  const overMonth = 0; // Taxa de Poupança sempre olha o mês atual (histórico de 6 meses); sem controle próprio desde 25/08/2026.
   const [fluxoView, setFluxoView] = useState(0);
   const [yesodSection, setYesodSection] = useState("geral"); // geral | if — ver YESOD_SECTIONS
   const [orcSection, setOrcSection] = useState("fluxo"); // fluxo | orc — ver ORC_SECTIONS
@@ -196,13 +196,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const [plannedItems, setPlannedItems] = useState([]);
   const [selChartYm, setSelChartYm] = useState(null); // null = mês atual, calculado on-the-fly
   const [txSearch, setTxSearch] = useState("");
-  // Filtros da lista de lançamentos fundida no Fluxo (era a aba "Extrato Geral" separada,
-  // 23-25/08/2026, voltou a viver dentro do próprio Fluxo). Não reusa txSearch pra não herdar
-  // busca deixada no extrato de uma conta ao entrar aqui de outro lugar.
-  const [extSearch, setExtSearch] = useState("");
+  // Filtro tipo/categoria da lista de lançamentos do Fluxo (era a aba "Extrato Geral"
+  // separada, 23-25/08/2026, voltou a viver dentro do próprio Fluxo — sem busca nem seletor
+  // de período próprios, 25/08/2026: o mês já vem 100% do gráfico).
   const [extType, setExtType] = useState("todos");
   const [extCat, setExtCat] = useState("");
-  const [extPeriod, setExtPeriod] = useState("mes"); // mes (selecionado no gráfico) | 3m | tudo
   const [projHorizonId, setProjHorizonId] = useState("90d");
   // Ajustes de cenário da Projeção — camada só de exibição, nunca escreve em nenhuma
   // entidade real (contas/dívidas/etc). Persistido à parte pra sobreviver a reload sem
@@ -832,8 +830,14 @@ export default function YesodModule({ onBack, dark, setDark }) {
             <div style={{animation:"slideUp .3s ease"}} onTouchStart={e=>{touchXRef.current=e.touches[0].clientX;}} onTouchEnd={e=>{const dx=e.changedTouches[0].clientX-touchXRef.current;if(Math.abs(dx)>40){setFluxoView(v=>dx<0?Math.min(VIEWS.length-1,v+1):Math.max(0,v-1));}}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <span style={{fontSize:13,fontWeight:800}}>{VIEW_LABELS[vIdx]}</span>
-                {vIdx===0&&(<div style={{display:"flex",gap:4,alignItems:"center"}}><button onClick={()=>setOverMonth(m=>m-1)} style={{background:C.b1,border:"none",borderRadius:6,width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="back" size={10} color={C.muted}/></button><span style={{fontSize:10,fontWeight:700,minWidth:44,textAlign:"center"}}>{monthLabel2(cf.ym)}</span><button onClick={()=>setOverMonth(m=>Math.min(0,m+1))} style={{background:C.b1,border:"none",borderRadius:6,width:24,height:24,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:overMonth===0?0.3:1}}><Ico n="chev" size={10} color={C.muted}/></button></div>)}
               </div>
+              {/* Antes tinha um "← Ago/26 →" aqui (overMonth), independente do mês selecionado
+                  no gráfico abaixo (selChartYm) — dava pra ficar com dois meses diferentes
+                  mostrados ao mesmo tempo na tela, um deles sem efeito nenhum visível (bug
+                  reportado 25/08/2026 com screenshot: cabeçalho em "Out/25", gráfico em
+                  "Mar/26"). Removido — a única forma de escolher o mês agora é tocar numa
+                  barra do gráfico; overMonth continua existindo só pra Taxa de Poupança
+                  (histórico de 6 meses), sem controle visível próprio, sempre no mês atual. */}
               {vIdx===0&&(function FluxoCaixaView(){
                 const chartYm=selChartYm||getMonthStr(0);
                 const curYm=getMonthStr(0);const[curY]=curYm.split("-").map(Number);
@@ -849,28 +853,24 @@ export default function YesodModule({ onBack, dark, setDark }) {
 
                 // Lista fundida (era a aba "Extrato", voltou a viver aqui em 25/08/2026 — clicar
                 // num card não pula de tela mais nenhuma, o detalhe aparece embaixo na hora).
-                const q=extSearch.trim().toLowerCase();
+                // Busca e filtro de período saíram em 25/08/2026 — o mês já é 100% escolhido
+                // pelo gráfico, não faz sentido ter um segundo controle de período aqui.
                 const allCats=[...new Set([...catsOut,...catsIn])];
-                const monthsBack=ds=>{const[y,m]=ds.slice(0,7).split("-").map(Number);const[ny,nm]=curYm.split("-").map(Number);return(ny-y)*12+(nm-m);};
-                const showFutureRows=selFuture&&extPeriod==="mes";
                 let list=[];
-                if(!showFutureRows){
+                if(!selFuture){
                   list=allTxs().filter(tx=>{
                     if(extType!=="todos"&&tx.type!==extType)return false;
                     if(extCat&&tx.cat!==extCat)return false;
-                    if(extPeriod==="mes"){ if(!tx.date||!tx.date.startsWith(chartYm))return false; }
-                    else if(extPeriod==="3m"){ const mb=monthsBack(tx.date); if(mb<0||mb>2)return false; }
-                    if(q&&!(tx.desc+" "+tx.cat).toLowerCase().includes(q))return false;
+                    if(!tx.date||!tx.date.startsWith(chartYm))return false;
                     return true;
                   }).sort((a,b)=>b.date.localeCompare(a.date));
                 }
                 const total=list.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-tx.amount),0);
                 let futureRows=[];
                 const futureType=extType==="todos"?"out":extType;
-                if(showFutureRows){
+                if(selFuture){
                   const totals=futureCategoryTotals(chartYm,futureType);
-                  futureRows=Object.entries(totals).map(([cat,v])=>({cat,...v}))
-                    .filter(r=>!extCat||r.cat===extCat).filter(r=>!q||r.cat.toLowerCase().includes(q));
+                  futureRows=Object.entries(totals).map(([cat,v])=>({cat,...v})).filter(r=>!extCat||r.cat===extCat);
                 }
 
                 return(<div>
@@ -889,26 +889,20 @@ export default function YesodModule({ onBack, dark, setDark }) {
                     <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Saldo</div><div style={{fontSize:13,fontWeight:900,color:selBalance>=0?ACCENT:"#ef4444"}}>{fmt(selBalance)}</div></div>
                   </div>
 
-                  <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>LANÇAMENTOS</div>
-                  <input value={extSearch} onChange={e=>setExtSearch(e.target.value)} placeholder="Buscar por descrição ou categoria..." style={{width:"100%",background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 12px",color:C.text,fontSize:12,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
-                  <div style={{display:"flex",gap:6,marginBottom:8}}>
-                    {[{v:"todos",l:"Todos"},{v:"in",l:"Receitas"},{v:"out",l:"Custos"}].map(o=>(
-                      <button key={o.v} onClick={()=>setExtType(o.v)} style={{flex:1,padding:"7px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:10,border:"1.5px solid "+(extType===o.v?ACCENT:C.b2),background:extType===o.v?ACCENT+"18":"transparent",color:extType===o.v?ACCENT:C.muted}}>{o.l}</button>
-                    ))}
-                  </div>
-                  <div style={{display:"flex",gap:6,marginBottom:14}}>
-                    <select value={extPeriod} onChange={e=>setExtPeriod(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
-                      <option value="mes">Mês selecionado</option>
-                      <option value="3m">Últimos 3 meses</option>
-                      <option value="tudo">Tudo</option>
-                    </select>
-                    <select value={extCat} onChange={e=>setExtCat(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>LANÇAMENTOS</span>
+                    <select value={extCat} onChange={e=>setExtCat(e.target.value)} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"5px 8px",color:C.text,fontSize:10,outline:"none"}}>
                       <option value="">Todas categorias</option>
                       {allCats.map(c=><option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
+                  <div style={{display:"flex",gap:6,marginBottom:14}}>
+                    {[{v:"todos",l:"Todos"},{v:"in",l:"Receitas"},{v:"out",l:"Custos"}].map(o=>(
+                      <button key={o.v} onClick={()=>setExtType(o.v)} style={{flex:1,padding:"7px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:10,border:"1.5px solid "+(extType===o.v?ACCENT:C.b2),background:extType===o.v?ACCENT+"18":"transparent",color:extType===o.v?ACCENT:C.muted}}>{o.l}</button>
+                    ))}
+                  </div>
 
-                  {showFutureRows?(<>
+                  {selFuture?(<>
                     <div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Mês futuro — valores vêm das recorrências ativas. Edite pra ajustar só {monthLabel2(chartYm)} (a recorrência continua com o valor padrão nos outros meses); some uma categoria nova se precisar.{extType==="todos"&&" Mostrando Custos esperados — escolha Receitas ou Custos acima pra trocar."}</div>
                     {futureRows.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:12}}>Nenhuma categoria esperada ainda.</div>}
                     {futureRows.map((row,i)=>(<div key={row.cat+i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:7}}>
