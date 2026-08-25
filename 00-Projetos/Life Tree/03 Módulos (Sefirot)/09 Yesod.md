@@ -34,10 +34,10 @@ Saldo de conta é sempre derivado (`accBal`, soma de `txs`), nunca armazenado �
 ## Telas
 Visão rápida do que cada tela mostra e permite fazer — detalhe de implementação de cada uma está em [[#Funcionalidades|Funcionalidades]] abaixo.
 
-- **Yesod → Visão Geral** — única seção da aba desde 25/08/2026 (IF saiu, Metas saiu — sem controle segmentado, é a aba toda) — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo. Botão "Lançar" no header (também aparece em Orçamento → Fluxo desde 25/08/2026).
-- **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Card de progresso da Meta de Independência Financeira (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, editar por valor-alvo ou renda desejada) seguido do checklist "Outras Metas" (livre, criar/concluir com XP/apagar — não só IF, no mesmo espírito de múltiplos objetivos do Hod).
+- **Yesod → Visão Geral** — única seção da aba desde 25/08/2026 (IF saiu, Metas saiu — sem controle segmentado, é a aba toda) — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo. Botão "Registrar" no header (renomeado de "Lançar" em 25/08/2026; também aparece em Orçamento → Fluxo desde a mesma leva).
+- **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Vista colapsada por padrão (segunda leva do dia, 25/08/2026 — a vista cheia tinha destaque demais): mostra só o card de progresso da Meta de Independência Financeira + botão "+ Objetivo"; tocar no card abre o detalhe completo como sub-página (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, taxa de poupança 6 meses, editar meta, e o checklist "Outras Metas" — livre, criar/concluir com XP/apagar, não só IF, no mesmo espírito de múltiplos objetivos do Hod).
 - **Orçamento** — controle segmentado **Fluxo** / **Orçamento** (desde 25/08/2026, Fluxo primeiro por ser o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
-- **Bolsos** — Contas (saldo, editar/apagar inline, tocar → extrato; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento — nested em Contas desde 23/08/2026) · Caixinhas (saldo/meta/%/data alvo, mesmas ações, tocar → depositar/retirar) · Investimentos (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria) · **Dívidas e Financiamentos** (5ª seção desde 25/08/2026, antes aba própria — total em dívidas no topo, lista com progresso, criar/apagar, tocar → editar/registrar parcela paga).
+- **Bolsos** — cada seção com um totalizador compacto no topo (uma linha, cor própria — trocou o card grande de destaque que só "Dívidas" tinha, 25/08/2026): Contas — verde (saldo, editar/apagar inline, tocar → extrato; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** — roxo (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento — nested em Contas desde 23/08/2026) · Caixinhas — azul (saldo/meta/%/data alvo, mesmas ações, tocar → depositar/retirar) · Investimentos — âmbar (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria) · **Dívidas e Financiamentos** — vermelho (5ª seção desde 25/08/2026, antes aba própria — lista com progresso, criar/apagar, tocar → editar/registrar parcela paga).
 - **Config** — Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
 
 ## Funcionalidades
@@ -315,6 +315,34 @@ reorganização. `npm run build`/`eslint` limpos — **32 problemas** (baseline 
 `no-unused-vars` correspondente sumiu — não foi introduzido nenhum problema novo). Rebuild do
 APK debug, cópia pra Downloads, commit + push, changelog aqui — mesmo padrão das levas
 anteriores.
+
+### Registrar, totalizadores compactos em Bolsos, Objetivos colapsado (25/08/2026, leva 3)
+Terceira leva do dia, ajustes finos depois de testar a leva 2:
+
+1. **Botão "Lançar" virou "Registrar"** — no header e dentro do extrato de conta, mesmo
+   comportamento.
+2. **Card "TOTAL EM DÍVIDAS" perdeu destaque** — o usuário achou que um card grande
+   (gradiente, borda grossa, número de 24px) só pra Dívidas não fazia sentido. Virou um
+   totalizador compacto de uma linha (label + valor, borda colorida fina à esquerda —
+   componente `MiniTotal`, ver `YesodModule.jsx`). Todas as outras 4 seções de Bolsos
+   ganharam o mesmo totalizador, cada uma com sua cor: Contas (verde, soma dos saldos),
+   Cartões (roxo, "Total em Faturas" — soma de `totCardDebt`, a mesma fatura em aberto que
+   agora desconta do patrimônio líquido desde a leva 2), Caixinhas (azul, soma dos saldos),
+   Investimentos (âmbar, total investido), Dívidas (vermelho, como antes, só que compacto).
+3. **Aba Objetivos colapsa pro card principal** — a vista cheia (card de IF + grid de stats
+   + taxa de poupança 6 meses + editar meta + checklist Outras Metas) apareceu logo depois
+   da leva 2 e o usuário achou cheia demais por padrão. Virou vista colapsada: só o card de
+   progresso da Meta de IF + botão "+ Objetivo" (cria uma meta livre sem precisar abrir o
+   detalhe). Tocar no card navega pra `page.type==="goalsDetail"`, mesmo padrão de sub-página
+   já usado em conta/cartão/caixinha/investimento/dívida (`nav()`/`BackBtn`) — lá dentro mostra
+   tudo que antes ficava sempre visível.
+
+Testado no navegador: botão "Registrar" nos dois lugares; Bolsos com 5 totalizadores
+compactos e cores diferentes (Contas R$40.415,10 verde, Faturas R$11.845,00 roxo, Caixinhas
+R$12.700,00 azul, Dívidas R$49.800,00 vermelho); Objetivos mostra só o card de IF por padrão,
+tocar nele abre o detalhe completo com "← Objetivos" pra voltar, "+ Objetivo" abre o sheet de
+criar meta direto da vista colapsada. `npm run build`/`eslint` limpos — 32 problemas (mesmo
+baseline da leva 2). Rebuild do APK debug, cópia pra Downloads, commit + push, changelog aqui.
 
 ## Persistência
 Prefixo `lifetree_fin_` — 21 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
