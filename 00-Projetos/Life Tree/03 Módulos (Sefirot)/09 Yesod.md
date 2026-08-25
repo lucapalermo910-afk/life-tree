@@ -408,6 +408,36 @@ tx correspondente em nenhuma conta) — ficou registrado aqui como um lembrete d
 criados antes desse commit podem precisar de correção manual (editar o Saldo atual e/ou
 lançar a diferença manualmente), não foi corrigido automaticamente.
 
+### Barra do gráfico não estoura mais o card; compra parcelada e parcelas de dívida entram no "Esperado" (25/08/2026, leva 5)
+Dois pedidos do usuário no mesmo dia: um ajuste visual (barra grande "parecendo estourar" o
+card do gráfico) e uma auditoria — "todos os lançamentos de contas, caixinhas, investimentos
+e dívidas aparecem no extrato e no fluxo? compra parcelada impacta fluxos futuros? uma dívida
+reflete nos custos? receita recorrente aparece no fluxo?".
+
+1. **Gráfico sem estouro visual**: `height:Math.max(2,(m.ins/chartMax)*56)` já devia ficar
+   sempre ≤56px matematicamente (chartMax é o maior valor entre os meses mostrados), mas sem
+   teto explícito nem `overflow:hidden` no container, qualquer valor bem acima da escala
+   normal do ano (ex: um empréstimo grande recém-creditado) fazia a barra parecer romper o
+   card. Adicionado `Math.min(56,...)` nos dois cálculos de altura (entradas e saídas) +
+   `overflow:hidden` nos dois containers — trava dupla, defensiva.
+2. **Compra parcelada e parcelas de dívida agora entram no "Esperado"**: auditoria encontrou
+   que nenhum dos dois aparecia em mês futuro nenhum do Fluxo — só no mês em que a compra foi
+   feita ou a dívida criada. A projeção "Esperado" só somava recorrências ativas + categorias
+   planejadas manualmente. As funções certas pra isso já existiam
+   (`cardBurdenAtMonth`/`debtBurdenAtMonth`, criadas antes só pra Projeção de Fluxo de Caixa,
+   uma sub-view separada) — `futureCategoryTotals` passou a somar as duas também, como
+   categorias novas "Fatura de Cartão" e "Parcelas de Dívida", só leitura (fatos já
+   conhecidos, diferente de recorrências/planejados que são estimativa editável).
+
+Testado no navegador: compra de R$3.000 em 3x lançada no cartão — mês seguinte mostrou
+"Fatura de Cartão" no Esperado batendo com a parcela devida naquele mês; "Parcelas de Dívida"
+em Set/26 somou R$2.050,00 = R$1.250 (Financiamento Carro) + R$800 (Empréstimo Pessoal),
+exato; total de Custos do mês (R$7.455,00) bateu com a soma de todas as categorias listadas,
+incluindo as duas novas. Confirmado que receita recorrente (Salário) já aparecia certinho no
+Esperado (sem mudança necessária) e que todos os lançamentos ligados a conta das levas
+anteriores (Caixinha, Investimento, Dívida) aparecem certinho no Extrato/Fluxo do mês em que
+aconteceram. `npm run build`/`eslint` limpos — 34 problemas, mesmo baseline de antes.
+
 ## Persistência
 Prefixo `lifetree_fin_` — 22 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
