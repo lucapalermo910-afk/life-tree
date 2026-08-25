@@ -35,9 +35,8 @@ Saldo de conta é sempre derivado (`accBal`, soma de `txs`), nunca armazenado �
 Visão rápida do que cada tela mostra e permite fazer — detalhe de implementação de cada uma está em [[#Funcionalidades|Funcionalidades]] abaixo.
 
 - **Yesod → Visão Geral** — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo · checklist de metas financeiras próprias do módulo.
-- **Yesod → Fluxo** — carrossel de 6 sub-views (swipe ou dots): **Fluxo de Caixa** (gráfico único realizado+esperado com toggle 3/6/12 meses, resumo do mês selecionado com drilldown editável por categoria nos meses futuros — reformulado 23/08/2026, ver seção própria — mais a lista de lançamentos do mês com busca) · Taxa de Poupança (+ histórico 6 meses) · Progresso Dívidas · Rendimento Investimentos · Evolução Patrimonial · Projeção (ver seção própria). ~~Gastos por Categoria~~ removida 23/08/2026 — virou o drilldown por categoria da Fluxo de Caixa, agora cobrindo receita também, não só saída.
-- **Yesod → IF** — progresso da meta (patrimônio atual vs. necessário, regra dos 4%), projeção de anos/meses até atingir com base na poupança média dos últimos 3 meses, renda mensal estimada, editar meta por valor-alvo ou por renda desejada.
-- **Orçamento** — lista por categoria com limite/gasto real/%/alerta "ACIMA" se estourou; criar categoria de orçamento, editar limite, apagar; botão **"Extrato"** abre o Extrato Geral (novo, 23/08/2026 — ver seção própria).
+- **Yesod → IF** — progresso da meta (patrimônio atual vs. necessário, regra dos 4%), projeção de anos/meses até atingir com base na poupança média dos últimos 3 meses, renda mensal estimada, editar meta por valor-alvo ou por renda desejada. (Fluxo saiu do controle segmentado do Yesod em 25/08/2026 — ver Orçamento abaixo — sobra só Visão Geral | IF.)
+- **Orçamento** — ganhou controle segmentado próprio em 25/08/2026 (mesmo estilo de pills do Yesod): **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar) · **Extrato** (Extrato Geral, ver seção própria — antes era sub-página, agora é pill) · **Fluxo** (o carrossel de 6 sub-views que antes vivia na aba Yesod: Fluxo de Caixa — gráfico realizado+esperado, ver seção própria — Taxa de Poupança, Progresso Dívidas, Rendimento Investimentos, Evolução Patrimonial, Projeção).
 - **Bolsos** — Contas (saldo, criar com banco novo direto daqui, editar/apagar inline, tocar → extrato) **com Cartões aninhado dentro** (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento — nested em Contas desde 23/08/2026, antes era seção irmã) · Caixinhas (saldo/meta/%/data alvo, mesmas ações, tocar → depositar/retirar) · Investimentos (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria).
 - **Dívidas** — total em dívidas no topo; lista com progresso (%, parcelas pagas/total); criar, apagar, tocar → editar / registrar parcela paga.
 - **Config** — Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
@@ -218,6 +217,32 @@ A antiga sub-view "Gastos por Categoria" (só saída, só mês corrente) foi rem
 **Extrato Geral** (novo, botão "Extrato" na aba Orçamento): página cheia com todos os lançamentos de todas as contas e cartões (`allTxs()`, já existia, só não tinha tela própria) — antes só dava pra ver por conta individual ou o mês selecionado no Fluxo. Filtros: busca por descrição/categoria, tipo (Todos/Receitas/Custos), categoria, período (Este mês/Últimos 3 meses/Tudo) — mais um resumo de contagem + total líquido no topo.
 
 Testado no navegador via `claude-in-chrome`: gráfico renderiza meses reais + projetados corretamente, seleção de mês futuro mostra badge "projeção editável", drilldown de Custos abre com a categoria vinda de uma recorrência real ("Conta de Luz"), editar o valor reflete na hora nos cards de resumo, Extrato Geral filtra em tempo real. `npm run build`/`eslint` limpos (só o mesmo ruído pré-existente de sempre).
+
+### Ajustes de 25/08/2026 — Fluxo/Extrato viram pills de Orçamento, toggle real, sem modal
+Feedback depois de usar a leva de 23/08: os pills Fluxo/IF acima do card de score incomodavam,
+o toggle 3/6/12 parecia não fazer nada, e o modal do drilldown atrapalhava. Três mudanças:
+
+1. **Fluxo saiu da aba Yesod, virou pill de Orçamento** — `ORC_SECTIONS` (Orçamento/Extrato/Fluxo),
+   mesmo componente visual dos pills que já existia. `YESOD_SECTIONS` ficou só com Visão Geral | IF.
+   O card indicador "Poupança" na Visão Geral agora navega pra `tab="orc"` + pill "fluxo" em vez
+   de mudar seção dentro do Yesod.
+2. **Toggle 3/6/12 corrigido de verdade** — o bug real era os meses futuros entrarem fora da área
+   visível do scroll horizontal do gráfico, sem indicação nenhuma. Em vez de só resolver isso,
+   o comportamento mudou: por padrão (`chartMode=null`) o gráfico mostra o ano corrente até o mês
+   atual (YTD puro, sem futuro); clicar 3/6/12 troca pra **só o último mês realizado + N meses
+   futuros** (cabe inteiro na tela, sem scroll) — clicar de novo no mesmo botão volta pro YTD.
+3. **Drilldown de Receitas/Custos não abre mais Sheet** — clicar troca pro pill "Extrato" já
+   filtrado por tipo e pelo mês exato selecionado no Fluxo (`extYm`, novo estado — mostra um chip
+   "Mês: X" removível no lugar do seletor de período de sempre). Extrato Geral também virou pill
+   (era sub-página) e, quando o mês filtrado é futuro, a lista deixa de vir de `allTxs()` (não
+   existe lançamento ainda) e mostra as mesmas categorias esperadas editáveis que estavam no
+   Sheet — lógica movida pra lá, não duplicada; `pastCategoryTotals` (só usada pelo Sheet antigo)
+   foi removida por ficar sem uso.
+
+Testado no navegador: pills Orçamento/Extrato/Fluxo funcionando, toggle 3/6/12 mudando o
+gráfico visivelmente (1 real + N futuros), clique em Custos trocando pro Extrato já filtrado
+("Mês: Set/26" + tipo Custos), mês futuro mostrando categoria vinda de recorrência editável
+inline. `npm run build`/`eslint` limpos.
 
 ## Persistência
 Prefixo `lifetree_fin_` — 21 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
