@@ -37,7 +37,7 @@ Visão rápida do que cada tela mostra e permite fazer — detalhe de implementa
 - **Yesod → Visão Geral** — única seção da aba desde 25/08/2026 (IF saiu, Metas saiu — sem controle segmentado, é a aba toda) — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo. Botão "Registrar" no header (renomeado de "Lançar" em 25/08/2026; também aparece em Orçamento → Fluxo desde a mesma leva).
 - **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Vista colapsada por padrão (segunda leva do dia, 25/08/2026 — a vista cheia tinha destaque demais): mostra só o card de progresso da Meta de Independência Financeira + botão "+ Objetivo"; tocar no card abre o detalhe completo como sub-página (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, taxa de poupança 6 meses, editar meta, e o checklist "Outras Metas" — livre, criar/concluir com XP/apagar, não só IF, no mesmo espírito de múltiplos objetivos do Hod).
 - **Orçamento** — controle segmentado **Fluxo** / **Orçamento** (desde 25/08/2026, Fluxo primeiro por ser o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
-- **Bolsos** — cada seção com um totalizador compacto no topo (uma linha, cor própria — trocou o card grande de destaque que só "Dívidas" tinha, 25/08/2026): Contas — verde (saldo, editar/apagar inline, tocar → extrato; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** — roxo (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento — nested em Contas desde 23/08/2026) · Caixinhas — azul (saldo/meta/%/data alvo, mesmas ações, tocar → depositar/retirar) · Investimentos — âmbar (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria) · **Dívidas e Financiamentos** — vermelho (5ª seção desde 25/08/2026, antes aba própria — lista com progresso, criar/apagar, tocar → editar/registrar parcela paga).
+- **Bolsos** — cada seção com um totalizador compacto no topo (uma linha, cor própria — trocou o card grande de destaque que só "Dívidas" tinha, 25/08/2026): Contas — verde (saldo, editar/apagar inline, tocar → extrato **agrupado por mês desde 25/08/2026**, cada grupo com o saldo daquele mês; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** — roxo (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento, todas as faturas passadas já listadas sem filtro — nested em Contas desde 23/08/2026) · Caixinhas — azul (saldo/meta/%/data alvo/**taxa de juros editável (%a.a. ou %a.m.), desde 25/08/2026**, mesmas ações, tocar → **Depositar/Retirar agora exige escolher uma conta (dinheiro sai/entra de verdade), mais histórico mensal de saldo e projeção futura pela taxa, 25/08/2026**) · Investimentos — âmbar (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria, **Aportar/Resgatar ligados a conta desde 25/08/2026, além do já existente Atualizar saldo**) · **Dívidas e Financiamentos** — vermelho (5ª seção desde 25/08/2026, antes aba própria — lista com progresso, criar (**ganhou "Valor recebido" + conta pra creditar, 25/08/2026**)/apagar, tocar → **Parcela/Amortizar (por valor ou parcelas, reduzindo prazo ou parcela)/Quitar dívida — os três ligados a conta, 25/08/2026**).
 - **Config** — Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
 
 ## Funcionalidades
@@ -348,8 +348,57 @@ tocar nele abre o detalhe completo com "← Objetivos" pra voltar, "+ Objetivo" 
 criar meta direto da vista colapsada. `npm run build`/`eslint` limpos — 32 problemas (mesmo
 baseline da leva 2). Rebuild do APK debug, cópia pra Downloads, commit + push, changelog aqui.
 
+### Bolsos passam a movimentar contas de verdade — extrato por mês, Caixinhas com juros/histórico/projeção, Investimentos com Aportar/Resgatar, Dívidas com amortização/quitação (25/08/2026, leva 4)
+Depois de usar a reorganização de Bolsos, o usuário percebeu que várias ações de dinheiro
+(mover pra Caixinha, aportar/resgatar Investimento, quitar Dívida, receber um empréstimo)
+não tinham **nenhuma ligação com uma conta** — o valor só mudava isolado na própria
+entidade. Achado que resolveu o design: o app já tinha o padrão certo pra isso, o modo
+**Transferir** do sheet de lançamento (tx real numa conta + ajuste do outro lado) — as
+mudanças abaixo generalizam essa mesma ideia em vez de inventar um mecanismo novo.
+
+1. **Contas — extrato agrupado por mês.** A lista de lançamentos da conta (que era plana)
+   agora agrupa por mês, cada grupo com cabeçalho mostrando o saldo daquele mês — rolar a
+   lista já mostra os extratos realizados dos meses passados, sem precisar de navegação
+   separada.
+2. **Cartões — faturas passadas já funcionavam.** Conferido que `getStmts` já lista todos
+   os meses (passado/atual/futuro) sem filtro — nenhuma mudança de código necessária aqui.
+3. **Caixinhas** ganharam campo de **taxa de juros** (número + toggle % ao ano/% ao mês,
+   editável pelo usuário — não fixo). **Depositar/Retirar agora exige escolher uma conta**:
+   o dinheiro debita/credita de verdade uma conta (antes só ajustava o saldo da caixinha
+   isolado). Novo **histórico mensal de saldo** (`boxSnaps`, mesmo padrão do `patrimSnaps` —
+   mês corrente ao vivo, meses passados congelados; história só existe a partir de agora,
+   não é retroativa) e nova **projeção futura** (composição mês a mês pela taxa informada),
+   os dois na página de detalhe da caixinha.
+4. **Investimentos** ganharam **Aportar** e **Resgatar**, cada um ligado a uma conta.
+   Aportar soma no `invested` e no `balance`. Resgatar reduz o `balance` e reduz o
+   `invested` **proporcionalmente** ao que saiu do saldo — confirmado com o usuário que é
+   assim que o % de rendimento fica coerente antes/depois de um resgate parcial (testado:
+   resgate de 50% do saldo manteve o % de rendimento idêntico). "Atualizar saldo" continua
+   existindo, é o ajuste de valor de mercado.
+5. **Dívidas**: criar uma dívida ganhou campo **"Valor recebido"** (o principal — pode ser
+   diferente da soma das parcelas, que já embute juros, confirmado com o usuário) + conta
+   pra creditar, então o empréstimo recebido cai de verdade numa conta ao criar. "Registrar
+   parcela paga" agora exige conta e debita o valor pago. Duas ações novas, as duas também
+   ligadas a conta: **Amortizar** (por valor em R$ ou por número de parcelas; no modo valor,
+   escolha entre reduzir prazo — quita parcelas finais, valor da parcela não muda — ou
+   reduzir parcela — nº de parcelas não muda, valor de cada uma diminui) e **Quitar dívida**
+   (paga o saldo devedor inteiro de uma vez).
+
+Testado no navegador ponta a ponta: extrato de conta mostrando Ago/Jun/Mai/26 com subtotal
+cada; caixinha com 12% a.a., depósito de R$500 debitando a conta certa e atualizando
+saldo/histórico/projeção (conferida a fórmula de juros composto mês a mês); investimento com
+aporte de R$1.000 (saldo 10.420→11.420, % de ganho ajustado corretamente) e resgate de
+R$5.710 — metade do saldo — mantendo o % de rendimento em 3,8% antes e depois; dívida nova
+com valor recebido R$10.000 creditando a conta (parcelas somam R$12.000 com juros, valores
+propositalmente diferentes); amortização de R$2.000 reduzindo parcela (833,33 = 10.000/12,
+exato); parcela paga debitando a conta; quitação geral zerando o saldo devedor (100%
+quitado). `npm run build`/`eslint` limpos — 34 problemas; as 2 a mais que a leva 3 (32) são
+réplicas esperadas do mesmo padrão de ruído que `patrimSnaps` já gerava (`catch(_)` +
+`setState` síncrono dentro de effect), agora também para a nova chave `boxSnaps` — confirmado
+comparando lint linha a linha contra a versão anterior ao HEAD, não é regressão nova.
+
 ## Persistência
-Prefixo `lifetree_fin_` — 21 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
+Prefixo `lifetree_fin_` — 22 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
 ## Padrão de tema
 `const C = dark ? DARK : LIGHT;` — dentro do componente, **correto** (não usa o anti-padrão de variável global mutável que afeta Geburah/Hod/Tiphareth).
