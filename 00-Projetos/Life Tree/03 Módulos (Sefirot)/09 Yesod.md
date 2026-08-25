@@ -337,6 +337,10 @@ Terceira leva do dia, ajustes finos depois de testar a leva 2:
    já usado em conta/cartão/caixinha/investimento/dívida (`nav()`/`BackBtn`) — lá dentro mostra
    tudo que antes ficava sempre visível.
 
+**Follow-up da mesma leva**: os botões "+ Conta"/"+ Cartão"/"+ Caixinha"/"+ Ativo" em Bolsos
+viraram todos "+ Adicionar" (Dívidas já usava esse texto) — rótulo único pro botão de criar
+em cada seção, em vez de um nome diferente por seção.
+
 Testado no navegador: botão "Registrar" nos dois lugares; Bolsos com 5 totalizadores
 compactos e cores diferentes (Contas R$40.415,10 verde, Faturas R$11.845,00 roxo, Caixinhas
 R$12.700,00 azul, Dívidas R$49.800,00 vermelho); Objetivos mostra só o card de IF por padrão,
