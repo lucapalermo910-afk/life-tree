@@ -69,7 +69,7 @@ export function buildYesodContext() {
     (s, d) => s + Math.max(0, (d.totalParcelas - d.parcelasPagas) * d.valorParcela), 0
   );
 
-  // capacidade de poupança média — mesma lógica da aba IF do YesodModule (últimos 3 meses)
+  // capacidade de poupança média — mesma lógica da aba Objetivos do YesodModule (últimos 3 meses)
   const allTxs = [];
   accs.forEach(a => (a.txs || []).forEach(t => allTxs.push(t)));
   cards.forEach(c => (c.txs || []).forEach(t => allTxs.push({ ...t, type: t.type || "out" })));
@@ -540,7 +540,7 @@ ORÇAMENTO POR CATEGORIA
 META DE INDEPENDÊNCIA FINANCEIRA
 33. {"action":"update_if_goal","ifGoal":500000} ou {"action":"update_if_goal","ifMonthly":5000}
 
-HÁBITOS E METAS FINANCEIRAS (checklist com XP, dentro da aba Yesod)
+HÁBITOS (checklist com XP, aba Yesod) E METAS FINANCEIRAS (checklist com XP, aba Objetivos)
 34. {"action":"create_yhabit","title":"...","freq":"Diário|Semanal|Mensal","xp":15}
 35. {"action":"toggle_yhabit","match":"..."} — marca feito/pendente
 36. {"action":"delete_yhabit","match":"..."}

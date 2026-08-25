@@ -71,12 +71,11 @@ const accLabel = (a, banks) => a.isCash ? "Carteira" : (banks.find(b=>b.id===a.b
 const D_CATS_OUT = ["Alimentação","Moradia","Transporte","Saude","Educação","Lazer","Vestuário","Serviços","Tecnologia","Assinaturas","Outros"];
 const D_CATS_IN  = ["Salario","Freelance","Aluguel recebido","Reembolso","Outros"];
 const PAY_METHODS = [{v:"credito",l:"Credito"},{v:"debito",l:"Debito"},{v:"pix",l:"PIX"},{v:"ted",l:"TED"},{v:"dinheiro",l:"Dinheiro"}];
-const TABS = [{id:"yesod",icon:"treelife",label:"Yesod"},{id:"orc",icon:"alvo",label:"Orçamento"},{id:"bolsos",icon:"bank",label:"Bolsos"},{id:"debt",icon:"debt",label:"Dívidas"},{id:"cfg",icon:"gear",label:"Config"}];
-// Seções dentro da aba Yesod — antes eram 3 abas próprias (Yesod/Fluxo/IF), consolidadas
-// aqui num controle segmentado (não carrossel de swipe) porque a seção Fluxo já tem seu
-// próprio carrossel interno por swipe (as 6 views) — dois swipes aninhados brigariam pelo
-// mesmo gesto. Ver decisão de reorganização de navegação, 01/08/2026.
-const YESOD_SECTIONS = [{id:"geral",l:"Visão Geral"},{id:"if",l:"IF"}];
+const TABS = [{id:"yesod",icon:"treelife",label:"Yesod"},{id:"orc",icon:"alvo",label:"Orçamento"},{id:"bolsos",icon:"bank",label:"Bolsos"},{id:"goals",icon:"target",label:"Objetivos"},{id:"cfg",icon:"gear",label:"Config"}];
+// A aba Yesod tinha um controle segmentado Visão Geral/IF (Yesod/Fluxo/IF originalmente,
+// 01/08/2026) — a seção IF saiu em 25/08/2026 pra virar a aba própria "Objetivos" (junto
+// com as Metas financeiras, que moraram na Visão Geral até então), sobrando só Visão
+// Geral. Sem outra seção pra alternar, o controle de pills foi removido.
 // Fluxo saiu daqui em 25/08/2026 — virou pill dentro de Orçamento (ORC_SECTIONS). Extrato
 // existiu como 3º pill por 2 dias e foi removido — a lista de lançamentos com filtro
 // (tipo/categoria/período) voltou a viver dentro do próprio Fluxo, ver FluxoCaixaView.
@@ -172,7 +171,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const [budgets, setBudgets] = useState([{id:"bg1",cat:"Alimentação",limit:800},{id:"bg2",cat:"Moradia",limit:3000},{id:"bg3",cat:"Transporte",limit:400},{id:"bg4",cat:"Lazer",limit:300},{id:"bg5",cat:"Saude",limit:500}]);
   const overMonth = 0; // Taxa de Poupança sempre olha o mês atual (histórico de 6 meses); sem controle próprio desde 25/08/2026.
   const [fluxoView, setFluxoView] = useState(0);
-  const [yesodSection, setYesodSection] = useState("geral"); // geral | if — ver YESOD_SECTIONS
   const [orcSection, setOrcSection] = useState("fluxo"); // fluxo | orc — ver ORC_SECTIONS
   const [ifGoal, setIfGoal] = useState(300000);
   const [ifMonthly, setIfMonthly] = useState(5000);
@@ -324,9 +322,12 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const totAcc = accs.reduce((s,a)=>s+accBal(a),0);
   const totBox = boxes.reduce((s,b)=>s+b.balance,0);
   const totInv = invs.reduce((s,i)=>s+i.balance,0);
+  // Fatura de cartão em aberto é passivo igual dívida/financiamento — ficava calculada
+  // (totCardDebt) e nunca descontada do patrimônio líquido (bug real encontrado na
+  // auditoria de 25/08/2026: net inflava o patrimônio pelo valor total usado nos cartões).
   const totCardDebt = cards.reduce((s,c)=>s+getStmts(c).reduce((ss,st)=>ss+st.total,0),0);
   const totDebtRem = debts.reduce((s,d)=>s+(d.totalParcelas-d.parcelasPagas)*d.valorParcela,0);
-  const net = totAcc+totBox+totInv-totDebtRem;
+  const net = totAcc+totBox+totInv-totDebtRem-totCardDebt;
 
   const getMonthStr = offset => { const d=new Date(); d.setMonth(d.getMonth()+offset); return d.toISOString().slice(0,7); };
   const monthLabel2 = ym => { const [y,m]=ym.split("-"); return MTHS[parseInt(m)-1]+"/"+y.slice(2); };
@@ -576,7 +577,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
         <div><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:2}}>YESOD</div><div style={{fontSize:18,fontWeight:800}}>Finanças</div></div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* FIX 1: default method=pix + first account pre-selected */}
-          {!page&&tab==="yesod"&&(<button onClick={()=>openSh("launch",{ltype:"out",desc:"",amount:0,date:today,cat:catsOut[0],method:"pix",cardId:"",accId:accs[0]?.id||"",installments:1,fromKind:"acc",fromId:"",toKind:"acc",toId:""})} style={{background:"linear-gradient(135deg,"+ACCENT+"dd,"+ACCENT+"88)",border:"none",borderRadius:10,padding:"7px 14px",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><Ico n="zap" size={13} color="#fff"/> Lançar</button>)}
+          {!page&&(tab==="yesod"||(tab==="orc"&&orcSection==="fluxo"))&&(<button onClick={()=>openSh("launch",{ltype:"out",desc:"",amount:0,date:today,cat:catsOut[0],method:"pix",cardId:"",accId:accs[0]?.id||"",installments:1,fromKind:"acc",fromId:"",toKind:"acc",toId:""})} style={{background:"linear-gradient(135deg,"+ACCENT+"dd,"+ACCENT+"88)",border:"none",borderRadius:10,padding:"7px 14px",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}><Ico n="zap" size={13} color="#fff"/> Lançar</button>)}
           <button onClick={()=>setDark(d=>!d)} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:8,width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Ico n={dark?"sun":"moon"} size={14} color={C.dim}/></button>
         </div>
       </div>
@@ -664,20 +665,8 @@ export default function YesodModule({ onBack, dark, setDark }) {
           return null;
         })()}
 
-        {/* Controle segmentado da aba Yesod — antes eram 3 abas próprias no rodapé
-            (Yesod/Fluxo/IF), consolidadas aqui em 01/08/2026 pra reduzir o rodapé de
-            9 pra 5 abas. Ver decisão de reorganização de navegação. */}
-        {!page&&tab==="yesod"&&(
-          <div style={{display:"flex",gap:6,marginBottom:14}}>
-            {YESOD_SECTIONS.map(s=>(<button key={s.id} onClick={()=>setYesodSection(s.id)}
-              style={{flex:1,padding:"8px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:11,
-                background:yesodSection===s.id?"linear-gradient(135deg,"+ACCENT+"dd,"+ACCENT+"88)":C.b1,
-                border:"none",color:yesodSection===s.id?"#fff":C.muted}}>{s.l}</button>))}
-          </div>
-        )}
-
         {/* ══ YESOD — VISÃO GERAL ══ */}
-        {!page&&tab==="yesod"&&yesodSection==="geral"&&(function YesodTab(){
+        {!page&&tab==="yesod"&&(function YesodTab(){
           const ys=calcYesodScore();
           const cf0=cashflowMonth(-1);
           const savRate=cf0.ins>0?Math.max(0,(cf0.ins-cf0.outs)/cf0.ins):0;
@@ -686,11 +675,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
           // ── Catálogo de cards disponíveis ──────────────────────────────────
           const CARD_DEFS=[
             {id:"poupanca",  l:"Poupança",      v:Math.min(100,Math.round(savRate/0.2*100)), unit:"%", c:"#16a34a", tab:"fluxo",  icon:"up",       desc:"Taxa de poupança"},
-            {id:"if",        l:"Prog. IF",       v:Math.min(100,Math.round(net/ifN*100)),     unit:"%", c:"#06b6d4", tab:"if",     icon:"alvo",     desc:"Independência financeira"},
-            {id:"dividas",   l:"Dívidas",        v:debts.length>0?Math.round(debts.reduce((s,d)=>s+(d.parcelasPagas/d.totalParcelas),0)/debts.length*100):100, unit:"%", c:"#f97316", tab:"debt", icon:"debt", desc:"Progresso quitação"},
+            {id:"if",        l:"Prog. IF",       v:Math.min(100,Math.round(net/ifN*100)),     unit:"%", c:"#06b6d4", tab:"goals",     icon:"alvo",     desc:"Independência financeira"},
+            {id:"dividas",   l:"Dívidas",        v:debts.length>0?Math.round(debts.reduce((s,d)=>s+(d.parcelasPagas/d.totalParcelas),0)/debts.length*100):100, unit:"%", c:"#f97316", tab:"bolsos", icon:"debt", desc:"Progresso quitação"},
             {id:"orcamento", l:"Orçamento",      v:budgets.length>0?Math.round(budgets.filter(b=>budgetSpend(b.cat)<=b.limit).length/budgets.length*100):50, unit:"%", c:"#8b5cf6", tab:"orc", icon:"alvo", desc:"Categorias no limite"},
             {id:"habitos",  l:"Hábitos",   v:Math.round(yHabits.filter(h=>h.done).length/(yHabits.length||1)*100), unit:"%", c:ACCENT,    tab:"habitos_section", icon:"check",    desc:"Hábitos concluídos"},
-            {id:"metas",    l:"Metas",     v:Math.round(yGoals.filter(g=>g.done).length/(yGoals.length||1)*100),   unit:"%", c:"#f59e0b", tab:"metas_section",   icon:"alvo",     desc:"Metas atingidas"},
+            {id:"metas",    l:"Metas",     v:Math.round(yGoals.filter(g=>g.done).length/(yGoals.length||1)*100),   unit:"%", c:"#f59e0b", tab:"goals",   icon:"alvo",     desc:"Metas atingidas"},
             {id:"patrimonio",l:"Patrimônio",     v:fmt(net),   unit:"", c:net>=0?ACCENT:"#ef4444", tab:"fluxo", icon:"wallet",   desc:"Patrimônio líquido"},
             {id:"receita",   l:"Receita",        v:fmt(cf0.ins), unit:"", c:"#16a34a", tab:"fluxo", icon:"up",    desc:"Receita do mês"},
             {id:"despesa",   l:"Despesas",       v:fmt(cf0.outs),unit:"", c:"#ef4444", tab:"fluxo", icon:"down",  desc:"Despesas do mês"},
@@ -756,8 +745,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
                 return(
                   <div key={r.id} onClick={()=>{
                     if(r.tab==="habitos_section") document.getElementById("yesod-habitos")?.scrollIntoView({behavior:"smooth"});
-                    else if(r.tab==="metas_section") document.getElementById("yesod-metas")?.scrollIntoView({behavior:"smooth"});
-                    else if(r.tab==="if") setYesodSection(r.tab);
                     else if(r.tab==="fluxo") { setTab("orc"); setOrcSection("fluxo"); }
                     else if(r.tab&&r.tab!=="yesod") setTab(r.tab);
                   }}
@@ -784,15 +771,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
                 <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:9,color:ACCENT,fontWeight:700}}>{yHabits.filter(h=>h.done).length}/{yHabits.length}</span><button onClick={()=>openSh("addYHabit",{title:"",freq:"Diário",xp:15})} style={{background:ACCENT+"22",border:"1px solid "+ACCENT+"44",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10} color={ACCENT}/> Hábito</button></div>
               </div>
               {yHabits.map(h=>(<div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:"1px solid "+C.b1}}><button onClick={()=>{if(!h.done){setFinXp(x=>x+h.xp);}setYHabits(p=>p.map(x=>x.id===h.id?{...x,done:!x.done}:x));}} style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(h.done?ACCENT:C.b2),background:h.done?ACCENT:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>{h.done&&<Ico n="check" size={11} color="#fff" sw={2.5}/>}</button><div style={{flex:1}}><div style={{fontSize:12,color:h.done?C.muted:C.text,textDecoration:h.done?"line-through":"none"}}>{h.title}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{h.freq}</div></div><span style={{fontSize:9,fontWeight:700,color:"#fbbf24"}}>+{h.xp}</span><button onClick={()=>setYHabits(p=>p.filter(x=>x.id!==h.id))} style={{background:"none",border:"none",cursor:"pointer",padding:2,opacity:.5}}><Ico n="x" size={11} color={C.muted}/></button></div>))}
-            </div>
-
-            {/* Metas */}
-            <div id="yesod-metas" style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>METAS</div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:9,color:"#f59e0b",fontWeight:700}}>{yGoals.filter(g=>g.done).length}/{yGoals.length}</span><button onClick={()=>openSh("addYGoal",{title:"",xp:100})} style={{background:"#f59e0b22",border:"1px solid #f59e0b44",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:"#f59e0b",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10} color="#f59e0b"/> Meta</button></div>
-              </div>
-              {yGoals.map(g=>(<div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:"1px solid "+C.b1}}><button onClick={()=>{if(!g.done){setFinXp(x=>x+g.xp);}setYGoals(p=>p.map(x=>x.id===g.id?{...x,done:!x.done}:x));}} style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(g.done?"#f59e0b":C.b2),background:g.done?"#f59e0b":"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>{g.done&&<Ico n="check" size={11} color="#fff" sw={2.5}/>}</button><div style={{flex:1,fontSize:12,color:g.done?C.muted:C.text,textDecoration:g.done?"line-through":"none"}}>{g.title}</div><span style={{fontSize:9,fontWeight:700,color:"#f59e0b"}}>+{g.xp}</span><button onClick={()=>setYGoals(p=>p.filter(x=>x.id!==g.id))} style={{background:"none",border:"none",cursor:"pointer",padding:2,opacity:.5}}><Ico n="x" size={11} color={C.muted}/></button></div>))}
             </div>
           </div>);
         })()}
@@ -993,12 +971,13 @@ export default function YesodModule({ onBack, dark, setDark }) {
           );
         })()}
 
-        {/* ══ BOLSOS ══ — Contas (com Cartões aninhado dentro)/Caixinhas/Investimentos,
+        {/* ══ BOLSOS ══ — Contas (com Cartões aninhado dentro)/Caixinhas/Investimentos/
+            Dívidas e Financiamentos (5ª seção, 25/08/2026 — antes era aba própria),
             com editar/apagar inline (antes só em Config, que agora só guarda o que não
             tem outro lugar) */}
         {!page&&tab==="bolsos"&&(
           <div style={{animation:"slideUp .3s ease"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Contas</span><div style={{display:"flex",gap:6}}><Btn sm full={false} outline color={C.muted} onClick={()=>openSh("addBank",{name:"",color:ACCENT})}><Ico n="bank" size={11}/> Banco</Btn><Btn sm full={false} onClick={()=>openSh("addAcc",{bankId:banks[0]?.id||"",name:""})}><Ico n="plus" size={11}/> Conta</Btn></div></div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Contas</span><Btn sm full={false} onClick={()=>openSh("addAcc",{bankId:banks[0]?.id||"",name:""})}><Ico n="plus" size={11}/> Conta</Btn></div>
             {accs.map(ac=>{const bk2=bkOf(ac.bankId);const accColor=ac.isCash?"#f59e0b":(bk2?.color||ACCENT);const bal=accBal(ac);return(<div key={ac.id} onClick={()=>nav("account",ac.id)} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:36,height:36,borderRadius:10,background:accColor+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n={ac.isCash?"wallet":"bank"} size={16} color={accColor}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{ac.isCash?"Carteira":bk2?.name}</div><div style={{fontSize:10,color:C.muted}}>{ac.isCash?"Dinheiro":ac.name}</div></div><div style={{fontSize:16,fontWeight:900,color:bal>=0?ACCENT:"#ef4444"}}>{fmt(bal)}</div>{!ac.isCash&&(<><button onClick={e=>{e.stopPropagation();openSh("editAcc",{id:ac.id,bankId:ac.bankId,name:ac.name});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delAcc(ac.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></>)}</div></div>);})}
             {/* Cartões aninhado dentro de Contas (reorganização 23/08/2026, ver 04 Bugs
                 Conhecidos) — divisor mais leve que o das outras seções, pra ler como
@@ -1012,22 +991,21 @@ export default function YesodModule({ onBack, dark, setDark }) {
             <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Investimentos</span><Btn sm full={false} onClick={()=>openSh("addInv",{bankId:banks[0]?.id||"",subCat:"rf_pub",name:"",invested:0,balance:0,rate:"",maturity:""})}><Ico n="plus" size={11}/> Ativo</Btn></div>
             {ICAT.map(cat=>{const ci=invs.filter(i=>cat.sub.some(s=>s.id===i.subCat));const tot=ci.reduce((s,i)=>s+i.balance,0);const gain=tot-ci.reduce((s,i)=>s+i.invested,0);return(<div key={cat.id} onClick={()=>nav("inv",cat.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px",background:C.card,border:"1px solid "+(ci.length?cat.color+"22":C.b1),borderRadius:12,marginBottom:8,cursor:"pointer",opacity:ci.length?1:.5}}><div style={{width:10,height:10,borderRadius:"50%",background:cat.color}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:700}}>{cat.label}</div>{ci.length>0&&<div style={{fontSize:9,color:gain>=0?"#10b981":"#ef4444",fontWeight:600}}>{gain>=0?"+":""}{fmt(gain)}</div>}{ci.length===0&&<div style={{fontSize:9,color:C.muted}}>Nenhum ativo</div>}</div>{ci.length>0&&<div style={{fontSize:14,fontWeight:800,color:cat.color}}>{fmt(tot)}</div>}<Ico n="chev" size={12} color={C.muted}/></div>);})}
-          </div>
-        )}
-
-        {/* ══ DÍVIDAS ══ */}
-        {!page&&tab==="debt"&&(
-          <div style={{animation:"slideUp .3s ease"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:13,fontWeight:800}}>Dívidas e Financiamentos</span><Btn sm full={false} onClick={()=>openSh("addDebt",{name:"",credor:"",totalParcelas:12,parcelasPagas:0,valorParcela:0,dueDay:10,startDate:today,color:"#ef4444"})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
+            {/* Dívidas e Financiamentos — era aba própria no rodapé, virou 5ª seção de
+                Bolsos em 25/08/2026 (usuário: "consigo ver tudo numa única aba") */}
+            <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
+            <div id="yesod-dividas" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Dívidas e Financiamentos</span><Btn sm full={false} onClick={()=>openSh("addDebt",{name:"",credor:"",totalParcelas:12,parcelasPagas:0,valorParcela:0,dueDay:10,startDate:today,color:"#ef4444"})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
             <div style={{background:"linear-gradient(135deg,#ef444418,#ef444406)",border:"1px solid #ef444433",borderRadius:14,padding:14,marginBottom:12}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>TOTAL EM DÍVIDAS</div><div style={{fontSize:24,fontWeight:900,color:"#ef4444"}}>{fmt(totDebtRem)}</div></div>
             {debts.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhuma dívida cadastrada</div>}
             {debts.map(d=>{const restantes=d.totalParcelas-d.parcelasPagas;const saldo=restantes*d.valorParcela;const pct=Math.min(100,Math.round((d.parcelasPagas/d.totalParcelas)*100));return(<div key={d.id} onClick={()=>nav("debt",d.id)} style={{background:C.card,border:"1px solid "+d.color+"33",borderRadius:14,padding:14,marginBottom:10,cursor:"pointer"}}><div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}><div style={{width:8,height:8,borderRadius:"50%",background:d.color,marginTop:5,flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{d.name}</div><div style={{fontSize:9,color:C.muted}}>{d.credor&&<span style={{color:d.color}}>{d.credor} </span>}{fmt(d.valorParcela)}/mês</div></div><div style={{textAlign:"right"}}><div style={{fontSize:15,fontWeight:900,color:d.color}}>{fmt(saldo)}</div><div style={{fontSize:9,color:C.muted}}>saldo devedor</div></div><button onClick={e=>{e.stopPropagation();delDebt(d.id);}} style={{background:C.b1,border:"none",borderRadius:99,width:22,height:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={10} color={C.muted}/></button></div><div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>Pago: {pct}% · {d.parcelasPagas}/{d.totalParcelas} parcelas</div></div>);})}
           </div>
         )}
 
-        {/* ══ YESOD — IF ══ (fica fisicamente longe da seção Fluxo no arquivo, mas
-            renderização condicional não depende de ordem no JSX — funciona igual) */}
-        {!page&&tab==="yesod"&&yesodSection==="if"&&(function IFTab(){
+        {/* ══ OBJETIVOS ══ — aba própria desde 25/08/2026 (antes: seção "IF" dentro da aba
+            Yesod, e checklist de Metas dentro da Visão Geral). Junta o objetivo "fixo" do
+            módulo (Independência Financeira) com metas livres criadas pelo usuário, no
+            mesmo espírito de múltiplos objetivos do Hod. */}
+        {!page&&tab==="goals"&&(function GoalsTab(){
           const ifNeeded=ifGoal||ifMonthly*300;const ifPct=Math.min(100,Math.round((net/ifNeeded)*100));
           const last3=[-1,-2,-3].map(o=>cashflowMonth(o));const avgSaving=Math.max(0,last3.reduce((s,m)=>s+(m.ins-m.outs),0)/3);
           const monthsLeft=avgSaving>0?Math.ceil((ifNeeded-net)/avgSaving):null;const yearsLeft=monthsLeft?(monthsLeft/12).toFixed(1):null;
@@ -1037,6 +1015,16 @@ export default function YesodModule({ onBack, dark, setDark }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>{[{l:"POUPANÇA MÉDIA/MÊS",v:fmt(avgSaving),sub:"últimos 3 meses",c:avgSaving>0?ACCENT:"#ef4444"},{l:"PROJEÇÃO",v:yearsLeft?yearsLeft+" anos":"—",sub:monthsLeft?monthsLeft+" meses":"sem dados",c:ACCENT},{l:"RENDA MENSAL (4%)",v:fmt(ifNeeded/300),sub:"ao atingir a meta",c:"#f59e0b"},{l:"PATRIMÔNIO ALVO",v:fmt(ifNeeded),sub:"regra dos 4%",c:C.text}].map(s=>(<div key={s.l} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:14,textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:4}}>{s.l}</div><div style={{fontSize:18,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:9,color:C.muted,marginTop:2}}>{s.sub}</div></div>))}</div>
             <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:14}}><div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:12}}>TAXA DE POUPANÇA — 6 MESES</div>{savRates.map(s=>{const color=s.rate>=20?ACCENT:s.rate>=10?"#f59e0b":"#ef4444";return(<div key={s.ym} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:10,minWidth:40,color:s.ym===getMonthStr(0)?ACCENT:C.text,fontWeight:s.ym===getMonthStr(0)?700:400}}>{monthLabel2(s.ym)}</span><div style={{flex:1,height:5,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:Math.min(100,s.rate)+"%",background:color,borderRadius:99}}/></div><span style={{fontSize:10,fontWeight:700,color,minWidth:30,textAlign:"right"}}>{s.rate}%</span></div>);})}</div>
             <Btn outline color={ACCENT} onClick={()=>openSh("editIF",{ifGoal:ifNeeded,ifMonthly})}><Ico n="edit" size={14}/> Editar meta</Btn>
+
+            {/* Outras metas — livres, não só IF (checklist com XP, migrou da Visão Geral) */}
+            <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginTop:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>OUTRAS METAS</div>
+                <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:9,color:"#f59e0b",fontWeight:700}}>{yGoals.filter(g=>g.done).length}/{yGoals.length}</span><button onClick={()=>openSh("addYGoal",{title:"",xp:100})} style={{background:"#f59e0b22",border:"1px solid #f59e0b44",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:"#f59e0b",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10} color="#f59e0b"/> Meta</button></div>
+              </div>
+              {yGoals.length===0&&<div style={{textAlign:"center",padding:16,color:C.muted,fontSize:11}}>Nenhuma meta ainda — toque em "+ Meta" pra criar uma.</div>}
+              {yGoals.map(g=>(<div key={g.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:"1px solid "+C.b1}}><button onClick={()=>{if(!g.done){setFinXp(x=>x+g.xp);}setYGoals(p=>p.map(x=>x.id===g.id?{...x,done:!x.done}:x));}} style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(g.done?"#f59e0b":C.b2),background:g.done?"#f59e0b":"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>{g.done&&<Ico n="check" size={11} color="#fff" sw={2.5}/>}</button><div style={{flex:1,fontSize:12,color:g.done?C.muted:C.text,textDecoration:g.done?"line-through":"none"}}>{g.title}</div><span style={{fontSize:9,fontWeight:700,color:"#f59e0b"}}>+{g.xp}</span><button onClick={()=>setYGoals(p=>p.filter(x=>x.id!==g.id))} style={{background:"none",border:"none",cursor:"pointer",padding:2,opacity:.5}}><Ico n="x" size={11} color={C.muted}/></button></div>))}
+            </div>
           </div>);
         })()}
 
@@ -1074,7 +1062,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
 
       {/* BOTTOM NAV */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.nav,borderTop:"1px solid "+C.b1,zIndex:50,padding:"6px 0 12px",display:"flex"}}>
-        {TABS.map(t=>{const a=tab===t.id&&!page;return(<button key={t.id} onClick={()=>{if(t.id===TABS[0].id){onBack();return;}setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}><div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}><Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/></div>{a&&<span style={{fontSize:7,fontWeight:700,color:ACCENT,letterSpacing:.2,whiteSpace:"nowrap"}}>{t.label.toUpperCase()}</span>}{!a&&<span style={{fontSize:1,color:"transparent"}}>.</span>}</button>);})}
+        {TABS.map(t=>{const a=tab===t.id&&!page;return(<button key={t.id} onClick={()=>{setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}><div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}><Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/></div>{a&&<span style={{fontSize:7,fontWeight:700,color:ACCENT,letterSpacing:.2,whiteSpace:"nowrap"}}>{t.label.toUpperCase()}</span>}{!a&&<span style={{fontSize:1,color:"transparent"}}>.</span>}</button>);})}
       </div>
 
       {/* ══ SHEETS ══ */}
