@@ -5,7 +5,7 @@ aliases: [Yesod]
 
 # 💰 Yesod — Finanças
 
-> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1200 linhas, 23/08/2026) · **fecha como v10** (ver [[08 Versões]])
+> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1185 linhas, 25/08/2026) · **fecha como v10** (ver [[08 Versões]])
 > Score bridge: publica `yesod` em `lifetree_scores`
 > Esta nota incorpora a auditoria funcional completa feita em 01/08/2026 (levantamento de telas/entidades/gaps que também existe como [artefato web](https://claude.ai/code/artifact/477b284f-23ed-447d-a614-5ff541796195)) — é a referência canônica do estado do módulo daqui pra frente, não só notas de implementação.
 
@@ -219,7 +219,7 @@ A antiga sub-view "Gastos por Categoria" (só saída, só mês corrente) foi rem
 Testado no navegador via `claude-in-chrome`: gráfico renderiza meses reais + projetados corretamente, seleção de mês futuro mostra badge "projeção editável", drilldown de Custos abre com a categoria vinda de uma recorrência real ("Conta de Luz"), editar o valor reflete na hora nos cards de resumo, Extrato Geral filtra em tempo real. `npm run build`/`eslint` limpos (só o mesmo ruído pré-existente de sempre).
 
 ### Ajustes de 25/08/2026 — Fluxo vira pill de Orçamento, gráfico Jan-Dez fixo, Extrato morre
-Duas levas no mesmo dia (a primeira já foi revisada pela segunda, registro só o estado final):
+Três levas no mesmo dia (as duas primeiras já foram revisadas pela terceira, registro só o estado final):
 
 1. **Fluxo saiu da aba Yesod, virou pill de Orçamento** — `ORC_SECTIONS`, mesmo componente
    visual de pills que já existia, **Fluxo primeiro** (`[{id:"fluxo"},{id:"orc"}]`, default
@@ -241,11 +241,34 @@ Duas levas no mesmo dia (a primeira já foi revisada pela segunda, registro só 
    lançamentos reais — mesma lógica de antes, só que embutida em vez de numa aba/Sheet à
    parte. Estados `chartMode`/`extYm` (da leva anterior) removidos por ficarem sem uso.
 
-Testado no navegador: pills "Fluxo | Orçamento" (Fluxo já vem selecionado), gráfico mostrando
-os 12 meses do ano de uma vez (Jan-Ago sólido, Set-Dez "(E)" claro), clicar numa barra futura
-atualiza cards + lista na mesma tela (categoria "Alimentação" vinda da recorrência "Conta de
-Luz", editável, valor persistindo entre reloads). `npm run build`/`eslint` limpos (mesmo
-ruído pré-existente de sempre).
+4. **Header do Fluxo perdeu o indicador de mês próprio** — existia um controle "◀ Mês ▶"
+   (`overMonth`/`setOverMonth`) acima do gráfico, independente do mês selecionado nas barras
+   (`selChartYm`); os dois podiam mostrar meses diferentes ao mesmo tempo na tela, um deles
+   sem efeito visível nenhum — bug reportado com screenshot (header em "Out/25", gráfico em
+   "Mar/26"). Removido; a única forma de escolher o mês agora é tocar numa barra do gráfico,
+   como o usuário já vinha usando. `overMonth` virou constante local (`= 0`) — segue existindo
+   só porque a Taxa de Poupança (janela fixa dos últimos 6 meses) precisa de um mês-base, mas
+   não tem controle próprio nem depende da seleção do gráfico.
+5. **Lançamentos do Fluxo perderam busca e filtro de período** — a lista fundida no Fluxo (item
+   3 acima) tinha, além do filtro por tipo/categoria, um campo de busca por descrição/categoria
+   e um seletor "Mês selecionado / Últimos 3 meses / Tudo". Removidos os dois: o mês já é
+   100% controlado pelo gráfico logo acima, então "Mês selecionado" era a única opção que
+   fazia sentido na prática e o seletor virou ruído; a busca não tinha sido pedida e não
+   compensava o espaço. Sobra só o filtro por categoria (select) e os pills Todos/Receitas/
+   Custos. Estados `extSearch`/`extPeriod` removidos por ficarem sem uso.
+
+Testado no navegador com uma base de dados fake injetada via `localStorage` só na sessão do
+`npm run dev` (não toca nos arquivos de seed reais nem no app do celular): meses realizados
+de Jun/Jul/Ago com lançamentos variados em várias categorias/contas/cartão, recorrências
+novas cobrindo Salário/Aluguel/Internet/Assinaturas, um `recurringOverrides` pontual (Conta de
+Luz sobe pra R$260 só em Out/26) e `plannedItems` em Set/Out/Nov. Confirmado: header mostra só
+"Fluxo de Caixa" (sem mês solto), clicar numa barra passada/atual/futura atualiza o rótulo do
+mês + cards + lista todos juntos, mês futuro mostra badge "projeção editável" com as categorias
+certas (incluindo o override de Out/26 em 260), editar um valor projetado (testado em Set/26,
+Lazer 300→450) reflete na hora no card de Custos, lista de lançamentos sem busca/período. `npm
+run build`/`eslint` limpos (33 problemas, mesmo baseline pré-existente de sempre — a remoção
+de `setOverMonth` teria introduzido 1 `no-unused-vars` novo, corrigido trocando o `useState`
+por uma constante).
 
 ## Persistência
 Prefixo `lifetree_fin_` — 21 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
