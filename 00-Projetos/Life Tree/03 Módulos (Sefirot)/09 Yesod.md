@@ -397,6 +397,17 @@ réplicas esperadas do mesmo padrão de ruído que `patrimSnaps` já gerava (`ca
 `setState` síncrono dentro de effect), agora também para a nova chave `boxSnaps` — confirmado
 comparando lint linha a linha contra a versão anterior ao HEAD, não é regressão nova.
 
+**Follow-up (mesmo dia)**: usuário reportou que criar um investimento NOVO com valor
+"Aplicado" não debitava conta nenhuma — a leva 4 só tinha ligado Aportar/Resgatar (ações
+sobre investimento já existente), esquecendo que criar um do zero é o mesmo gap que já tinha
+sido corrigido pra criar dívida (item 5 acima). Corrigido: `addInv` ganhou `accId` opcional
+("Debitar de", com aviso de que pode deixar em branco se for um ativo que já existia antes
+do app) e, se preenchido, debita o valor aplicado da conta ao criar. Encontrado no teste real
+do usuário um investimento órfão criado antes da correção (`invested:10000, balance:0`, sem
+tx correspondente em nenhuma conta) — ficou registrado aqui como um lembrete de que dados
+criados antes desse commit podem precisar de correção manual (editar o Saldo atual e/ou
+lançar a diferença manualmente), não foi corrigido automaticamente.
+
 ## Persistência
 Prefixo `lifetree_fin_` — 22 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
