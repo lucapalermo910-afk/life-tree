@@ -355,6 +355,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // ym <= mês atual = realizado (somatório de lançamentos de verdade, só leitura).
   const isFutureYm = ym => ym > getMonthStr(0);
   const monthRange = ym => { const [y,m]=ym.split("-").map(Number); return [ym+"-01", new Date(y,m,0).toISOString().slice(0,10)]; };
+  const monthDiff = (fromYm,toYm) => { const [fy,fm]=fromYm.split("-").map(Number); const [ty,tm]=toYm.split("-").map(Number); return (ty-fy)*12+(tm-fm); };
   const recurringAmountFor = (r,ym) => { const key=ym+"|"+r.id; return Object.prototype.hasOwnProperty.call(recurringOverrides,key) ? Number(recurringOverrides[key]) : r.amount; };
   // Retorna { [categoria]: {amount, fromRecurring, recDesc, recId} } pra um mês futuro —
   // cada categoria some as ocorrências de recorrências ativas daquele tipo nesse mês (via
@@ -376,6 +377,18 @@ export default function YesodModule({ onBack, dark, setDark }) {
       if (!totals[p.cat]) totals[p.cat]={amount:0,fromRecurring:false,plannedId:p.id};
       totals[p.cat].amount += Number(p.amount)||0;
     });
+    // Fatura de cartão (parcelas ainda por vencer) e parcelas de dívida em aberto (25/08/2026)
+    // — sem isso, uma compra parcelada ou uma dívida não apareciam em NENHUM mês futuro do
+    // Fluxo, só no mês em que a compra foi feita ou a dívida criada. Somados por fora dos
+    // recurrings/plannedItems (que o usuário edita livremente) porque são fatos já
+    // conhecidos, não estimativas — por isso `readOnly`, sem input editável na lista.
+    if (type==="out") {
+      const mi = monthDiff(getMonthStr(0), ym) - 1;
+      const cardBurden = cardBurdenAtMonth(mi);
+      if (cardBurden > 0) totals["Fatura de Cartão"] = {amount: cardBurden, readOnly:true, note:"parcelas de compras já lançadas nos cartões"};
+      const debtBurden = debtBurdenAtMonth(mi);
+      if (debtBurden > 0) totals["Parcelas de Dívida"] = {amount: debtBurden, readOnly:true, note:"parcelas em aberto das dívidas cadastradas"};
+    }
     return totals;
   };
   const monthTotals = ym => {
@@ -1058,7 +1071,12 @@ export default function YesodModule({ onBack, dark, setDark }) {
                 return(<div>
                   <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>REALIZADO + ESPERADO — {curY}</div>
                   <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:12}}>
-                    <div style={{display:"flex",gap:4,alignItems:"flex-end",height:70,marginBottom:8}}>{chartMonths.map(m=>(<div key={m.ym} onClick={()=>setSelChartYm(m.ym)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer"}}><div style={{width:"100%",display:"flex",gap:1,alignItems:"flex-end",height:56}}><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#16a34a55":"#16a34a",height:Math.max(2,(m.ins/chartMax)*56)+"px"}}/><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#ef444455":"#ef4444",height:Math.max(2,(m.outs/chartMax)*56)+"px"}}/></div><div style={{fontSize:6,color:m.ym===chartYm?ACCENT:(m.future?C.dim:C.muted),fontWeight:m.ym===chartYm?700:400,whiteSpace:"nowrap"}}>{monthLabel2(m.ym).slice(0,3)}{m.future?"(E)":""}</div></div>))}</div>
+                    {/* Barras sempre limitadas a 56px (Math.min defensivo + overflow:hidden no
+                        container, 25/08/2026) — a razão m.ins/chartMax já devia garantir isso
+                        matematicamente (chartMax é o maior valor entre os meses mostrados), mas
+                        um valor muito acima da escala normal (ex: um empréstimo grande recém
+                        creditado) fazia a barra parecer estourar o card por falta dessa trava. */}
+                    <div style={{display:"flex",gap:4,alignItems:"flex-end",height:70,marginBottom:8,overflow:"hidden"}}>{chartMonths.map(m=>(<div key={m.ym} onClick={()=>setSelChartYm(m.ym)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer"}}><div style={{width:"100%",display:"flex",gap:1,alignItems:"flex-end",height:56,overflow:"hidden"}}><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#16a34a55":"#16a34a",height:Math.min(56,Math.max(2,(m.ins/chartMax)*56))+"px"}}/><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#ef444455":"#ef4444",height:Math.min(56,Math.max(2,(m.outs/chartMax)*56))+"px"}}/></div><div style={{fontSize:6,color:m.ym===chartYm?ACCENT:(m.future?C.dim:C.muted),fontWeight:m.ym===chartYm?700:400,whiteSpace:"nowrap"}}>{monthLabel2(m.ym).slice(0,3)}{m.future?"(E)":""}</div></div>))}</div>
                     <div style={{display:"flex",gap:12,fontSize:8,color:C.muted}}><span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:2,background:"#16a34a",display:"inline-block"}}/>Realizado</span><span style={{display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:2,background:"#16a34a55",display:"inline-block"}}/>Esperado (E)</span></div>
                   </div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -1091,8 +1109,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:11,fontWeight:700}}>{row.cat}</div>
                         {row.fromRecurring&&<div style={{fontSize:8,color:C.muted}}>da recorrência "{row.recDesc}"</div>}
+                        {row.readOnly&&<div style={{fontSize:8,color:C.muted}}>{row.note} · não editável aqui</div>}
                       </div>
-                      {row.fromRecurring
+                      {row.readOnly
+                        ?<span style={{fontSize:12,fontWeight:800,color:C.text}}>{fmt(row.amount)}</span>
+                        :row.fromRecurring
                         ?<input type="number" value={row.amount} onChange={e=>setRecurringOverrides(p=>({...p,[chartYm+"|"+row.recId]:e.target.value}))} style={{width:78,background:C.bg,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>
                         :<input type="number" value={row.amount} onChange={e=>setPlannedItems(p=>p.map(it=>it.id===row.plannedId?{...it,amount:e.target.value}:it))} style={{width:78,background:C.bg,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>}
                     </div>))}
