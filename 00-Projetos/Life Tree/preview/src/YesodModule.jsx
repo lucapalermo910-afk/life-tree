@@ -76,7 +76,9 @@ const TABS = [{id:"yesod",icon:"treelife",label:"Yesod"},{id:"orc",icon:"alvo",l
 // aqui num controle segmentado (não carrossel de swipe) porque a seção Fluxo já tem seu
 // próprio carrossel interno por swipe (as 6 views) — dois swipes aninhados brigariam pelo
 // mesmo gesto. Ver decisão de reorganização de navegação, 01/08/2026.
-const YESOD_SECTIONS = [{id:"geral",l:"Visão Geral"},{id:"fluxo",l:"Fluxo"},{id:"if",l:"IF"}];
+const YESOD_SECTIONS = [{id:"geral",l:"Visão Geral"},{id:"if",l:"IF"}];
+// Fluxo saiu daqui em 25/08/2026 — virou pill dentro de Orçamento (ORC_SECTIONS), junto com Extrato.
+const ORC_SECTIONS = [{id:"orc",l:"Orçamento"},{id:"extrato",l:"Extrato"},{id:"fluxo",l:"Fluxo"}];
 // Horizontes da Projeção de Fluxo de Caixa (view "projecao" dentro de Fluxo) — dias<=90
 // usam granularidade diária no gráfico, acima disso vira mensal (ver buildProjSeries).
 const PROJ_HORIZONS = [
@@ -168,7 +170,8 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const [budgets, setBudgets] = useState([{id:"bg1",cat:"Alimentação",limit:800},{id:"bg2",cat:"Moradia",limit:3000},{id:"bg3",cat:"Transporte",limit:400},{id:"bg4",cat:"Lazer",limit:300},{id:"bg5",cat:"Saude",limit:500}]);
   const [overMonth, setOverMonth] = useState(0);
   const [fluxoView, setFluxoView] = useState(0);
-  const [yesodSection, setYesodSection] = useState("geral"); // geral | fluxo | if — ver YESOD_SECTIONS
+  const [yesodSection, setYesodSection] = useState("geral"); // geral | if — ver YESOD_SECTIONS
+  const [orcSection, setOrcSection] = useState("orc"); // orc | extrato | fluxo — ver ORC_SECTIONS
   const [ifGoal, setIfGoal] = useState(300000);
   const [ifMonthly, setIfMonthly] = useState(5000);
   const touchXRef = useRef(0);
@@ -189,10 +192,10 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // não muda o valor padrão da recorrência. plannedItems: categoria esperada futura sem recorrência por trás.
   const [recurringOverrides, setRecurringOverrides] = useState({});
   const [plannedItems, setPlannedItems] = useState([]);
-  const [chartHorizon, setChartHorizon] = useState(3);
+  // chartMode: null = YTD (default, só meses realizados do ano) | 3|6|12 = só o último mês
+  // realizado + N futuros (substitui a visão YTD enquanto ativo — toggle, 25/08/2026).
+  const [chartMode, setChartMode] = useState(null);
   const [selChartYm, setSelChartYm] = useState(null); // null = mês atual, calculado on-the-fly
-  const [drillOpen, setDrillOpen] = useState(false);
-  const [drillType, setDrillType] = useState("out");
   const [txSearch, setTxSearch] = useState("");
   // Extrato Geral (aba Orçamento → Ver tudo) — filtros próprios, não reusa txSearch pra não
   // herdar busca deixada em Fluxo/detalhe de conta ao entrar aqui de outro lugar.
@@ -200,6 +203,9 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const [extType, setExtType] = useState("todos");
   const [extCat, setExtCat] = useState("");
   const [extPeriod, setExtPeriod] = useState("mes");
+  // Setado ao vir do clique em Receitas/Custos no Fluxo (25/08/2026) — filtra o Extrato pra
+  // exatamente esse mês (YYYY-MM) em vez do seletor de período; null = seletor normal.
+  const [extYm, setExtYm] = useState(null);
   const [projHorizonId, setProjHorizonId] = useState("90d");
   // Ajustes de cenário da Projeção — camada só de exibição, nunca escreve em nenhuma
   // entidade real (contas/dívidas/etc). Persistido à parte pra sobreviver a reload sem
@@ -358,13 +364,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
       if (!totals[p.cat]) totals[p.cat]={amount:0,fromRecurring:false,plannedId:p.id};
       totals[p.cat].amount += Number(p.amount)||0;
     });
-    return totals;
-  };
-  // Pra mês realizado: mesma agregação por categoria que "Gastos por Categoria" já fazia,
-  // generalizada pra receita também — direto de allTxs(), sem projeção nenhuma.
-  const pastCategoryTotals = (ym,type) => {
-    const totals = {};
-    allTxs().filter(t=>t.date&&t.date.startsWith(ym)&&(t.type||"out")===type).forEach(t=>{ totals[t.cat]=(totals[t.cat]||0)+t.amount; });
     return totals;
   };
   const monthTotals = ym => {
@@ -667,51 +666,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
               {ci.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum ativo</div>}
             </div>);
           }
-
-          if(page.type==="extrato"){
-            // Único lugar que junta lançamentos de todas as contas E cartões, sem limite de
-            // mês — antes só existia por conta (EXTRATO acima) ou o mês selecionado no Fluxo.
-            const q=extSearch.trim().toLowerCase();
-            const nowYm=today.slice(0,7);
-            const monthsBack=ds=>{const[y,m]=ds.slice(0,7).split("-").map(Number);const[ny,nm]=nowYm.split("-").map(Number);return(ny-y)*12+(nm-m);};
-            const list=allTxs().filter(tx=>{
-              if(extType!=="todos"&&tx.type!==extType)return false;
-              if(extCat&&tx.cat!==extCat)return false;
-              const mb=monthsBack(tx.date);
-              if(extPeriod==="mes"&&mb!==0)return false;
-              if(extPeriod==="3m"&&(mb<0||mb>2))return false;
-              if(q&&!(tx.desc+" "+tx.cat).toLowerCase().includes(q))return false;
-              return true;
-            }).sort((a,b)=>b.date.localeCompare(a.date));
-            const total=list.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-tx.amount),0);
-            const allCats=[...new Set([...catsOut,...catsIn])];
-            return(<div style={{animation:"slideUp .3s ease"}}><BackBtn label="Orçamento"/>
-              <div style={{fontSize:15,fontWeight:800,marginBottom:12}}>Extrato Geral</div>
-              <input value={extSearch} onChange={e=>setExtSearch(e.target.value)} placeholder="Buscar por descrição ou categoria..." style={{width:"100%",background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 12px",color:C.text,fontSize:12,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
-              <div style={{display:"flex",gap:6,marginBottom:8}}>
-                {[{v:"todos",l:"Todos"},{v:"in",l:"Receitas"},{v:"out",l:"Custos"}].map(o=>(
-                  <button key={o.v} onClick={()=>setExtType(o.v)} style={{flex:1,padding:"7px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:10,border:"1.5px solid "+(extType===o.v?ACCENT:C.b2),background:extType===o.v?ACCENT+"18":"transparent",color:extType===o.v?ACCENT:C.muted}}>{o.l}</button>
-                ))}
-              </div>
-              <div style={{display:"flex",gap:6,marginBottom:14}}>
-                <select value={extPeriod} onChange={e=>setExtPeriod(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
-                  <option value="mes">Este mês</option>
-                  <option value="3m">Últimos 3 meses</option>
-                  <option value="tudo">Tudo</option>
-                </select>
-                <select value={extCat} onChange={e=>setExtCat(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
-                  <option value="">Todas categorias</option>
-                  {allCats.map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 14px",marginBottom:14}}>
-                <span style={{fontSize:9,color:C.muted,fontWeight:600}}>{list.length} lançamento{list.length===1?"":"s"}</span>
-                <span style={{fontSize:14,fontWeight:900,color:total>=0?"#16a34a":"#ef4444"}}>{total>=0?"+":"-"}{fmt(Math.abs(total))}</span>
-              </div>
-              {list.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum lançamento encontrado com esses filtros.</div>}
-              {list.map((tx,i)=>(<div key={tx.id+i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:26,height:26,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={12} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.sourceName} · {tx.date.split("-").reverse().join("/")}</div></div><div style={{fontSize:12,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444",flexShrink:0}}>{tx.type==="in"?"+":"-"}{fmt(tx.amount)}</div></div>))}
-            </div>);
-          }
           return null;
         })()}
 
@@ -808,7 +762,8 @@ export default function YesodModule({ onBack, dark, setDark }) {
                   <div key={r.id} onClick={()=>{
                     if(r.tab==="habitos_section") document.getElementById("yesod-habitos")?.scrollIntoView({behavior:"smooth"});
                     else if(r.tab==="metas_section") document.getElementById("yesod-metas")?.scrollIntoView({behavior:"smooth"});
-                    else if(r.tab==="fluxo"||r.tab==="if") setYesodSection(r.tab);
+                    else if(r.tab==="if") setYesodSection(r.tab);
+                    else if(r.tab==="fluxo") { setTab("orc"); setOrcSection("fluxo"); }
                     else if(r.tab&&r.tab!=="yesod") setTab(r.tab);
                   }}
                     style={{background:C.card,border:"1px solid "+color+"22",borderRadius:12,
@@ -848,7 +803,27 @@ export default function YesodModule({ onBack, dark, setDark }) {
         })()}
 
         {/* ══ YESOD — FLUXO ══ */}
-        {!page&&tab==="yesod"&&yesodSection==="fluxo"&&(function FluxoTab(){
+        {/* ══ ORÇAMENTO ══ — ganhou pills Orçamento/Extrato/Fluxo em 25/08/2026 (Fluxo morava
+            na aba Yesod antes, ver ORC_SECTIONS) */}
+        {!page&&tab==="orc"&&(
+          <div style={{animation:"slideUp .3s ease"}}>
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              {ORC_SECTIONS.map(s=>(<button key={s.id} onClick={()=>setOrcSection(s.id)}
+                style={{flex:1,padding:"8px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:11,
+                  background:orcSection===s.id?"linear-gradient(135deg,"+ACCENT+"dd,"+ACCENT+"88)":C.b1,
+                  border:"none",color:orcSection===s.id?"#fff":C.muted}}>{s.l}</button>))}
+            </div>
+            {orcSection==="orc"&&(<div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:13,fontWeight:800}}>Orçamento — {monthLabel2(getMonthStr(0))}</span>
+                <button onClick={()=>openSh("addBudget",{cat:catsOut[0],limit:0})} style={{background:"none",border:"1px solid "+ACCENT,borderRadius:7,padding:"5px 11px",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10}/> Categoria</button>
+              </div>
+              {budgets.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum orçamento definido</div>}
+              {budgets.map(bg=>{const spent=budgetSpend(bg.cat);const pct=Math.min(100,Math.round((spent/bg.limit)*100));const over=spent>bg.limit;const color=over?"#ef4444":pct>75?"#f59e0b":ACCENT;return(<div key={bg.id} style={{background:C.card,border:"1px solid "+(over?"#ef444433":C.b1),borderRadius:12,padding:"11px 13px",marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:12,fontWeight:600}}>{bg.cat}</span>{over&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"#fee2e2",color:"#ef4444",fontWeight:700}}>ACIMA</span>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,fontWeight:700,color}}>{fmt(spent)}</span><span style={{fontSize:9,color:C.muted}}>/ {fmt(bg.limit)}</span><button onClick={()=>openSh("editBudget",{id:bg.id,cat:bg.cat,limit:bg.limit})} style={{background:C.b1,border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="edit" size={10} color={C.muted}/></button><button onClick={()=>setBudgets(p=>p.filter(x=>x.id!==bg.id))} style={{background:C.b1,border:"none",borderRadius:99,width:18,height:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={9} color={C.muted}/></button></div></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:pct+"%",background:color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>{pct}% usado {over?"— "+fmt(spent-bg.limit)+" acima":"— "+fmt(bg.limit-spent)+" disponível"}</div></div>);})}
+            </div>)}
+          </div>
+        )}
+        {!page&&tab==="orc"&&orcSection==="fluxo"&&(function FluxoTab(){
           const VIEWS=["fluxo","poupanca","dividas-rel","invest-rel","patrimonio","projecao"];
           const VIEW_LABELS=["Fluxo de Caixa","Taxa de Poupança","Progresso Dívidas","Rendimento Invest.","Evolução Patrimonial","Projeção"];
           const vIdx=typeof fluxoView==="number"?fluxoView:0;
@@ -865,19 +840,22 @@ export default function YesodModule({ onBack, dark, setDark }) {
               {vIdx===0&&(function FluxoCaixaView(){
                 const chartYm=selChartYm||getMonthStr(0);
                 const curYm=getMonthStr(0);const[curY,curMo]=curYm.split("-").map(Number);
-                const realizedYms=[];for(let m=1;m<=curMo;m++)realizedYms.push(curY+"-"+String(m).padStart(2,"0"));
-                const futureYms=[];{let y=curY,m=curMo;for(let i=0;i<chartHorizon;i++){m++;if(m>12){m=1;y++;}futureYms.push(y+"-"+String(m).padStart(2,"0"));}}
+                // chartMode null = YTD "pura" (só meses realizados do ano, sem futuro nenhum) —
+                // visão default. chartMode=3|6|12 = só o último mês realizado + N futuros, pra
+                // caber inteiro na tela sem precisar de scroll (antes o toggle só apendava meses
+                // fora da área visível — parecia não fazer nada; corrigido 25/08/2026).
+                const realizedYms = chartMode===null
+                  ? Array.from({length:curMo},(_,i)=>curY+"-"+String(i+1).padStart(2,"0"))
+                  : [curYm];
+                const futureYms=[];if(chartMode!==null){let y=curY,m=curMo;for(let i=0;i<chartMode;i++){m++;if(m>12){m=1;y++;}futureYms.push(y+"-"+String(m).padStart(2,"0"));}}
                 const chartMonths=[...realizedYms,...futureYms].map(ym=>({ym,...monthTotals(ym),future:isFutureYm(ym)}));
                 const chartMax=Math.max(...chartMonths.map(m=>Math.max(m.ins,m.outs)),1);
                 const selTotals=monthTotals(chartYm);const selFuture=isFutureYm(chartYm);const selBalance=selTotals.ins-selTotals.outs;
-                const drillTotals=selFuture?futureCategoryTotals(chartYm,drillType):pastCategoryTotals(chartYm,drillType);
-                const drillRows=selFuture
-                  ?Object.entries(drillTotals).map(([cat,v])=>({cat,...v}))
-                  :Object.entries(drillTotals).sort((a,b)=>b[1]-a[1]).map(([cat,amount])=>({cat,amount,fromRecurring:false}));
+                const goToExtrato=type=>{setExtType(type);setExtYm(chartYm);setOrcSection("extrato");};
                 return(<div>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                    <span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1}}>REALIZADO (YTD) + ESPERADO</span>
-                    <div style={{display:"flex",gap:4}}>{[3,6,12].map(h=>(<button key={h} onClick={()=>setChartHorizon(h)} style={{padding:"4px 9px",borderRadius:99,cursor:"pointer",fontWeight:700,fontSize:9,border:"1.5px solid "+(chartHorizon===h?ACCENT:C.b2),background:chartHorizon===h?ACCENT+"18":"transparent",color:chartHorizon===h?ACCENT:C.muted}}>{h}m</button>))}</div>
+                    <span style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1}}>{chartMode===null?"REALIZADO (YTD)":"ÚLTIMO MÊS + ESPERADO"}</span>
+                    <div style={{display:"flex",gap:4}}>{[3,6,12].map(h=>(<button key={h} onClick={()=>{setChartMode(m=>m===h?null:h);setSelChartYm(null);}} style={{padding:"4px 9px",borderRadius:99,cursor:"pointer",fontWeight:700,fontSize:9,border:"1.5px solid "+(chartMode===h?ACCENT:C.b2),background:chartMode===h?ACCENT+"18":"transparent",color:chartMode===h?ACCENT:C.muted}}>{h}m</button>))}</div>
                   </div>
                   <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:12}}>
                     <div style={{display:"flex",gap:5,alignItems:"flex-end",height:70,marginBottom:8,overflowX:"auto"}}>{chartMonths.map(m=>(<div key={m.ym} onClick={()=>setSelChartYm(m.ym)} style={{flex:"0 0 26px",display:"flex",flexDirection:"column",alignItems:"center",gap:3,cursor:"pointer"}}><div style={{width:"100%",display:"flex",gap:2,alignItems:"flex-end",height:56}}><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#16a34a55":"#16a34a",height:Math.max(2,(m.ins/chartMax)*56)+"px"}}/><div style={{flex:1,borderRadius:"3px 3px 0 0",background:m.future?"#ef444455":"#ef4444",height:Math.max(2,(m.outs/chartMax)*56)+"px"}}/></div><div style={{fontSize:6,color:m.ym===chartYm?ACCENT:(m.future?C.dim:C.muted),fontWeight:m.ym===chartYm?700:400,whiteSpace:"nowrap"}}>{monthLabel2(m.ym)}{m.future?"(E)":""}</div></div>))}</div>
@@ -888,33 +866,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
                     {selFuture&&<span style={{fontSize:8,fontWeight:700,color:"#f59e0b",background:"#f59e0b18",padding:"3px 8px",borderRadius:99}}>projeção editável</span>}
                   </div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                    <div onClick={()=>{setDrillType("in");setDrillOpen(true);}} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center",cursor:"pointer"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Receitas</div><div style={{fontSize:13,fontWeight:900,color:"#16a34a"}}>{fmt(selTotals.ins)}</div></div>
-                    <div onClick={()=>{setDrillType("out");setDrillOpen(true);}} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center",cursor:"pointer"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Custos</div><div style={{fontSize:13,fontWeight:900,color:"#ef4444"}}>{fmt(selTotals.outs)}</div></div>
+                    <div onClick={()=>goToExtrato("in")} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center",cursor:"pointer"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Receitas</div><div style={{fontSize:13,fontWeight:900,color:"#16a34a"}}>{fmt(selTotals.ins)}</div></div>
+                    <div onClick={()=>goToExtrato("out")} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center",cursor:"pointer"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Custos</div><div style={{fontSize:13,fontWeight:900,color:"#ef4444"}}>{fmt(selTotals.outs)}</div></div>
                     <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 10px",textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>Saldo</div><div style={{fontSize:13,fontWeight:900,color:selBalance>=0?ACCENT:"#ef4444"}}>{fmt(selBalance)}</div></div>
                   </div>
-                  <div style={{fontSize:9,color:C.muted,lineHeight:1.6,marginBottom:14}}>Toque numa barra pra selecionar o mês · toque em Receitas/Custos pra ver o detalhe por categoria — editável quando o mês é futuro.</div>
-                  {drillOpen&&(<Sheet title={(drillType==="in"?"Receitas":"Custos")+" · "+monthLabel2(chartYm)} onClose={()=>setDrillOpen(false)} C={C}>
-                    {selFuture&&<div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Mês futuro — valores vêm das recorrências ativas. Edite pra ajustar só {monthLabel2(chartYm)} (a recorrência continua com o valor padrão nos outros meses); some uma categoria nova se precisar.</div>}
-                    {!selFuture&&<div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Mês já realizado — somatório dos lançamentos de verdade por categoria.</div>}
-                    {drillRows.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:12}}>Nenhuma categoria {selFuture?"esperada":"lançada"} ainda.</div>}
-                    {drillRows.map((row,i)=>(<div key={row.cat+i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",background:C.b1,borderRadius:10,marginBottom:7}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:11,fontWeight:700}}>{row.cat}</div>
-                        {row.fromRecurring&&<div style={{fontSize:8,color:C.muted}}>da recorrência "{row.recDesc}"</div>}
-                      </div>
-                      {selFuture?(
-                        row.fromRecurring
-                          ?<input type="number" value={row.amount} onChange={e=>setRecurringOverrides(p=>({...p,[chartYm+"|"+row.recId]:e.target.value}))} style={{width:78,background:C.surface,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>
-                          :<input type="number" value={row.amount} onChange={e=>setPlannedItems(p=>p.map(it=>it.id===row.plannedId?{...it,amount:e.target.value}:it))} style={{width:78,background:C.surface,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>
-                      ):(
-                        <div style={{fontSize:12,fontWeight:800}}>{fmt(row.amount)}</div>
-                      )}
-                    </div>))}
-                    {selFuture&&(<Btn outline sm color={ACCENT} onClick={()=>{
-                      const opts=drillType==="in"?catsIn:catsOut;
-                      setPlannedItems(p=>[...p,{id:"pi"+uid(),ym:chartYm,cat:opts[0],type:drillType,amount:0}]);
-                    }}><Ico n="plus" size={11}/> Adicionar categoria esperada</Btn>)}
-                  </Sheet>)}
+                  <div style={{fontSize:9,color:C.muted,lineHeight:1.6,marginBottom:14}}>Toque numa barra pra selecionar o mês · toque em Receitas/Custos pra ver o detalhe por categoria no Extrato — editável quando o mês é futuro.</div>
                 </div>);
               })()}
               {vIdx===0&&(<div>
@@ -992,20 +948,98 @@ export default function YesodModule({ onBack, dark, setDark }) {
           );
         })()}
 
-        {/* ══ ORÇAMENTO ══ */}
-        {!page&&tab==="orc"&&(
-          <div style={{animation:"slideUp .3s ease"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <span style={{fontSize:13,fontWeight:800}}>Orçamento — {monthLabel2(getMonthStr(0))}</span>
-              <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>nav("extrato")} style={{background:"none",border:"1px solid "+C.b2,borderRadius:7,padding:"5px 11px",cursor:"pointer",color:C.muted,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="bank" size={10}/> Extrato</button>
-                <button onClick={()=>openSh("addBudget",{cat:catsOut[0],limit:0})} style={{background:"none",border:"1px solid "+ACCENT,borderRadius:7,padding:"5px 11px",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10}/> Categoria</button>
-              </div>
+        {/* ══ EXTRATO GERAL ══ — pill dentro de Orçamento (era sub-página até 25/08/2026).
+            Sem extYm: comportamento de sempre (busca+tipo+categoria+período, allTxs()).
+            Com extYm (chegando do clique em Receitas/Custos no Fluxo): filtra exatamente
+            aquele mês; se for futuro, a lista vira as categorias esperadas editáveis (mesma
+            lógica que estava no Sheet de drilldown do Fluxo, movida pra cá — não duplicada). */}
+        {!page&&tab==="orc"&&orcSection==="extrato"&&(function ExtratoView(){
+          const q=extSearch.trim().toLowerCase();
+          const nowYm=today.slice(0,7);
+          const monthsBack=ds=>{const[y,m]=ds.slice(0,7).split("-").map(Number);const[ny,nm]=nowYm.split("-").map(Number);return(ny-y)*12+(nm-m);};
+          const allCats=[...new Set([...catsOut,...catsIn])];
+          const ymFuture=extYm&&isFutureYm(extYm);
+
+          let list=[];
+          if(!ymFuture){
+            list=allTxs().filter(tx=>{
+              if(extType!=="todos"&&tx.type!==extType)return false;
+              if(extCat&&tx.cat!==extCat)return false;
+              if(extYm){ if(!tx.date||!tx.date.startsWith(extYm))return false; }
+              else {
+                const mb=monthsBack(tx.date);
+                if(extPeriod==="mes"&&mb!==0)return false;
+                if(extPeriod==="3m"&&(mb<0||mb>2))return false;
+              }
+              if(q&&!(tx.desc+" "+tx.cat).toLowerCase().includes(q))return false;
+              return true;
+            }).sort((a,b)=>b.date.localeCompare(a.date));
+          }
+          const total=list.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-tx.amount),0);
+
+          let futureRows=[];
+          const futureType=extType==="todos"?"out":extType;
+          if(ymFuture){
+            const totals=futureCategoryTotals(extYm,futureType);
+            futureRows=Object.entries(totals).map(([cat,v])=>({cat,...v}))
+              .filter(r=>!extCat||r.cat===extCat)
+              .filter(r=>!q||r.cat.toLowerCase().includes(q));
+          }
+
+          return(<div style={{animation:"slideUp .3s ease"}}>
+            <div style={{fontSize:15,fontWeight:800,marginBottom:12}}>Extrato Geral</div>
+            <input value={extSearch} onChange={e=>setExtSearch(e.target.value)} placeholder="Buscar por descrição ou categoria..." style={{width:"100%",background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 12px",color:C.text,fontSize:12,outline:"none",marginBottom:10,boxSizing:"border-box"}}/>
+            <div style={{display:"flex",gap:6,marginBottom:8}}>
+              {[{v:"todos",l:"Todos"},{v:"in",l:"Receitas"},{v:"out",l:"Custos"}].map(o=>(
+                <button key={o.v} onClick={()=>setExtType(o.v)} style={{flex:1,padding:"7px",borderRadius:9,cursor:"pointer",fontWeight:700,fontSize:10,border:"1.5px solid "+(extType===o.v?ACCENT:C.b2),background:extType===o.v?ACCENT+"18":"transparent",color:extType===o.v?ACCENT:C.muted}}>{o.l}</button>
+              ))}
             </div>
-            {budgets.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum orçamento definido</div>}
-            {budgets.map(bg=>{const spent=budgetSpend(bg.cat);const pct=Math.min(100,Math.round((spent/bg.limit)*100));const over=spent>bg.limit;const color=over?"#ef4444":pct>75?"#f59e0b":ACCENT;return(<div key={bg.id} style={{background:C.card,border:"1px solid "+(over?"#ef444433":C.b1),borderRadius:12,padding:"11px 13px",marginBottom:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}><div style={{display:"flex",alignItems:"center",gap:7}}><span style={{fontSize:12,fontWeight:600}}>{bg.cat}</span>{over&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:99,background:"#fee2e2",color:"#ef4444",fontWeight:700}}>ACIMA</span>}</div><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,fontWeight:700,color}}>{fmt(spent)}</span><span style={{fontSize:9,color:C.muted}}>/ {fmt(bg.limit)}</span><button onClick={()=>openSh("editBudget",{id:bg.id,cat:bg.cat,limit:bg.limit})} style={{background:C.b1,border:"none",borderRadius:6,width:22,height:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="edit" size={10} color={C.muted}/></button><button onClick={()=>setBudgets(p=>p.filter(x=>x.id!==bg.id))} style={{background:C.b1,border:"none",borderRadius:99,width:18,height:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={9} color={C.muted}/></button></div></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:4}}><div style={{height:"100%",width:pct+"%",background:color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>{pct}% usado {over?"— "+fmt(spent-bg.limit)+" acima":"— "+fmt(bg.limit-spent)+" disponível"}</div></div>);})}
-          </div>
-        )}
+            <div style={{display:"flex",gap:6,marginBottom:14}}>
+              {extYm?(
+                <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"space-between",background:ACCENT+"14",border:"1.5px solid "+ACCENT+"55",borderRadius:9,padding:"7px 11px"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:ACCENT}}>Mês: {monthLabel2(extYm)}</span>
+                  <button onClick={()=>setExtYm(null)} style={{background:"none",border:"none",cursor:"pointer",display:"flex",padding:0}}><Ico n="x" size={12} color={ACCENT}/></button>
+                </div>
+              ):(
+                <select value={extPeriod} onChange={e=>setExtPeriod(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
+                  <option value="mes">Este mês</option>
+                  <option value="3m">Últimos 3 meses</option>
+                  <option value="tudo">Tudo</option>
+                </select>
+              )}
+              <select value={extCat} onChange={e=>setExtCat(e.target.value)} style={{flex:1,background:C.card,border:"1px solid "+C.b1,borderRadius:9,padding:"8px 10px",color:C.text,fontSize:11,outline:"none"}}>
+                <option value="">Todas categorias</option>
+                {allCats.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+
+            {ymFuture?(<>
+              <div style={{fontSize:8,fontWeight:700,color:"#f59e0b",background:"#f59e0b18",display:"inline-block",padding:"3px 8px",borderRadius:99,marginBottom:10}}>projeção editável</div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Mês futuro — valores vêm das recorrências ativas. Edite pra ajustar só {monthLabel2(extYm)} (a recorrência continua com o valor padrão nos outros meses); some uma categoria nova se precisar.{extType==="todos"&&" Mostrando Custos esperados — escolha Receitas ou Custos acima pra trocar."}</div>
+              {futureRows.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:12}}>Nenhuma categoria esperada ainda.</div>}
+              {futureRows.map((row,i)=>(<div key={row.cat+i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:7}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:700}}>{row.cat}</div>
+                  {row.fromRecurring&&<div style={{fontSize:8,color:C.muted}}>da recorrência "{row.recDesc}"</div>}
+                </div>
+                {row.fromRecurring
+                  ?<input type="number" value={row.amount} onChange={e=>setRecurringOverrides(p=>({...p,[extYm+"|"+row.recId]:e.target.value}))} style={{width:78,background:C.bg,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>
+                  :<input type="number" value={row.amount} onChange={e=>setPlannedItems(p=>p.map(it=>it.id===row.plannedId?{...it,amount:e.target.value}:it))} style={{width:78,background:C.bg,border:"1px solid "+C.b2,borderRadius:8,padding:"7px 9px",color:C.text,fontSize:12,outline:"none",textAlign:"right"}}/>}
+              </div>))}
+              <Btn outline sm color={ACCENT} onClick={()=>{
+                const opts=futureType==="in"?catsIn:catsOut;
+                setPlannedItems(p=>[...p,{id:"pi"+uid(),ym:extYm,cat:opts[0],type:futureType,amount:0}]);
+              }}><Ico n="plus" size={11}/> Adicionar categoria esperada</Btn>
+            </>):(<>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"11px 14px",marginBottom:14}}>
+                <span style={{fontSize:9,color:C.muted,fontWeight:600}}>{list.length} lançamento{list.length===1?"":"s"}</span>
+                <span style={{fontSize:14,fontWeight:900,color:total>=0?"#16a34a":"#ef4444"}}>{total>=0?"+":"-"}{fmt(Math.abs(total))}</span>
+              </div>
+              {list.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhum lançamento encontrado com esses filtros.</div>}
+              {list.map((tx,i)=>(<div key={tx.id+i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:26,height:26,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={12} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.sourceName} · {tx.date.split("-").reverse().join("/")}</div></div><div style={{fontSize:12,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444",flexShrink:0}}>{tx.type==="in"?"+":"-"}{fmt(tx.amount)}</div></div>))}
+            </>)}
+          </div>);
+        })()}
 
         {/* ══ BOLSOS ══ — Contas (com Cartões aninhado dentro)/Caixinhas/Investimentos,
             com editar/apagar inline (antes só em Config, que agora só guarda o que não
