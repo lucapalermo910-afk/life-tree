@@ -5,12 +5,12 @@ aliases: [Yesod]
 
 # 💰 Yesod — Finanças
 
-> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1185 linhas, 25/08/2026) · **fecha como v10** (ver [[08 Versões]])
+> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1195 linhas, 25/08/2026) · **fecha como v10** (ver [[08 Versões]])
 > Score bridge: publica `yesod` em `lifetree_scores`
 > Esta nota incorpora a auditoria funcional completa feita em 01/08/2026 (levantamento de telas/entidades/gaps que também existe como [artefato web](https://claude.ai/code/artifact/477b284f-23ed-447d-a614-5ff541796195)) — é a referência canônica do estado do módulo daqui pra frente, não só notas de implementação.
 
 ## Abas
-Reorganizado em 01/08/2026 de 9 pra **5 abas**: `yesod` (Yesod — com controle segmentado interno **Visão Geral** / **Fluxo** / **IF**, ver [[04 Bugs Conhecidos]]) · `orc` (Orçamento) · `bolsos` (Contas, Caixinhas, Cartões e Investimentos, cada linha com editar/apagar inline) · `debt` (Dívidas) · `cfg` (Config — só o que não tem lugar em outra tela: Bancos, Categorias, Recorrências). As antigas abas `over` (Geral) e `inv` (Investimentos, agora dentro de Bolsos) foram removidas; `fluxo` e `if` viraram seções do controle segmentado em vez de abas próprias.
+Reorganizado em 01/08/2026 de 9 pra 5 abas, e de novo em 25/08/2026 (Dívidas entrou em Bolsos, IF+Metas saíram pra uma aba própria) — hoje são **5 abas**: `yesod` (Yesod — só Visão Geral desde 25/08/2026, sem controle segmentado; ver [[04 Bugs Conhecidos]]) · `orc` (Orçamento, com controle segmentado **Fluxo** / **Orçamento**) · `bolsos` (Contas com Cartões aninhado, Caixinhas, Investimentos **e Dívidas e Financiamentos** — 5 seções, cada uma com editar/apagar inline) · `goals` (Objetivos — Meta de Independência Financeira + metas livres) · `cfg` (Config — só o que não tem lugar em outra tela: Bancos, Categorias, Recorrências). As antigas abas `over` (Geral), `inv` (Investimentos) e `debt` (Dívidas) foram removidas; `fluxo`/`if`/`metas` viraram conteúdo de outras abas em vez de abas ou seções próprias.
 
 ## Entidades de dados
 11 estruturas de dados independentes, todas em arrays no estado do componente, persistidas em `localStorage` sob `lifetree_fin_*` (ver [[#Persistência|Persistência]]).
@@ -34,11 +34,10 @@ Saldo de conta é sempre derivado (`accBal`, soma de `txs`), nunca armazenado �
 ## Telas
 Visão rápida do que cada tela mostra e permite fazer — detalhe de implementação de cada uma está em [[#Funcionalidades|Funcionalidades]] abaixo.
 
-- **Yesod → Visão Geral** — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo · checklist de metas financeiras próprias do módulo.
-- **Yesod → IF** — progresso da meta (patrimônio atual vs. necessário, regra dos 4%), projeção de anos/meses até atingir com base na poupança média dos últimos 3 meses, renda mensal estimada, editar meta por valor-alvo ou por renda desejada. (Fluxo saiu do controle segmentado do Yesod em 25/08/2026 — ver Orçamento abaixo — sobra só Visão Geral | IF.)
-- **Orçamento** — ganhou controle segmentado próprio em 25/08/2026, **Fluxo primeiro** (é o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
-- **Bolsos** — Contas (saldo, criar com banco novo direto daqui, editar/apagar inline, tocar → extrato) **com Cartões aninhado dentro** (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento — nested em Contas desde 23/08/2026, antes era seção irmã) · Caixinhas (saldo/meta/%/data alvo, mesmas ações, tocar → depositar/retirar) · Investimentos (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria).
-- **Dívidas** — total em dívidas no topo; lista com progresso (%, parcelas pagas/total); criar, apagar, tocar → editar / registrar parcela paga.
+- **Yesod → Visão Geral** — única seção da aba desde 25/08/2026 (IF saiu, Metas saiu — sem controle segmentado, é a aba toda) — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo. Botão "Lançar" no header (também aparece em Orçamento → Fluxo desde 25/08/2026).
+- **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Card de progresso da Meta de Independência Financeira (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, editar por valor-alvo ou renda desejada) seguido do checklist "Outras Metas" (livre, criar/concluir com XP/apagar — não só IF, no mesmo espírito de múltiplos objetivos do Hod).
+- **Orçamento** — controle segmentado **Fluxo** / **Orçamento** (desde 25/08/2026, Fluxo primeiro por ser o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
+- **Bolsos** — Contas (saldo, editar/apagar inline, tocar → extrato; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento — nested em Contas desde 23/08/2026) · Caixinhas (saldo/meta/%/data alvo, mesmas ações, tocar → depositar/retirar) · Investimentos (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria) · **Dívidas e Financiamentos** (5ª seção desde 25/08/2026, antes aba própria — total em dívidas no topo, lista com progresso, criar/apagar, tocar → editar/registrar parcela paga).
 - **Config** — Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
 
 ## Funcionalidades
@@ -269,6 +268,53 @@ Lazer 300→450) reflete na hora no card de Custos, lista de lançamentos sem bu
 run build`/`eslint` limpos (33 problemas, mesmo baseline pré-existente de sempre — a remoção
 de `setOverMonth` teria introduzido 1 `no-unused-vars` novo, corrigido trocando o `useState`
 por uma constante).
+
+### Reorganização de navegação e correção de patrimônio líquido (25/08/2026, leva 2)
+Feedback depois de testar a leva anterior com dados falsos (ver seção acima): 6 pontos de
+navegação/UX mais um pedido explícito de auditoria de confiabilidade dos números.
+
+1. **Botão inferior esquerdo (ícone "Yesod") não sai mais do módulo.** Causa raiz: uma correção
+   de sessão anterior tinha feito esse ícone (o mesmo `treelife` da Árvore em `App.jsx`) chamar
+   `onBack()` direto — o que quebrou a única forma de voltar pra Visão Geral a partir de
+   Orçamento/Bolsos/Config, já que não tem mais controle segmentado dentro da aba Yesod pra
+   isso. Agora navega internamente como qualquer outro tab (`setTab`/`setPage(null)`); sair do
+   módulo continua pelo link "← Árvore" no topo, que já funcionava corretamente.
+2. **Botão "Lançar"** passa a aparecer também em Orçamento → Fluxo (onde vive a lista de
+   lançamentos), não só na Visão Geral.
+3. **Botão "Banco" removido de Bolsos → Contas** — Config → Bancos já é CRUD completo
+   (criar/editar/apagar), o botão em Contas só duplicava a criação sem oferecer editar/apagar.
+4. **Dívidas e Financiamentos** deixou de ser aba própria no rodapé e virou a 5ª seção de
+   Bolsos (depois de Investimentos) — mesmo padrão visual (divisor + header com botão) das
+   outras seções. Rodapé cai pra 4 ícones antes do item 5 devolver pra 5.
+5. **Nova aba "Objetivos"** — a seção "IF" (que vivia dentro da aba Yesod, controle segmentado
+   Visão Geral/IF) migrou pra lá, e o checklist "Metas" (que vivia dentro da Visão Geral)
+   também — os dois juntos no mesmo lugar. Com "IF" fora, a aba Yesod sobrou só com Visão
+   Geral: o controle de pills foi removido (sem sentido com 1 opção só). "Outras Metas" segue
+   livre pra criar qualquer objetivo, não só IF — aproxima o módulo do padrão de múltiplos
+   objetivos do Hod, como pedido.
+6. **Auditoria de confiabilidade**, testada ao vivo com a base de dados falsa (ver seção
+   acima): confirmado que transações de cartão aparecem tanto no Extrato/Fluxo (agrupadas por
+   mês da transação) quanto na fatura do cartão certo (agrupada por ciclo de fechamento/
+   vencimento — datas diferentes são esperadas, ex. uma compra de 15/08 com fechamento dia 10
+   cai na fatura de setembro, não na de agosto) — comportamento correto, não bug. Confirmado
+   que os totais por categoria do Orçamento batem exatamente com os do Fluxo pro mesmo mês
+   (testado com Alimentação: R$1.035,90 nos dois lugares). **Encontrado 1 bug real**: `net`
+   (Patrimônio Líquido, usado no header, no score e na Meta de IF) calculava `totCardDebt`
+   (soma das faturas em aberto de todos os cartões) mas nunca subtraía do total — o patrimônio
+   ficava inflado pelo valor total usado nos cartões de crédito. Corrigido (`net` agora
+   desconta `totCardDebt` também); no ambiente de teste isso corrigiu o patrimônio de
+   R$32.645,10 pra R$20.800,10 (diferença de R$11.845,00, batendo exatamente com a soma das
+   faturas em aberto dos 2 cartões de teste).
+
+Testado no navegador: ícone Yesod volta pra Visão Geral de qualquer aba; "Lançar" aparece nos
+dois lugares certos; Bolsos → Contas sem botão "Banco" (Config → Bancos intacto); Dívidas
+dentro de Bolsos com dados corretos; aba Objetivos mostra IF + Outras Metas, indicadores da
+Visão Geral ("Prog. IF", "Dívidas", "Metas") navegam pros lugares certos depois da
+reorganização. `npm run build`/`eslint` limpos — **32 problemas** (baseline caiu de 33 pra 32:
+`totCardDebt` era declarado e nunca lido, agora é usado no cálculo de `net`, então o
+`no-unused-vars` correspondente sumiu — não foi introduzido nenhum problema novo). Rebuild do
+APK debug, cópia pra Downloads, commit + push, changelog aqui — mesmo padrão das levas
+anteriores.
 
 ## Persistência
 Prefixo `lifetree_fin_` — 21 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
