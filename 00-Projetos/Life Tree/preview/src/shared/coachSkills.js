@@ -59,6 +59,7 @@ export function buildYesodContext() {
   const yesodCards = readJSON("lifetree_fin_yesodcards", ["poupanca","if","dividas","orcamento","habitos","metas"]);
   const ifGoal = readJSON("lifetree_fin_ifgoal", 0);
   const ifMonthly = readJSON("lifetree_fin_ifmonthly", 0);
+  const scoreWeights = readJSON("lifetree_fin_scoreweights", { savRate: 25, debt: 20, budget: 20, emergency: 20, if: 15, emergencyTargetMonths: 6 });
   const today = new Date().toISOString().slice(0, 10);
 
   const bankName = id => banks.find(b => b.id === id)?.name || "";
@@ -68,6 +69,15 @@ export function buildYesodContext() {
   const dividaRestante = debts.reduce(
     (s, d) => s + Math.max(0, (d.totalParcelas - d.parcelasPagas) * d.valorParcela), 0
   );
+  // Fatura de cartão em aberto (passivo) e despesas divididas a receber (ativo) — mesma
+  // lógica de totCardDebt/totReceivable em YesodModule.jsx (26/08/2026), pra
+  // patrimonio_liquido bater com o que a UI mostra.
+  const totalFaturaCartao = cards.reduce((s, c) => s + (c.txs || []).reduce((ss, t) => ss + (t.type === "in" ? -t.amount : t.amount), 0), 0);
+  const totalAReceber = accs.reduce((s, a) => s + (a.txs || []).reduce((ss, t) => ss + (t.split && !t.split.settled ? t.amount * ((Number(t.split.theirPercent) || 0) / 100) : 0), 0), 0);
+
+  // custo líquido de uma transação dividida — a parte da outra pessoa nunca foi gasto de
+  // verdade do usuário, mesma lógica de mySplitShare em YesodModule.jsx.
+  const mySplitShare = t => t.split ? t.amount * (1 - (Number(t.split.theirPercent) || 0) / 100) : t.amount;
 
   // capacidade de poupança média — mesma lógica da aba Objetivos do YesodModule (últimos 3 meses)
   const allTxs = [];
@@ -79,11 +89,31 @@ export function buildYesodContext() {
     const txs = allTxs.filter(t => t.date && t.date.startsWith(ym));
     return {
       ins: txs.filter(t => t.type === "in").reduce((s, t) => s + t.amount, 0),
-      outs: txs.filter(t => t.type === "out").reduce((s, t) => s + t.amount, 0),
+      outs: txs.filter(t => t.type === "out").reduce((s, t) => s + mySplitShare(t), 0),
     };
   };
   const last3 = [-1, -2, -3].map(monthIO);
   const poupancaMedia = Math.max(0, last3.reduce((s, m) => s + (m.ins - m.outs), 0) / 3);
+
+  // ── Fórmula de Saúde Financeira — mesmos sub-cálculos de calcYesodScore em
+  // YesodModule.jsx (26/08/2026), pro Coach poder explicar/avaliar/sugerir os pesos com os
+  // números reais em vez de recomputar tudo de novo às cegas.
+  const cf0 = monthIO(-1);
+  const savRate = cf0.ins > 0 ? Math.max(0, (cf0.ins - cf0.outs) / cf0.ins) : 0;
+  const savS = Math.min(1, savRate / 0.2);
+  const totalDebtOriginal = debts.reduce((s, d) => s + d.totalParcelas * d.valorParcela, 0);
+  const debtS = debts.length === 0 ? 1 : (totalDebtOriginal > 0 ? Math.max(0, 1 - dividaRestante / totalDebtOriginal) : 1);
+  const budgetSpend = cat => { const ym = today.slice(0, 7); return allTxs.filter(t => t.type === "out" && t.cat === cat && t.date && t.date.startsWith(ym)).reduce((s, t) => s + mySplitShare(t), 0); };
+  const budS = budgets.length === 0 ? 0.5 : budgets.reduce((s, b) => { const spend = budgetSpend(b.cat); return s + (spend <= b.limit ? 1 : Math.max(0, 1 - (spend - b.limit) / b.limit)); }, 0) / budgets.length;
+  const avgMonthlyExpense = [-1, -2, -3].reduce((s, o) => s + monthIO(o).outs, 0) / 3;
+  const emergTarget = scoreWeights.emergencyTargetMonths || 6;
+  const emergMonths = avgMonthlyExpense > 0 ? (totalContas + totalCaixinhas) / avgMonthlyExpense : 0;
+  const emergS = Math.min(1, emergMonths / emergTarget);
+  const netLiquido = totalContas + totalCaixinhas + totalInvestido - dividaRestante - totalFaturaCartao + totalAReceber;
+  const ifN = ifGoal || (ifMonthly ? ifMonthly * 300 : 0) || 1;
+  const ifS = Math.min(1, netLiquido / ifN);
+  const totalPesos = (Number(scoreWeights.savRate) || 0) + (Number(scoreWeights.debt) || 0) + (Number(scoreWeights.budget) || 0) + (Number(scoreWeights.emergency) || 0) + (Number(scoreWeights.if) || 0);
+  const scoreFinal = totalPesos > 0 ? Math.round(((savS * (scoreWeights.savRate || 0) + debtS * (scoreWeights.debt || 0) + budS * (scoreWeights.budget || 0) + emergS * (scoreWeights.emergency || 0) + ifS * (scoreWeights.if || 0)) / totalPesos) * 100) : 0;
 
   // alertas de vencimento (faturas de cartão e parcelas de dívida nos próximos 7 dias)
   const alertas = [];
@@ -116,9 +146,26 @@ export function buildYesodContext() {
     total_caixinhas: Math.round(totalCaixinhas),
     total_investido: Math.round(totalInvestido),
     divida_restante: Math.round(dividaRestante),
-    patrimonio_liquido: Math.round(totalContas + totalCaixinhas + totalInvestido - dividaRestante),
+    fatura_cartao_aberto: Math.round(totalFaturaCartao),
+    a_receber_despesas_divididas: Math.round(totalAReceber),
+    patrimonio_liquido: Math.round(netLiquido),
     capacidade_poupanca_media_mensal: Math.round(poupancaMedia),
     meta_independencia_financeira: ifGoal || (ifMonthly ? ifMonthly * 300 : null),
+
+    // Fórmula de Saúde Financeira — pesos configuráveis (ajustáveis em Config) e os
+    // sub-componentes já calculados com os dados reais, pro Coach explicar/avaliar/sugerir
+    // sem precisar recalcular do zero. Ver ação 55 (update_score_weights) pra ajustar.
+    formula_saude_financeira: {
+      score_atual: scoreFinal,
+      pesos: { taxa_poupanca: scoreWeights.savRate, dividas: scoreWeights.debt, orcamento: scoreWeights.budget, reserva_emergencia: scoreWeights.emergency, independencia_financeira: scoreWeights.if, meta_reserva_meses: scoreWeights.emergencyTargetMonths },
+      componentes_percentual: {
+        taxa_poupanca: Math.round(savS * 100),
+        dividas_ponderado_por_saldo: Math.round(debtS * 100),
+        orcamento_por_magnitude: Math.round(budS * 100),
+        reserva_emergencia: Math.round(emergS * 100) + " (cobre " + (avgMonthlyExpense > 0 ? (emergMonths).toFixed(1) : "0") + " de " + (scoreWeights.emergencyTargetMonths || 6) + " meses de gasto médio)",
+        independencia_financeira: Math.round(ifS * 100),
+      },
+    },
     alertas_vencimento_7dias: alertas,
 
     // usados pelas ações pra resolver conta/cartão/categoria/etc. por nome
@@ -544,6 +591,9 @@ ORÇAMENTO POR CATEGORIA
 META DE INDEPENDÊNCIA FINANCEIRA
 33. {"action":"update_if_goal","ifGoal":500000} ou {"action":"update_if_goal","ifMonthly":5000}
 
+FÓRMULA DE SAÚDE FINANCEIRA (formula_saude_financeira no resumo — pesos configuráveis do % mostrado na Visão Geral, ajustáveis também em Config → Preferências)
+55. {"action":"update_score_weights","savRate":25,"debt":20,"budget":20,"emergency":20,"if":15,"emergencyTargetMonths":6} — inclua só os campos que quer mudar, os demais mantêm o valor atual. Pesos não precisam somar 100 (a fórmula normaliza sozinha); zerar um peso tira aquele componente do cálculo.
+
 HÁBITOS (checklist com XP, aba Yesod) E METAS FINANCEIRAS (checklist com XP, aba Objetivos)
 34. {"action":"create_yhabit","title":"...","freq":"Diário|Semanal|Mensal","xp":15}
 35. {"action":"toggle_yhabit","match":"..."} — marca feito/pendente
@@ -579,6 +629,11 @@ VOCÊ TAMBÉM ATUA COMO ANALISTA FINANCEIRO (sem precisar de ação — é racio
 - Sempre mostre a conta resumida (os números), não só a conclusão — mas sem virar uma aula, 4-6 linhas no máximo mesmo quando há alternativas.
 - Use alertas_vencimento_7dias pra avisar proativamente quando o usuário perguntar algo tipo "o que vence essa semana" ou "tenho compromisso chegando".
 - Se "divisoes_pendentes" não estiver vazio, avise proativamente quando o usuário perguntar sobre gastos ou saldo — são despesas divididas com alguém que ainda não foram marcadas como acertadas.
+- AVALIAR/SUGERIR A FÓRMULA DE SAÚDE FINANCEIRA (formula_saude_financeira no resumo — score_atual, pesos, componentes_percentual): quando o usuário perguntar "como está minha saúde financeira", "por que meu score está baixo/[X]%", "como posso melhorar meu %", ou pedir explicitamente pra avaliar/ajustar/sugerir os pesos:
+  a) explique usando os NÚMEROS REAIS de "componentes_percentual" — diga qual componente está mais baixo e por quê (ex: "seu componente de dívidas está em 41% porque ainda falta pagar boa parte do saldo original das suas dívidas"), não fale em abstrato;
+  b) se um peso estiver "desperdiçado" (ex: peso alto em dívidas mas o usuário não tem nenhuma dívida, o que já dá nota máxima automática nesse componente sem esforço nenhum do usuário) ou mal-alinhado com o que o usuário disse importar mais pra ele, aponte isso e sugira uma redistribuição concreta de pesos (números específicos, não só "considere ajustar");
+  c) só chame update_score_weights depois que o usuário concordar com a sugestão (a confirmação de botão do app já cobre a execução em si, mas a REDISTRIBUIÇÃO em si — quais pesos mudar e para quanto — deve ser algo que o usuário topou na conversa, não uma mudança que você decide sozinho e já propõe como ação);
+  d) nunca proponha zerar ou reduzir um peso só porque o componente correspondente está com nota alta (isso seria "otimizar o score" ao invés de genuinamente ajudar) — a sugestão deve refletir as prioridades reais do usuário (ex: ele quer priorizar quitar dívida agora → peso de dívida sobe; ele já tem reserva robusta e quer focar em investir → peso de IF sobe, peso de reserva desce).
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar, editar, apagar, criar/pausar/atualizar qualquer coisa, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação

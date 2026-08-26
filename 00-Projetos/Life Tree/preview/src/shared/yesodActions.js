@@ -688,6 +688,19 @@ export function updateYesodIFGoal(a) {
   return { ok: true, message: "Meta de Independência Financeira atualizada." };
 }
 
+// Pesos da Fórmula de Saúde Financeira (26/08/2026, ver formula_saude_financeira no
+// contexto e calcYesodScore em YesodModule.jsx) — só corrige os campos informados, mantém
+// os demais como estavam. Não precisam somar 100 (a fórmula normaliza sozinha).
+export function updateYesodScoreWeights(a) {
+  const current = readJSON("scoreweights", { savRate: 25, debt: 20, budget: 20, emergency: 20, if: 15, emergencyTargetMonths: 6 });
+  const patch = {};
+  ["savRate", "debt", "budget", "emergency", "if", "emergencyTargetMonths"].forEach(k => { if (a[k] != null) patch[k] = Number(a[k]); });
+  const updated = { ...current, ...patch };
+  writeJSON("scoreweights", updated);
+  notifyYesodUpdated();
+  return { ok: true, message: "Pesos da fórmula de Saúde Financeira atualizados." };
+}
+
 // ── HÁBITOS E METAS FINANCEIRAS DO YESOD ─────────────────────────────────────────
 export function createYesodHabit(a) {
   const yhabits = readJSON("yhabits", []);
@@ -880,6 +893,7 @@ export const YESOD_ACTION_HANDLERS = {
   edit_budget: editYesodBudget,
   delete_budget: deleteYesodBudget,
   update_if_goal: updateYesodIFGoal,
+  update_score_weights: updateYesodScoreWeights,
   create_yhabit: createYesodHabit,
   toggle_yhabit: toggleYesodHabit,
   delete_yhabit: deleteYesodHabit,

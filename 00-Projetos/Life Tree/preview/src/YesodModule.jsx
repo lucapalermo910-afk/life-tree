@@ -223,6 +223,10 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // Pessoas com quem despesas recorrentes são divididas (ex: cônjuge) — split fica dentro
   // da própria transação (accs[].txs[].split), não aqui; esta lista só guarda quem existe.
   const [splitPeople, setSplitPeople] = useState([]);
+  // Pesos da fórmula de Saúde Financeira (26/08/2026) — configurável em Config, ver
+  // calcYesodScore. Não precisam somar 100 (a fórmula normaliza sozinha) — dá pra zerar um
+  // componente inteiro botando o peso dele em 0.
+  const [scoreWeights, setScoreWeights] = useState({savRate:25,debt:20,budget:20,emergency:20,if:15,emergencyTargetMonths:6});
   const F = v => setF(x => ({...x,...v}));
   const toast_ = (msg, color) => { setToast({msg,color:color||ACCENT}); setTimeout(()=>setToast(null),2400); };
 
@@ -256,6 +260,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
         if(r_projevents) setProjEvents(r_projevents);
         else { const r_projscn_old=load("fin_projscenario"); if(r_projscn_old&&((Number(r_projscn_old.deltaIn)||0)!==0||(Number(r_projscn_old.deltaOut)||0)!==0)) setProjEvents([{id:"pe"+uid(),label:"",deltaIn:r_projscn_old.deltaIn||0,deltaOut:r_projscn_old.deltaOut||0,fromM:r_projscn_old.fromM||0}]); }
         const r_splitpeople=load("fin_splitpeople"); if(r_splitpeople) setSplitPeople(r_splitpeople);
+        const r_scoreweights=load("fin_scoreweights"); if(r_scoreweights) setScoreWeights(p=>({...p,...r_scoreweights}));
     } finally { setStorageLoaded(true); }
   };
   useEffect(() => { loadFromStorage(); }, []);
@@ -286,6 +291,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_boxsnaps",JSON.stringify(boxSnaps));}catch(_){} }, [boxSnaps,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_projevents",JSON.stringify(projEvents));}catch(_){} }, [projEvents,storageLoaded]);
   useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_splitpeople",JSON.stringify(splitPeople));}catch(_){} }, [splitPeople,storageLoaded]);
+  useEffect(() => { if(!storageLoaded) return; try{localStorage.setItem("lifetree_fin_scoreweights",JSON.stringify(scoreWeights));}catch(_){} }, [scoreWeights,storageLoaded]);
   // Migração pra quem já tinha dados salvos antes da Carteira existir — sem isso,
   // usuários antigos ficariam sem destino pra lançamentos em dinheiro até um "novo" seed.
   useEffect(() => { if(!storageLoaded) return; setAccs(p => p.some(a=>a.id===CASH_ACC_ID) ? p : [...p,{id:CASH_ACC_ID,bankId:null,name:"Carteira",isCash:true,txs:[]}]);
@@ -522,8 +528,49 @@ export default function YesodModule({ onBack, dark, setDark }) {
         localStorage.setItem("lifetree_scores", JSON.stringify(scores));
       } catch(e) {}
     }
-  }, [banks, accs, cards, boxes, debts, invs, budgets, yHabits, yGoals, storageLoaded]);
-  const calcYesodScore = () => { const cf0=cashflowMonth(-1);const savRate=cf0.ins>0?Math.max(0,(cf0.ins-cf0.outs)/cf0.ins):0;const ifN=ifGoal||ifMonthly*300||1;const debtS=debts.length>0?debts.reduce((s,d)=>s+(d.parcelasPagas/d.totalParcelas),0)/debts.length:1;const budS=budgets.length>0?budgets.filter(b=>budgetSpend(b.cat)<=b.limit).length/budgets.length:0.5;const habS=yHabits.filter(h=>h.done).length/(yHabits.length||1);const goaS=yGoals.filter(g=>g.done).length/(yGoals.length||1);return Math.round((Math.min(1,savRate/0.2)*0.20+Math.min(1,net/ifN)*0.25+debtS*0.15+budS*0.15+habS*0.13+goaS*0.12)*100); };
+  }, [banks, accs, cards, boxes, debts, invs, budgets, scoreWeights, storageLoaded]);
+  // Fórmula de Saúde Financeira — recomposta em 26/08/2026 (pesos configuráveis em Config,
+  // ver scoreWeights acima). Problemas da fórmula antiga que motivaram a mudança:
+  // (1) hábitos/metas nunca "resetavam" — uma vez marcado feito, ficava feito pra sempre,
+  //     então essa fatia (25% somados) só crescia, nunca refletia comportamento atual. Saiu
+  //     do cálculo — hábitos/metas continuam dando XP e aparecendo na Visão Geral, só não
+  //     entram mais no %.
+  // (2) progresso de dívida era média simples entre dívidas, sem pesar pelo saldo — uma
+  //     dívida de R$500 quitada e uma de R$50.000 intocada empatavam em 50%. Agora pondera
+  //     pelo valor total de cada dívida (equivalente a 1 − saldo_devedor/valor_original).
+  // (3) orçamento era binário (dentro/fora do limite) — estourar 1% ou 500% pontuava igual.
+  //     Agora mede a distância proporcional ao limite por categoria.
+  // (4) não existia reserva de emergência no score, apesar do módulo já ter tudo pra
+  //     calcular isso (contas+caixinhas ÷ gasto médio mensal). Componente novo.
+  // (5) IF pesava 25% mas é uma métrica de décadas — dominava o score de quem está no
+  //     início da jornada mesmo com disciplina diária impecável. Peso reduzido.
+  const calcYesodScore = () => {
+    const cf0=cashflowMonth(-1);
+    const savRate=cf0.ins>0?Math.max(0,(cf0.ins-cf0.outs)/cf0.ins):0;
+    const savS=Math.min(1,savRate/0.2);
+
+    const totalDebtOriginal=debts.reduce((s,d)=>s+d.totalParcelas*d.valorParcela,0);
+    const debtS=debts.length===0?1:(totalDebtOriginal>0?Math.max(0,1-totDebtRem/totalDebtOriginal):1);
+
+    const budS=budgets.length===0?0.5:budgets.reduce((s,b)=>{
+      const spend=budgetSpend(b.cat);
+      const catScore=spend<=b.limit?1:Math.max(0,1-(spend-b.limit)/b.limit);
+      return s+catScore;
+    },0)/budgets.length;
+
+    const avgMonthlyExpense=[-1,-2,-3].reduce((s,o)=>s+cashflowMonth(o).outs,0)/3;
+    const emergTarget=scoreWeights.emergencyTargetMonths||6;
+    const emergMonths=avgMonthlyExpense>0?(totAcc+totBox)/avgMonthlyExpense:0;
+    const emergS=Math.min(1,emergMonths/emergTarget);
+
+    const ifN=ifGoal||ifMonthly*300||1;
+    const ifS=Math.min(1,net/ifN);
+
+    const w=scoreWeights;
+    const totalW=(Number(w.savRate)||0)+(Number(w.debt)||0)+(Number(w.budget)||0)+(Number(w.emergency)||0)+(Number(w.if)||0);
+    if(totalW<=0)return 0;
+    return Math.round(((savS*(Number(w.savRate)||0)+debtS*(Number(w.debt)||0)+budS*(Number(w.budget)||0)+emergS*(Number(w.emergency)||0)+ifS*(Number(w.if)||0))/totalW)*100);
+  };
 
   // ── ALERTAS DE VENCIMENTO — faturas e parcelas de dívida nos próximos 7 dias ──
   const upcomingAlerts = () => {
@@ -1299,6 +1346,27 @@ export default function YesodModule({ onBack, dark, setDark }) {
             Caixinhas/Investimentos passaram a ter editar/apagar direto em Bolsos, 01/08/2026) */}
         {!page&&tab==="cfg"&&(
           <div style={{animation:"slideUp .3s ease"}}>
+            {/* Preferências do módulo — primeira seção de Config a sair do padrão "lista +
+                Adicionar" das entidades abaixo (Bancos/Categorias/Pessoas/Recorrências);
+                aqui mora configuração de comportamento, não itens que se criam/apagam. */}
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8}}>PREFERÊNCIAS</div>
+            <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:10}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <span style={{fontSize:12,fontWeight:700}}>Fórmula de Saúde Financeira</span>
+                <button onClick={()=>setScoreWeights({savRate:25,debt:20,budget:20,emergency:20,if:15,emergencyTargetMonths:6})} style={{background:"none",border:"none",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700}}>Restaurar padrão</button>
+              </div>
+              <div style={{fontSize:10,color:C.muted,marginBottom:12,lineHeight:1.6}}>Pesos de cada componente do % mostrado na Visão Geral. Não precisam somar 100 — o app normaliza sozinho; zere um peso pra tirar aquele componente do cálculo. Peça pro Coach avaliar ou sugerir esses pesos a qualquer momento.</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <FI label="Taxa de poupança (%)" value={scoreWeights.savRate} onChange={v=>setScoreWeights(p=>({...p,savRate:v}))} type="number" min={0} C={C}/>
+                <FI label="Dívidas (%)" value={scoreWeights.debt} onChange={v=>setScoreWeights(p=>({...p,debt:v}))} type="number" min={0} C={C}/>
+                <FI label="Orçamento (%)" value={scoreWeights.budget} onChange={v=>setScoreWeights(p=>({...p,budget:v}))} type="number" min={0} C={C}/>
+                <FI label="Reserva de emergência (%)" value={scoreWeights.emergency} onChange={v=>setScoreWeights(p=>({...p,emergency:v}))} type="number" min={0} C={C}/>
+                <FI label="Independência Financeira (%)" value={scoreWeights.if} onChange={v=>setScoreWeights(p=>({...p,if:v}))} type="number" min={0} C={C}/>
+                <FI label="Meta de reserva (meses)" value={scoreWeights.emergencyTargetMonths} onChange={v=>setScoreWeights(p=>({...p,emergencyTargetMonths:v}))} type="number" min={1} C={C}/>
+              </div>
+              <div style={{fontSize:9,color:C.muted,textAlign:"right"}}>Total: {(Number(scoreWeights.savRate)||0)+(Number(scoreWeights.debt)||0)+(Number(scoreWeights.budget)||0)+(Number(scoreWeights.emergency)||0)+(Number(scoreWeights.if)||0)}%</div>
+            </div>
+
             {[
               {title:"Bancos",items:banks,addSh:"addBank",addInit:{name:"",color:ACCENT},render:b=><div key={b.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}><div style={{width:8,height:8,borderRadius:"50%",background:b.color}}/><span style={{flex:1,fontSize:12,fontWeight:600}}>{b.name}</span><button onClick={()=>openSh("editBank",{id:b.id,name:b.name,color:b.color})} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={()=>delBank(b.id)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button></div>},
               {title:"Categorias de Saída",items:catsOut,addSh:"addCatOut",addInit:{name:""},render:c=><div key={c} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}><span style={{flex:1,fontSize:12,fontWeight:600}}>{c}</span><button onClick={()=>delCatOut(c)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button></div>},
