@@ -713,6 +713,32 @@ real, bateu certinho (`taxa_juros: 18.5` só na dívida editada, `0` nas demais,
 calculado certo em todas). `npm run build` limpo; `YesodModule.jsx` manteve o baseline de
 lint (35 problemas, nenhum novo); `coachSkills.js`/`yesodActions.js` sem nenhum problema.
 
+### Coach ganha a 5ª e última skill de planejamento — Plano de Renda Diversificada (26/08/2026, leva 13 — fecha o estudo 3B)
+Fecha as 5 skills de planejamento pedidas pelo usuário (estudo 3B):
+**Expense Leak Detector → Automatic Savings System → Budget Without Shame → Debt
+Elimination Command Center → Plano de Renda Diversificada**, essa última sendo a mais
+conversacional das cinco — o app não rastreia "horas disponíveis por semana" nem "capital
+que toparia arriscar" como campos próprios, então o skill instrui o Coach a perguntar isso
+direto em vez de supor.
+
+- Novo skill no `systemPrompt`: usa `recorrencias_ativas` (tipo entrada) como ponto de
+  partida pra "o que você ganha hoje" (em vez de pedir pro usuário listar do zero,
+  confirmando com ele se bate com a realidade), pode citar `saldo_total_contas`/
+  `total_caixinhas` como referência de capital disponível mas pergunta explicitamente
+  quanto o usuário toparia arriscar (nunca presume que é tudo), propõe exatamente 7 canais
+  de renda adequados às restrições e forças que o usuário mencionar na conversa, classifica
+  cada um (facilidade de começar, capital inicial, tempo até retornar, risco, potencial de
+  crescimento, melhor ordem de lançamento) e fecha com um plano de 12 meses mês a mês +
+  checklist, usando `capacidade_poupanca_media_mensal` como referência de "sobra" mensal
+  reinvestível quando fizer sentido.
+- Nenhum campo novo em `buildYesodContext` — reusa `recorrencias_ativas`,
+  `saldo_total_contas`, `total_caixinhas` e `capacidade_poupanca_media_mensal`, todos já
+  testados em levas anteriores.
+
+`npm run build` limpo; `coachSkills.js` sem nenhum problema de lint. Com as 5 skills de
+planejamento implementadas, o estudo 3 (habilidades do Coach) está completo — 3A (paridade
+de ações, leva 7) e 3B (as 5 skills, levas 10-13).
+
 ## Persistência
 Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
