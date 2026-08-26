@@ -795,7 +795,18 @@ badge sem alterar nenhum outro número (48/15/33, saldo, %); simulada uma recorr
 "Pagar"; confirmado o pagamento com R$15 de juros — gerou as 2 transações certas
 (desc/valor/data/categoria) e avançou `nextDate` em 1 mês; testado também caso com 2
 ocorrências pendentes acumuladas (Aluguel) — "Pagar" resolve só a mais antiga por vez,
-confirmado que a segunda continua pendente depois. `npm run build` limpo; `YesodModule.jsx`
+confirmado que a segunda continua pendente depois.
+
+**Pendência explícita, confirmada com o usuário:** os dados usados no teste acima (`Financiamento
+Carro`/`Empréstimo Pessoal`) são dado semeado fictício, não dívidas reais — o usuário
+confirmou isso depois de ver o resultado. Ou seja, a lógica de detecção de atraso foi
+validada matematicamente (o cálculo está correto pros dados que existem), mas **ainda não
+foi confirmado se ela se comporta bem com dívidas/recorrências reais do usuário** — só dá
+pra saber testando com dado de verdade. Se aparecer atraso "fantasma" num caso real, o
+botão "Marcar em dia" resolve na hora; se aparecer com frequência, pode valer revisitar a
+premissa (1 parcela por mês desde `startDate`) mais adiante.
+
+`npm run build` limpo; `YesodModule.jsx`
 manteve o baseline de lint (35 problemas, nenhum novo); `coachSkills.js`/`yesodActions.js`
 sem nenhum problema.
 
