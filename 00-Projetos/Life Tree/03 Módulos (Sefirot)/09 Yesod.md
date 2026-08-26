@@ -438,6 +438,46 @@ Esperado (sem mudança necessária) e que todos os lançamentos ligados a conta 
 anteriores (Caixinha, Investimento, Dívida) aparecem certinho no Extrato/Fluxo do mês em que
 aconteceram. `npm run build`/`eslint` limpos — 34 problemas, mesmo baseline de antes.
 
+### Despesas Divididas ganham contabilização de verdade (25/08→26/08/2026, leva 6)
+Usuário pediu pra entender como "Despesas Divididas" funcionava e, ao ver que era só um
+lembrete visual (custo sempre contado cheio, "Marcar acertado" não gerava nenhum dinheiro,
+sem noção de "a receber" em lugar nenhum), pediu pra implementar a contabilização real.
+
+1. **Custo líquido sempre** — o valor que conta em Fluxo/Orçamento/Score agora é
+   `mySplitShare` (desconta a parte da outra pessoa), **sempre**, esteja "acertado" ou não —
+   a parte dela nunca foi seu gasto de verdade. Aplicado em `cashflowMonth`, `monthTotals`
+   (mês realizado), `budgetSpend`, `avgAccountNet3` (projeção) e na lista de Lançamentos do
+   Fluxo (linha individual + total do filtro). Recorrências futuras com split **não** foram
+   ajustadas (limitação conhecida, documentada em comentário — evita risco de dobrar o
+   desconto no fluxo de edição de `recurringOverrides`).
+2. **"A receber" vira ativo de verdade** — `splitReceivable` soma a parte pendente de todas
+   as despesas divididas não recebidas, e essa soma (`totReceivable`) entra no cálculo do
+   Patrimônio Líquido (`net`) até ser efetivamente recebida.
+3. **"Marcar acertado" virou "Registrar recebimento"** — sheet novo que pede a conta onde
+   caiu o reembolso e lança de verdade uma entrada (`tx in`, categoria "Reembolso") nela,
+   só então marcando a transação original como acertada — mesmo princípio de "tudo ligado a
+   conta" já usado em Caixinha/Investimento/Dívida. Itens já recebidos mostram um badge
+   estático "Recebido" (sem opção de desfazer aqui — pra corrigir um erro, usa a edição
+   manual do lançamento, que continua existindo à parte). O header do card ganhou "a receber
+   R$X" somando os pendentes.
+4. **Notas visuais**: Extrato de conta mostra o valor **cheio** pago (é o dado real que saiu
+   da conta) com uma nota "Dividido com Fulano (50%) · pendente/recebido"; a lista de
+   Lançamentos do Fluxo mostra o valor **líquido** (bate com o total do card Custos acima),
+   com nota "Total pago RX · Fulano deve RY".
+5. **Coach IA**: ação `mark_split_settled` ganhou o mesmo comportamento — `settled:true`
+   agora lança o reembolso de verdade numa conta (campo `account` opcional, ou primeira
+   conta por padrão) antes de marcar acertado; `settled:false` continua só corrigindo o
+   campo, sem desfazer um reembolso já lançado.
+
+Testado no navegador: nova despesa dividida de R$200 (50%) fez o patrimônio cair exatamente
+R$100 (não R$200 — os outros R$100 viraram "a receber"); Custos do mês conferidos via
+`localStorage` batendo exatamente com a soma líquida de todos os splits do mês, incluindo um
+que já estava "acertado" desde antes desta leva (confirma que o desconto vale sempre, não só
+enquanto pendente); "Registrar recebimento" lançou a entrada certa na conta escolhida e o
+patrimônio ficou idêntico ao de antes (ativo virou caixa — evento neutro, como esperado).
+`npm run build`/`eslint` limpos — 34 problemas, mesmo baseline (YesodModule.jsx,
+yesodActions.js, coachSkills.js todos limpos).
+
 ## Persistência
 Prefixo `lifetree_fin_` — 22 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
