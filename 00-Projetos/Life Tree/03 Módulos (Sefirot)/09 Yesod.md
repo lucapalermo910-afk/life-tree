@@ -615,6 +615,43 @@ Bolsos conferido depois — visualmente idêntico a antes da refatoração (mesm
 mesmos totais, mesmo layout). `npm run build` limpo; `YesodModule.jsx` manteve o mesmo
 baseline de lint (35 problemas, nenhum novo).
 
+### Coach ganha o skill "Detector de Vazamentos de Gasto" (26/08/2026, leva 10 — início do estudo 3B)
+Primeira das 5 skills de planejamento pedidas pelo usuário (prompts originais em inglês:
+Diversified Income Plan, Debt Elimination Command Center, Expense Leak Detector, Budget
+Without Shame, Automatic Savings System) — ordem de implementação recomendada e aceita:
+**Expense Leak Detector → Automatic Savings System → Budget Without Shame → Debt
+Elimination (após adicionar juros na Dívida) → Diversified Income Plan**, por viabilidade
+com os dados que já existem no módulo.
+
+Diferença de abordagem em relação ao prompt original: em vez do usuário colar despesas/
+renda manualmente (`[list]`, `[amount]` no prompt original), o Coach já tem acesso aos
+dados reais via `buildYesodContext` — reconhece a intenção na conversa e monta a análise
+sozinho, sem pedir pra digitar de novo.
+
+- `buildYesodContext` (`coachSkills.js`) ganhou 4 campos novos: `renda_mes_atual`,
+  `gastos_por_categoria_mes_atual`, `gastos_por_categoria_media_3m` (gasto por categoria do
+  mês atual e a média dos últimos 3, pra comparar magnitude/tendência) e
+  `candidatas_assinatura_nao_marcada` (mesma descrição de lançamento repetindo em 2+ dos
+  últimos 3 meses com valor parecido ±10%, mas nunca marcada como recorrência — provável
+  assinatura lançada manualmente sem o usuário perceber o padrão).
+- Novo skill no `systemPrompt`: quando o usuário pedir uma "auditoria de gastos" ou
+  perguntar onde está desperdiçando dinheiro, o Coach (a) aponta assinaturas esquecidas —
+  recorrências ativas de baixo valor + as candidatas não marcadas; (b) compara gasto do mês
+  com a média trimestral por categoria pra separar gasto pontual/impulso de custo
+  estrutural; (c) classifica cada vazamento por economia potencial, dificuldade de
+  eliminar, impacto na qualidade de vida e prioridade; (d) é honesto que não sabe se um
+  preço está "caro" sem referência externa — só aponta magnitude/tendência dentro do
+  próprio histórico; (e) fecha sempre com um plano de 30 dias, sem zerar categorias de
+  lazer/prazer por completo.
+
+Testado no navegador: replicada a lógica exata de `gastos_por_categoria_mes_atual`/
+`_media_3m`/`candidatas_assinatura_nao_marcada` via JS contra o `localStorage` real —
+resultado bateu com o esperado dos dados semeados (ex: "Lazer" 220 no mês vs. média de 100
+= alerta de gasto pontual; "Transporte" 420 vs. 200; nenhuma candidata de assinatura não
+marcada, correto, já que a única despesa repetida da seed — Netflix+Spotify — já está
+marcada como recorrência). `npm run build` limpo; `coachSkills.js` sem nenhum problema de
+lint (exit 0, mesmo padrão de sempre).
+
 ## Persistência
 Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 

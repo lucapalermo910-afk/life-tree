@@ -95,6 +95,42 @@ export function buildYesodContext() {
   const last3 = [-1, -2, -3].map(monthIO);
   const poupancaMedia = Math.max(0, last3.reduce((s, m) => s + (m.ins - m.outs), 0) / 3);
 
+  // Gasto por categoria (mês atual + média 3 meses) e assinaturas candidatas não marcadas
+  // como recorrência — pro skill "Detector de Vazamentos de Gasto" (26/08/2026) não
+  // precisar que o usuário cole as despesas de novo, os dados já existem em accs/cards.
+  const catSpendForMonth = (offset) => {
+    const d = new Date(); d.setMonth(d.getMonth() + offset);
+    const ym = d.toISOString().slice(0, 7);
+    const out = {};
+    allTxs.filter(t => t.type === "out" && t.date && t.date.startsWith(ym)).forEach(t => {
+      out[t.cat] = (out[t.cat] || 0) + mySplitShare(t);
+    });
+    return out;
+  };
+  const gastosMesAtual = catSpendForMonth(-1);
+  const gastos3m = [-1, -2, -3].map(catSpendForMonth);
+  const catsComGasto = [...new Set([...catsOut, ...gastos3m.flatMap(m => Object.keys(m))])];
+  const gastosMedia3m = {};
+  catsComGasto.forEach(c => { gastosMedia3m[c] = Math.round(gastos3m.reduce((s, m) => s + (m[c] || 0), 0) / 3); });
+  // mesma descrição repetindo em 2+ dos últimos 3 meses com valor parecido (±10%), mas
+  // nunca marcada como recorrência — provável assinatura lançada manualmente sem o
+  // usuário perceber o padrão.
+  const candidatasAssinatura = (() => {
+    const byDesc = {};
+    [-1, -2, -3].forEach(o => {
+      const d = new Date(); d.setMonth(d.getMonth() + o);
+      const ym = d.toISOString().slice(0, 7);
+      allTxs.filter(t => t.type === "out" && t.date && t.date.startsWith(ym)).forEach(t => {
+        const key = t.desc.trim().toLowerCase();
+        (byDesc[key] = byDesc[key] || []).push(mySplitShare(t));
+      });
+    });
+    return Object.entries(byDesc)
+      .filter(([desc, vals]) => vals.length >= 2 && !recurrings.some(r => r.active && r.desc.trim().toLowerCase() === desc))
+      .filter(([, vals]) => { const avg = vals.reduce((s, v) => s + v, 0) / vals.length; return avg > 0 && vals.every(v => Math.abs(v - avg) <= avg * 0.1); })
+      .map(([desc, vals]) => ({ desc, valor_medio: Math.round(vals.reduce((s, v) => s + v, 0) / vals.length), ocorrencias: vals.length }));
+  })();
+
   // ── Fórmula de Saúde Financeira — mesmos sub-cálculos de calcYesodScore em
   // YesodModule.jsx (26/08/2026), pro Coach poder explicar/avaliar/sugerir os pesos com os
   // números reais em vez de recomputar tudo de novo às cegas.
@@ -151,6 +187,13 @@ export function buildYesodContext() {
     patrimonio_liquido: Math.round(netLiquido),
     capacidade_poupanca_media_mensal: Math.round(poupancaMedia),
     meta_independencia_financeira: ifGoal || (ifMonthly ? ifMonthly * 300 : null),
+    renda_mes_atual: Math.round(cf0.ins),
+
+    // Pro skill "Detector de Vazamentos de Gasto" (26/08/2026) — gasto real por categoria
+    // (mês atual e média dos últimos 3), sem precisar que o usuário cole despesas de novo.
+    gastos_por_categoria_mes_atual: Object.fromEntries(Object.entries(gastosMesAtual).map(([k, v]) => [k, Math.round(v)])),
+    gastos_por_categoria_media_3m: gastosMedia3m,
+    candidatas_assinatura_nao_marcada: candidatasAssinatura,
 
     // Fórmula de Saúde Financeira — pesos configuráveis (ajustáveis em Config) e os
     // sub-componentes já calculados com os dados reais, pro Coach explicar/avaliar/sugerir
@@ -634,6 +677,12 @@ VOCÊ TAMBÉM ATUA COMO ANALISTA FINANCEIRO (sem precisar de ação — é racio
   b) se um peso estiver "desperdiçado" (ex: peso alto em dívidas mas o usuário não tem nenhuma dívida, o que já dá nota máxima automática nesse componente sem esforço nenhum do usuário) ou mal-alinhado com o que o usuário disse importar mais pra ele, aponte isso e sugira uma redistribuição concreta de pesos (números específicos, não só "considere ajustar");
   c) só chame update_score_weights depois que o usuário concordar com a sugestão (a confirmação de botão do app já cobre a execução em si, mas a REDISTRIBUIÇÃO em si — quais pesos mudar e para quanto — deve ser algo que o usuário topou na conversa, não uma mudança que você decide sozinho e já propõe como ação);
   d) nunca proponha zerar ou reduzir um peso só porque o componente correspondente está com nota alta (isso seria "otimizar o score" ao invés de genuinamente ajudar) — a sugestão deve refletir as prioridades reais do usuário (ex: ele quer priorizar quitar dívida agora → peso de dívida sobe; ele já tem reserva robusta e quer focar em investir → peso de IF sobe, peso de reserva desce).
+- DETECTAR VAZAMENTOS DE GASTO ("auditoria de gastos", "onde estou desperdiçando dinheiro", "quero cortar gastos sem virar prisão financeira", ou qualquer pedido no estilo "analise minhas despesas e ache gastos escondidos"): use gastos_por_categoria_mes_atual, gastos_por_categoria_media_3m, recorrencias_ativas e candidatas_assinatura_nao_marcada no resumo — os dados já existem, nunca peça pro usuário colar/digitar as despesas de novo.
+  a) primeiro aponte "assinaturas esquecidas" — recorrências ativas de valor baixo que o usuário pode ter esquecido que existem, MAIS os itens de candidatas_assinatura_nao_marcada (mesma descrição repetindo nos últimos meses com valor parecido, mas nunca marcada como recorrência — provável assinatura sendo lançada manualmente sem o usuário perceber o padrão);
+  b) compare gastos_por_categoria_mes_atual com gastos_por_categoria_media_3m: uma categoria bem acima da própria média é candidata a gasto por impulso/pontual nesse mês; uma categoria consistentemente alta é candidata a custo estrutural (conta/tarifa cara, hábito de consumo);
+  c) pra cada vazamento identificado, classifique em 4 eixos — economia potencial (R$/mês), dificuldade de eliminar (baixa/média/alta), impacto na qualidade de vida (baixo/médio/alto) e prioridade — e apresente em ordem de prioridade;
+  d) seja honesto sobre o limite dos dados: você não sabe se uma conta de luz ou seguro está "acima do preço de mercado" sem uma referência externa — só consegue apontar magnitude e tendência dentro do próprio histórico do usuário, nunca afirme que algo está "caro" em termos absolutos;
+  e) feche sempre com um plano de 30 dias, ação por ação — o objetivo é reduzir gasto sem virar prisão financeira, então nunca sugira zerar 100% de uma categoria de lazer/prazer, e priorize cortes de baixo impacto na qualidade de vida primeiro.
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar, editar, apagar, criar/pausar/atualizar qualquer coisa, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação
