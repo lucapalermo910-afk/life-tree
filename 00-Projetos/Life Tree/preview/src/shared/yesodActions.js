@@ -447,6 +447,7 @@ export function createYesodDebt(a) {
     totalParcelas: Number(a.totalParcelas) || 12, parcelasPagas: Number(a.parcelasPagas) || 0,
     valorParcela: Number(a.valorParcela) || 0, dueDay: Number(a.dueDay) || 10,
     startDate, color: a.color || "#ef4444",
+    taxaJuros: Number(a.taxaJuros) || 0, taxaJurosUnit: a.taxaJurosUnit === "mes" ? "mes" : "ano",
   }]);
   const valorRecebido = Number(a.valorRecebido) || 0;
   let creditMsg = "";
@@ -467,7 +468,8 @@ export function editYesodDebt(a) {
   const changes = a.changes || {};
   const patch = {};
   ["name","credor"].forEach(k => { if (changes[k] != null) patch[k] = changes[k]; });
-  ["totalParcelas","parcelasPagas","valorParcela","dueDay"].forEach(k => { if (changes[k] != null) patch[k] = Number(changes[k]); });
+  ["totalParcelas","parcelasPagas","valorParcela","dueDay","taxaJuros"].forEach(k => { if (changes[k] != null) patch[k] = Number(changes[k]); });
+  if (changes.taxaJurosUnit != null) patch.taxaJurosUnit = changes.taxaJurosUnit === "mes" ? "mes" : "ano";
   writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, ...patch } : x));
   notifyYesodUpdated();
   return { ok: true, message: "Dívida '" + found.name + "' atualizada." };

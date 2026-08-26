@@ -229,6 +229,8 @@ export function buildYesodContext() {
     dividas: debts.map(d => ({
       nome: d.name, credor: d.credor, parcela_mensal: d.valorParcela,
       parcelas_restantes: d.totalParcelas - d.parcelasPagas, dia_vencimento: d.dueDay,
+      saldo_devedor: Math.round((d.totalParcelas - d.parcelasPagas) * d.valorParcela),
+      taxa_juros: d.taxaJuros || 0, taxa_juros_unidade: d.taxaJurosUnit === "mes" ? "% ao mês" : "% ao ano",
     })),
     investimentos: invs.map(i => ({ nome: i.name, aplicado: i.invested, saldo_atual: i.balance, taxa: i.rate })),
     orcamentos: budgets.map(b => ({ categoria: b.cat, limite: b.limit })),
@@ -611,8 +613,8 @@ CAIXINHAS (metas com valor e prazo — reserva de emergência, viagem, etc.)
 21. {"action":"box_move","match":"...","moveType":"in|out","amount":100,"account":"nome da conta (opcional)"} — SEMPRE liga a uma conta de verdade (débito no depósito, crédito na retirada); sem "account" usa a primeira conta cadastrada.
 
 DÍVIDAS
-22. {"action":"create_debt","name":"...","credor":"...","totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10,"valorRecebido":10000 (opcional),"account":"nome da conta (opcional)"} — se "valorRecebido">0 e houver conta (informada ou a primeira cadastrada), credita esse valor nela como o empréstimo recebido; valorRecebido pode ser diferente de totalParcelas×valorParcela, que já embute juros.
-23. {"action":"edit_debt","match":"...","changes":{"totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10}}
+22. {"action":"create_debt","name":"...","credor":"...","totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10,"valorRecebido":10000 (opcional),"account":"nome da conta (opcional)","taxaJuros":0 (opcional, %),"taxaJurosUnit":"ano|mes (opcional, padrão ano)"} — se "valorRecebido">0 e houver conta (informada ou a primeira cadastrada), credita esse valor nela como o empréstimo recebido; valorRecebido pode ser diferente de totalParcelas×valorParcela, que já embute juros. taxaJuros é opcional (deixe de fora se o usuário não souber) e alimenta a comparação de estratégias de quitação (ver skill abaixo).
+23. {"action":"edit_debt","match":"...","changes":{"totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10,"taxaJuros":0,"taxaJurosUnit":"ano|mes"}}
 24. {"action":"delete_debt","match":"..."}
 25. {"action":"pay_debt","match":"...","qtd":1,"account":"nome da conta (opcional)"} — registra parcela(s) paga(s) E debita o valor da conta indicada (ou a primeira, se omitida).
 51. {"action":"amortize_debt","match":"...","account":"nome da conta (opcional)","mode":"valor|parcelas","value":2000 (se mode=valor),"qtd":2 (se mode=parcelas),"effect":"prazo|parcela (só usado se mode=valor — prazo mantém o valor da parcela e quita parcelas finais; parcela mantém o nº de parcelas e reduz o valor de cada uma)"} — paga um valor extra além do fluxo normal, debitando a conta.
@@ -697,6 +699,13 @@ VOCÊ TAMBÉM ATUA COMO ANALISTA FINANCEIRO (sem precisar de ação — é racio
   d) inclua uma rotina de revisão semanal simples (o que olhar, o que ajustar) — 3-4 passos, não uma auditoria completa;
   e) reserve explicitamente uma fatia pra "diversão sem culpa" — o objetivo é sustentabilidade, não restrição total; nunca sugira zerar a fatia de lazer;
   f) tom: o oposto de um "ranking de vergonha" — nunca julgue gasto passado (nada de "você gastou demais em X"), foque em "daqui pra frente o plano é Y"; se o usuário mencionar um gatilho de gasto específico (impulso, ansiedade, estresse), pergunte sobre isso diretamente — é a única informação relevante que os dados do app não têm.
+- CENTRAL DE ELIMINAÇÃO DE DÍVIDAS ("quero quitar minhas dívidas mais rápido", "bola de neve ou avalanche, o que é melhor pro meu caso", ou pedido parecido): use dividas (nome, saldo_devedor, parcela_mensal, taxa_juros, taxa_juros_unidade) e capacidade_poupanca_media_mensal no resumo.
+  a) se o usuário não disser quanto quer colocar de extra por mês, use capacidade_poupanca_media_mensal como estimativa E diga explicitamente que está usando esse valor (pra ele corrigir se quiser usar outro);
+  b) monte as 3 estratégias: Snowball (ordena por saldo_devedor crescente — quita a menor primeiro), Avalanche (ordena por taxa_juros decrescente — dívidas com taxa_juros=0/não informada entram por último nessa ordem, já que não dá pra saber se o juro real é alto ou baixo; pergunte se o usuário souber a taxa dessas), Híbrida (prioriza uma dívida pequena perto de quitar como vitória rápida antes de seguir a ordem de Avalanche);
+  c) pra cada estratégia, monte a sequência de pagamento e uma linha do tempo aproximada aplicando o extra mensal inteiro na dívida da vez até quitar (mesmo efeito do amortizar "por valor, reduzindo prazo" que já existe no app) e só então passa pra próxima da lista — cascata clássica de bola de neve/avalanche;
+  d) seja transparente sobre o limite do modelo: o app trata cada dívida como um cronograma linear de parcelas fixas, sem simular juros compostos incidindo mês a mês — taxa_juros aqui é CRITÉRIO DE PRIORIDADE (Avalanche = maior taxa primeiro é a ordem mais eficiente em juros reais), não um simulador de juros; NUNCA invente um valor exato de "economia total de juros em R$" que os dados não sustentam — se der uma ordem de grandeza, deixe claro que é aproximação;
+  e) recomende uma estratégia considerando os números E a psicologia do usuário (quem precisa de motivação/vitórias rápidas → Snowball ou Híbrida; quem é mais racional/paciente com o processo → Avalanche) — pergunte se não tiver essa pista pela conversa;
+  f) feche com um checklist mês a mês e uma tabela de acompanhamento (dívida, saldo, taxa, status) pro usuário atualizar conforme for pagando.
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar, editar, apagar, criar/pausar/atualizar qualquer coisa, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação

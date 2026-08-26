@@ -5,7 +5,7 @@ aliases: [Yesod]
 
 # 💰 Yesod — Finanças
 
-> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1609 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
+> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1618 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
 > Score bridge: publica `yesod` em `lifetree_scores`
 > Esta nota incorpora a auditoria funcional completa feita em 01/08/2026 (levantamento de telas/entidades/gaps que também existe como [artefato web](https://claude.ai/code/artifact/477b284f-23ed-447d-a614-5ff541796195)) — é a referência canônica do estado do módulo daqui pra frente, não só notas de implementação.
 
@@ -22,7 +22,7 @@ Reorganizado em 01/08/2026 de 9 pra 5 abas, e de novo em 25/08/2026 (Dívidas en
 | Transação | dentro de `accs[].txs` / `cards[].txs` | `desc`, `amount` (sempre positivo, sinal vem de `type`), `type` (`in`/`out`), `date`, `cat`, `method` (pix/debito/credito/ted/dinheiro — só em txs de conta), `recurring`, `installments` (só em txs de cartão) |
 | Cartão | `cards` | `bankId`, `name`, `color`, `limit`, `closeDay`, `dueDay`, `txs[]` |
 | Caixinha | `boxes` | `name`, `color`, `goal`, `balance` (único saldo *armazenado* direto — não derivado), `targetDate` |
-| Dívida | `debts` | `name`, `credor`, `color`, `totalParcelas`, `parcelasPagas`, `valorParcela`, `dueDay`, `startDate` |
+| Dívida | `debts` | `name`, `credor`, `color`, `totalParcelas`, `parcelasPagas`, `valorParcela`, `dueDay`, `startDate`, `taxaJuros`/`taxaJurosUnit` (opcional, novo 26/08/2026 — ver leva 12) |
 | Investimento | `invs` | `bankId`, `subCat` (10 subcategorias em 4 grupos: Renda Fixa, Renda Variável, Multimercado, Internacional), `name`, `invested`, `balance`, `rate`, `maturity` |
 | Orçamento | `budgets` | `cat`, `limit` |
 | Categorias | `catsout` / `catsin` | listas de string, editáveis (seed: 11 de saída, 5 de entrada) |
@@ -680,6 +680,38 @@ de contexto foi criado (as duas skills reusam `renda_mes_atual`/`capacidade_poup
 mensal`/`caixinhas`/`orcamentos`/`gastos_por_categoria_*` já testados na leva anterior), a
 verificação foi releitura do texto do prompt + build/lint limpos, sem nova simulação de
 matemática.
+
+### Dívida ganha taxa de juros + Coach ganha skill "Central de Eliminação de Dívidas" (26/08/2026, leva 12)
+Última peça antes de fechar o estudo 3B com a skill mais genérica (Diversified Income
+Plan). Debt Elimination era a única das 5 skills bloqueada por falta de dado — sem taxa de
+juros por dívida não dá pra ordenar por Avalanche (maior juro primeiro) com sentido.
+
+- `debts[]` ganha `taxaJuros` (número, %) e `taxaJurosUnit` (`"ano"|"mes"`, padrão `"ano"`)
+  — opcional, mesmo padrão de campo com unidade editável já usado em Caixinhas (`rate`/
+  `rateUnit`). Editável no sheet de criar/editar dívida (novo bloco "TAXA DE JUROS
+  (OPCIONAL)" com toggle % a.a./% a.m.); mostrado na página de detalhe da dívida quando
+  `taxaJuros>0` (fica oculto quando não informado, pra não obrigar ninguém a preencher).
+- `create_debt`/`edit_debt` (Coach) e `buildYesodContext` atualizados: `dividas[]` no
+  contexto ganha `saldo_devedor` (valor exato, antes só dava pra derivar de dois campos) e
+  `taxa_juros`/`taxa_juros_unidade`.
+- Novo skill "Central de Eliminação de Dívidas": monta as 3 estratégias clássicas —
+  Snowball (menor saldo primeiro), Avalanche (maior taxa_juros primeiro — dívida sem taxa
+  informada entra por último, o Coach pergunta se o usuário souber), Híbrida (uma vitória
+  rápida antes de seguir Avalanche) — aplicando o "extra mensal" (informado pelo usuário ou
+  `capacidade_poupanca_media_mensal` como estimativa, sempre dizendo qual dos dois está
+  usando) em cascata numa dívida de cada vez, mesmo efeito do "amortizar por valor,
+  reduzindo prazo" que já existe no app. Honestidade explícita no prompt: o app modela cada
+  dívida como cronograma linear de parcelas fixas, sem simular juros compostos mês a mês —
+  `taxa_juros` é critério de PRIORIDADE entre estratégias, o Coach nunca deve inventar um
+  valor de "economia total de juros em R$" que os dados não sustentam. Fecha com checklist
+  mês a mês + tabela de acompanhamento.
+
+Testado no navegador: adicionada taxa de 18,5% a.a. na dívida "Financiamento Carro" pelo
+sheet de editar — campo salvou e a página de detalhe passou a mostrar "18.5% a.a." abaixo
+do saldo; replicada a lógica exata do `dividas[]` do contexto via JS contra o `localStorage`
+real, bateu certinho (`taxa_juros: 18.5` só na dívida editada, `0` nas demais, `saldo_devedor`
+calculado certo em todas). `npm run build` limpo; `YesodModule.jsx` manteve o baseline de
+lint (35 problemas, nenhum novo); `coachSkills.js`/`yesodActions.js` sem nenhum problema.
 
 ## Persistência
 Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).

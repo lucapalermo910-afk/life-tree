@@ -630,14 +630,14 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // das parcelas, que já embute juros e não é o valor que efetivamente entrou na conta.
   const addDebt=()=>{
     if(!f.name)return;
-    setDebts(p=>[...p,{id:"d"+uid(),name:f.name,credor:f.credor||"",totalParcelas:Number(f.totalParcelas)||12,parcelasPagas:Number(f.parcelasPagas)||0,valorParcela:Number(f.valorParcela)||0,dueDay:Number(f.dueDay)||10,startDate:f.startDate||today,color:f.color||"#ef4444"}]);
+    setDebts(p=>[...p,{id:"d"+uid(),name:f.name,credor:f.credor||"",totalParcelas:Number(f.totalParcelas)||12,parcelasPagas:Number(f.parcelasPagas)||0,valorParcela:Number(f.valorParcela)||0,dueDay:Number(f.dueDay)||10,startDate:f.startDate||today,color:f.color||"#ef4444",taxaJuros:Number(f.taxaJuros)||0,taxaJurosUnit:f.taxaJurosUnit||"ano"}]);
     const valorRecebido=Number(f.valorRecebido)||0;
     if(valorRecebido>0&&f.accId){
       setAccs(p=>p.map(a=>a.id===f.accId?{...a,txs:[...a.txs,{id:"t"+uid(),desc:"Empréstimo: "+f.name,amount:valorRecebido,type:"in",date:f.startDate||today,cat:"Empréstimo",method:"ted"}]}:a));
     }
     toast_("Dívida adicionada","#f97316");close();
   };
-  const editDebt=()=>{setDebts(p=>p.map(d=>d.id===f.id?{...d,name:f.name,credor:f.credor||"",totalParcelas:Number(f.totalParcelas),parcelasPagas:Number(f.parcelasPagas),valorParcela:Number(f.valorParcela),dueDay:Number(f.dueDay),startDate:f.startDate,color:f.color}:d));toast_("Dívida atualizada");close();};
+  const editDebt=()=>{setDebts(p=>p.map(d=>d.id===f.id?{...d,name:f.name,credor:f.credor||"",totalParcelas:Number(f.totalParcelas),parcelasPagas:Number(f.parcelasPagas),valorParcela:Number(f.valorParcela),dueDay:Number(f.dueDay),startDate:f.startDate,color:f.color,taxaJuros:Number(f.taxaJuros)||0,taxaJurosUnit:f.taxaJurosUnit||"ano"}:d));toast_("Dívida atualizada");close();};
   // Registrar parcela paga agora exige conta (25/08/2026) — era a única ação de dívida que
   // mexia em parcelasPagas sem debitar dinheiro de lugar nenhum.
   const payDebt=()=>{
@@ -917,8 +917,8 @@ export default function YesodModule({ onBack, dark, setDark }) {
             return(<div style={{animation:"slideUp .3s ease"}}><BackBtn label="Dívidas"/>
               <div style={{background:"linear-gradient(135deg,"+d.color+"18,"+d.color+"06)",border:"1px solid "+d.color+"33",borderRadius:16,padding:18,marginBottom:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div><div style={{fontSize:11,color:C.muted,marginBottom:2}}>{d.name}</div>{d.credor&&<div style={{fontSize:12,fontWeight:700,color:d.color,marginBottom:4}}>{d.credor}</div>}<div style={{fontSize:22,fontWeight:900,color:d.color}}>{fmt(saldo)}</div></div>
-                  <button onClick={()=>openSh("editDebt",{id:d.id,name:d.name,credor:d.credor||"",totalParcelas:d.totalParcelas,parcelasPagas:d.parcelasPagas,valorParcela:d.valorParcela,dueDay:d.dueDay,startDate:d.startDate,color:d.color})} style={{background:d.color+"22",border:"1px solid "+d.color+"44",borderRadius:9,padding:"6px 12px",cursor:"pointer",color:d.color,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:5}}><Ico n="edit" size={12} color={d.color}/> Editar</button>
+                  <div><div style={{fontSize:11,color:C.muted,marginBottom:2}}>{d.name}</div>{d.credor&&<div style={{fontSize:12,fontWeight:700,color:d.color,marginBottom:4}}>{d.credor}</div>}<div style={{fontSize:22,fontWeight:900,color:d.color}}>{fmt(saldo)}</div>{d.taxaJuros>0&&<div style={{fontSize:9,color:C.muted,marginTop:2}}>{d.taxaJuros}% {d.taxaJurosUnit==="mes"?"a.m.":"a.a."}</div>}</div>
+                  <button onClick={()=>openSh("editDebt",{id:d.id,name:d.name,credor:d.credor||"",totalParcelas:d.totalParcelas,parcelasPagas:d.parcelasPagas,valorParcela:d.valorParcela,dueDay:d.dueDay,startDate:d.startDate,color:d.color,taxaJuros:d.taxaJuros||0,taxaJurosUnit:d.taxaJurosUnit||"ano"})} style={{background:d.color+"22",border:"1px solid "+d.color+"44",borderRadius:9,padding:"6px 12px",cursor:"pointer",color:d.color,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:5}}><Ico n="edit" size={12} color={d.color}/> Editar</button>
                 </div>
                 <div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",margin:"12px 0 4px"}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div>
                 <div style={{fontSize:9,color:C.muted}}>{pct}% quitado</div>
@@ -1562,7 +1562,16 @@ export default function YesodModule({ onBack, dark, setDark }) {
           </div>
         </div>
         <ColorPicker value={f.color||ACCENT} onChange={c=>F({color:c})} C={C}/><Btn color={f.color||ACCENT} onClick={sh==="addBox"?addBox:editBox}>Salvar</Btn></Sheet>)}
-      {(sh==="addDebt"||sh==="editDebt")&&(<Sheet title={sh==="addDebt"?"Nova Dívida":"Editar Dívida"} onClose={close} C={C}><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Financiamento Carro" C={C}/><FI label="Credor" value={f.credor||""} onChange={v=>F({credor:v})} placeholder="Ex: Banco Itau" C={C}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FI label="Total de parcelas" value={f.totalParcelas||12} onChange={v=>F({totalParcelas:v})} type="number" min={1} C={C}/><FI label="Parcelas pagas" value={f.parcelasPagas||0} onChange={v=>F({parcelasPagas:v})} type="number" min={0} C={C}/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FI label="Valor da parcela (R$)" value={f.valorParcela||0} onChange={v=>F({valorParcela:v})} type="number" min={0} C={C}/><FI label="Dia vencimento" value={f.dueDay||10} onChange={v=>F({dueDay:v})} type="number" min={1} C={C}/></div><FI label="Data de início" value={f.startDate||today} onChange={v=>F({startDate:v})} type="date" C={C}/>
+      {(sh==="addDebt"||sh==="editDebt")&&(<Sheet title={sh==="addDebt"?"Nova Dívida":"Editar Dívida"} onClose={close} C={C}><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Financiamento Carro" C={C}/><FI label="Credor" value={f.credor||""} onChange={v=>F({credor:v})} placeholder="Ex: Banco Itau" C={C}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FI label="Total de parcelas" value={f.totalParcelas||12} onChange={v=>F({totalParcelas:v})} type="number" min={1} C={C}/><FI label="Parcelas pagas" value={f.parcelasPagas||0} onChange={v=>F({parcelasPagas:v})} type="number" min={0} C={C}/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FI label="Valor da parcela (R$)" value={f.valorParcela||0} onChange={v=>F({valorParcela:v})} type="number" min={0} C={C}/><FI label="Dia vencimento" value={f.dueDay||10} onChange={v=>F({dueDay:v})} type="number" min={1} C={C}/></div>
+        <div style={{marginBottom:11}}>
+          <div style={{fontSize:10,color:C.muted,marginBottom:4,fontWeight:700,letterSpacing:.8}}>TAXA DE JUROS (OPCIONAL)</div>
+          <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}><FI value={f.taxaJuros||0} onChange={v=>F({taxaJuros:v})} type="number" min={0} C={C}/></div>
+            <div style={{display:"flex",gap:6}}>{[{v:"ano",l:"% a.a."},{v:"mes",l:"% a.m."}].map(o=>(<button key={o.v} onClick={()=>F({taxaJurosUnit:o.v})} style={{padding:"0 12px",borderRadius:9,cursor:"pointer",fontWeight:600,fontSize:11,border:"1.5px solid "+((f.taxaJurosUnit||"ano")===o.v?ACCENT:C.b2),background:(f.taxaJurosUnit||"ano")===o.v?ACCENT+"18":"transparent",color:(f.taxaJurosUnit||"ano")===o.v?ACCENT:C.text}}>{o.l}</button>))}</div>
+          </div>
+          <div style={{fontSize:9,color:C.muted,marginTop:4,lineHeight:1.5}}>Usada pelo Coach pra comparar estratégias de quitação (Avalanche prioriza a dívida de maior juro) — deixe 0 se não souber.</div>
+        </div>
+        <FI label="Data de início" value={f.startDate||today} onChange={v=>F({startDate:v})} type="date" C={C}/>
         {sh==="addDebt"&&(<>
           <div style={{fontSize:10,color:C.muted,marginBottom:8,lineHeight:1.6}}>O valor recebido pode ser diferente da soma das parcelas (que já inclui juros) — é o que efetivamente cai numa conta.</div>
           <FI label="Valor recebido (R$)" value={f.valorRecebido||0} onChange={v=>F({valorRecebido:v})} type="number" min={0} C={C}/>
