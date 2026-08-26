@@ -335,6 +335,17 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storageLoaded]);
 
+  // Despesas Divididas — contabilização de verdade (25/08/2026): antes o custo de uma
+  // despesa dividida contava sempre cheio em todo lugar (Fluxo/Orçamento/Score) e a parte
+  // devida pela outra pessoa não existia em lugar nenhum do sistema — "Marcar acertado" só
+  // trocava uma cor, sem gerar nenhum dinheiro. Agora: mySplitShare é o custo que É seu de
+  // verdade (desconta a parte do outro, sempre, esteja acertado ou não — a parte dela nunca
+  // foi seu gasto); splitReceivable é a parte que ela ainda deve, enquanto não recebida —
+  // conta como ativo (a receber) no patrimônio líquido até virar dinheiro de verdade numa
+  // conta (ver receiveSplit()). Só transações de CONTA têm split (nunca cartão).
+  const mySplitShare = t => t.split ? t.amount*(1-(Number(t.split.theirPercent)||0)/100) : t.amount;
+  const splitReceivable = t => (t.split && !t.split.settled) ? t.amount*((Number(t.split.theirPercent)||0)/100) : 0;
+
   const totAcc = accs.reduce((s,a)=>s+accBal(a),0);
   const totBox = boxes.reduce((s,b)=>s+b.balance,0);
   const totInv = invs.reduce((s,i)=>s+i.balance,0);
@@ -343,12 +354,13 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // auditoria de 25/08/2026: net inflava o patrimônio pelo valor total usado nos cartões).
   const totCardDebt = cards.reduce((s,c)=>s+getStmts(c).reduce((ss,st)=>ss+st.total,0),0);
   const totDebtRem = debts.reduce((s,d)=>s+(d.totalParcelas-d.parcelasPagas)*d.valorParcela,0);
-  const net = totAcc+totBox+totInv-totDebtRem-totCardDebt;
+  const totReceivable = accs.reduce((s,a)=>s+(a.txs||[]).reduce((ss,t)=>ss+splitReceivable(t),0),0);
+  const net = totAcc+totBox+totInv-totDebtRem-totCardDebt+totReceivable;
 
   const getMonthStr = offset => { const d=new Date(); d.setMonth(d.getMonth()+offset); return d.toISOString().slice(0,7); };
   const monthLabel2 = ym => { const [y,m]=ym.split("-"); return MTHS[parseInt(m)-1]+"/"+y.slice(2); };
   const allTxs = () => { const txs=[]; accs.forEach(a=>(a.txs||[]).forEach(t=>txs.push({...t,source:"conta",sourceName:accLabel(a,banks)}))); cards.forEach(c=>(c.txs||[]).forEach(t=>txs.push({...t,type:t.type||"out",source:"cartao",sourceName:c.name}))); return txs; };
-  const cashflowMonth = offset => { const ym=getMonthStr(offset); const txs=allTxs().filter(t=>t.date&&t.date.startsWith(ym)); const ins=txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0); const outs=txs.filter(t=>t.type==="out").reduce((s,t)=>s+t.amount,0); return {ym,ins,outs,balance:ins-outs,txs}; };
+  const cashflowMonth = offset => { const ym=getMonthStr(offset); const txs=allTxs().filter(t=>t.date&&t.date.startsWith(ym)); const ins=txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0); const outs=txs.filter(t=>t.type==="out").reduce((s,t)=>s+mySplitShare(t),0); return {ym,ins,outs,balance:ins-outs,txs}; };
 
   // ── GRÁFICO REALIZADO+ESPERADO (Fluxo de Caixa) ───────────────────────────────
   // ym > mês atual = futuro (projetado a partir de recorrências + plannedItems, editável);
@@ -394,12 +406,14 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const monthTotals = ym => {
     if (!isFutureYm(ym)) {
       const txs = allTxs().filter(t=>t.date&&t.date.startsWith(ym));
-      return { ins: txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0), outs: txs.filter(t=>t.type==="out").reduce((s,t)=>s+t.amount,0) };
+      return { ins: txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0), outs: txs.filter(t=>t.type==="out").reduce((s,t)=>s+mySplitShare(t),0) };
     }
     const sumOf = totals => Object.values(totals).reduce((s,v)=>s+v.amount,0);
     return { ins: sumOf(futureCategoryTotals(ym,"in")), outs: sumOf(futureCategoryTotals(ym,"out")) };
   };
-  const budgetSpend = cat => { const ym=getMonthStr(0); return allTxs().filter(t=>t.type==="out"&&t.cat===cat&&t.date&&t.date.startsWith(ym)).reduce((s,t)=>s+t.amount,0); };
+  // Custo por categoria também usa mySplitShare (25/08/2026) — mesma lógica: o que é
+  // dividido não é gasto seu por inteiro, mesmo antes de ser "acertado".
+  const budgetSpend = cat => { const ym=getMonthStr(0); return allTxs().filter(t=>t.type==="out"&&t.cat===cat&&t.date&&t.date.startsWith(ym)).reduce((s,t)=>s+mySplitShare(t),0); };
   const retroPatrimData = useMemo(() => {
     const months=[]; for(let i=-5;i<=0;i++){const d=new Date();d.setMonth(d.getMonth()+i);const ym=d.toISOString().slice(0,7);const endDate=ym+"-31";const accTotal=accs.reduce((s,a)=>s+(a.txs||[]).filter(t=>t.date<=endDate).reduce((ss,t)=>t.type==="in"?ss+t.amount:ss-t.amount,0),0);const debtTotal=debts.reduce((s,d2)=>{const paid=Math.min(d2.totalParcelas,Math.round((new Date(endDate)-new Date(d2.startDate+"T00:00:00"))/(1000*60*60*24*30)));return s+Math.max(0,d2.totalParcelas-paid)*d2.valorParcela;},0);months.push({ym,net:accTotal+totBox+totInv-debtTotal});}const snaps=[...patrimSnaps];months.forEach(m=>{if(!snaps.some(s=>s.ym===m.ym))snaps.push(m);});return snaps.sort((a,b)=>a.ym.localeCompare(b.ym));
   }, [accs, debts, totBox, totInv, patrimSnaps]);
@@ -450,7 +464,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const avgAccountNet3 = () => {
     const ms=[-3,-2,-1].map(o=>{
       const ym=getMonthStr(o);const txs=[];accs.forEach(a=>(a.txs||[]).forEach(t=>{if(t.date&&t.date.startsWith(ym))txs.push(t);}));
-      return txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0)-txs.filter(t=>t.type==="out").reduce((s,t)=>s+t.amount,0);
+      return txs.filter(t=>t.type==="in").reduce((s,t)=>s+t.amount,0)-txs.filter(t=>t.type==="out").reduce((s,t)=>s+mySplitShare(t),0);
     });
     return ms.reduce((s,v)=>s+v,0)/ms.length;
   };
@@ -701,8 +715,24 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // ── DIVISÃO DE DESPESAS — pessoas + toggle de "já recebi/paguei minha parte" ─────
   const addSplitPerson=()=>{const name=(f.name||"").trim();if(!name)return;setSplitPeople(p=>[...p,{id:"sp"+uid(),name}]);toast_("Pessoa adicionada");close();};
   const delSplitPerson=id=>setSplitPeople(p=>p.filter(x=>x.id!==id));
-  const toggleSplitSettled=(accId,txId)=>setAccs(p=>p.map(a=>a.id===accId?{...a,txs:a.txs.map(t=>t.id===txId?{...t,split:{...t.split,settled:!t.split.settled}}:t)}:a));
   const pendingSplits=()=>{const out=[];accs.forEach(a=>(a.txs||[]).forEach(t=>{if(t.split)out.push({...t,accId:a.id,accName:accLabel(a,banks)});}));return out.sort((a,b)=>(a.split.settled===b.split.settled?0:a.split.settled?1:-1)||b.date.localeCompare(a.date));};
+  // Registrar recebimento de uma despesa dividida (25/08/2026) — substitui o antigo
+  // toggleSplitSettled (só trocava uma cor, sem mexer em dinheiro nenhum). Agora lança de
+  // verdade uma entrada na conta escolhida (o dinheiro que a outra pessoa te devolveu) e só
+  // então marca a transação original como acertada — mesmo princípio de "tudo ligado a
+  // conta" já usado em Caixinha/Investimento/Dívida. f vem preenchido por openSh("receiveSplit",
+  // {origAccId,txId,origDesc,theirs,accId:""}).
+  const receiveSplit=()=>{
+    if(!f.accId){toast_("Selecione uma conta","#ef4444");return;}
+    const theirs=Number(f.theirs)||0;
+    setAccs(p=>p.map(a=>{
+      let next=a;
+      if(a.id===f.origAccId) next={...next,txs:next.txs.map(t=>t.id===f.txId?{...t,split:{...t.split,settled:true}}:t)};
+      if(a.id===f.accId) next={...next,txs:[...next.txs,{id:"t"+uid(),desc:"Reembolso: "+f.origDesc,amount:theirs,type:"in",date:today,cat:"Reembolso",method:"ted"}]};
+      return next;
+    }));
+    toast_("Reembolso registrado",ACCENT);close();
+  };
   const launch=()=>{
     if(!f.desc||!f.amount)return;
     // Split só se aplica a saídas em conta (não cartão, não transferência) — cobre o caso
@@ -779,7 +809,10 @@ export default function YesodModule({ onBack, dark, setDark }) {
               {monthGroups.map(g=>{const monthNet=g.txs.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-tx.amount),0);return(
                 <div key={g.ym} style={{marginBottom:14}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,padding:"0 2px"}}><span style={{fontSize:11,fontWeight:700,color:C.text}}>{monthLabel2(g.ym)}</span><span style={{fontSize:11,fontWeight:700,color:monthNet>=0?"#16a34a":"#ef4444"}}>{monthNet>=0?"+":"-"}{fmt(Math.abs(monthNet))}</span></div>
-                  {g.txs.map(tx=>(<div key={tx.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:28,height:28,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={13} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.method} · {tx.date}</div></div><div style={{fontSize:13,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444"}}>{tx.type==="in"?"+":"-"}{fmt(tx.amount)}</div><button onClick={()=>openSh("editTx",{accId:ac.id,origAccId:ac.id,id:tx.id,ltype:tx.type,desc:tx.desc,amount:tx.amount,date:tx.date,cat:tx.cat,method:tx.method,recurring:tx.recurring||"",splitOn:!!tx.split,splitPersonId:tx.split?.personId||"",splitPercent:tx.split?.theirPercent??50,splitSettled:tx.split?.settled||false})} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={()=>delAccTx(ac.id,tx.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Ico n="x" size={13} color={C.muted}/></button></div>))}
+                  {g.txs.map(tx=>{
+                    const splitPerson = tx.split ? splitPeople.find(p=>p.id===tx.split.personId) : null;
+                    return(<div key={tx.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:28,height:28,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={13} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.method} · {tx.date}</div>{splitPerson&&<div style={{fontSize:8,color:"#f59e0b"}}>Dividido com {splitPerson.name} ({tx.split.theirPercent}%) · {tx.split.settled?"recebido":"pendente"}</div>}</div><div style={{fontSize:13,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444"}}>{tx.type==="in"?"+":"-"}{fmt(tx.amount)}</div><button onClick={()=>openSh("editTx",{accId:ac.id,origAccId:ac.id,id:tx.id,ltype:tx.type,desc:tx.desc,amount:tx.amount,date:tx.date,cat:tx.cat,method:tx.method,recurring:tx.recurring||"",splitOn:!!tx.split,splitPersonId:tx.split?.personId||"",splitPercent:tx.split?.theirPercent??50,splitSettled:tx.split?.settled||false})} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={()=>delAccTx(ac.id,tx.id)} style={{background:"none",border:"none",cursor:"pointer",padding:2}}><Ico n="x" size={13} color={C.muted}/></button></div>);
+                  })}
                 </div>
               );})}
             </div>);
@@ -928,13 +961,16 @@ export default function YesodModule({ onBack, dark, setDark }) {
                 </div>);})}
               </div>
             )}
-            {/* Divisões pendentes — despesas marcadas como divididas com alguém, ainda não
-                acertadas. Resolve a limitação "split de despesas" (ex: luz 50/50, controle
-                de quem já pagou a parte). */}
-            {(()=>{const splits=pendingSplits();const pend=splits.filter(t=>!t.split.settled);if(!splits.length)return null;return(
+            {/* Divisões pendentes — despesas marcadas como divididas com alguém. Contabilização
+                de verdade desde 25/08/2026: o custo que conta em Fluxo/Orçamento/Score já é só
+                a sua parte (mySplitShare); o que falta receber conta como ativo no patrimônio
+                (totReceivable) até virar dinheiro de verdade numa conta via "Registrar
+                recebimento" (receiveSplit). Antes "Marcar acertado" só trocava uma cor. */}
+            {(()=>{const splits=pendingSplits();const pend=splits.filter(t=>!t.split.settled);if(!splits.length)return null;const pendTotal=pend.reduce((s,t)=>s+t.amount*(t.split.theirPercent/100),0);return(
               <div style={{background:C.card,border:"1px solid "+ACCENT+"33",borderRadius:14,padding:12,marginBottom:14}}>
                 <div style={{fontSize:9,color:ACCENT,fontWeight:700,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <span>DESPESAS DIVIDIDAS{pend.length>0?" · "+pend.length+" PENDENTE"+(pend.length>1?"S":""):""}</span>
+                  {pendTotal>0&&<span>a receber {fmt(pendTotal)}</span>}
                 </div>
                 {splits.slice(0,6).map(t=>{const person=splitPeople.find(p=>p.id===t.split.personId);const theirs=t.amount*(t.split.theirPercent/100);return(
                   <div key={t.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:"1px solid "+C.b1}}>
@@ -942,7 +978,9 @@ export default function YesodModule({ onBack, dark, setDark }) {
                       <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.desc}</div>
                       <div style={{fontSize:9,color:C.muted}}>{person?.name||"?"} deve {fmt(theirs)} ({t.split.theirPercent}%) · {t.date.split("-").reverse().join("/")}</div>
                     </div>
-                    <button onClick={()=>toggleSplitSettled(t.accId,t.id)} style={{flexShrink:0,background:t.split.settled?ACCENT+"22":"#f59e0b22",border:"1px solid "+(t.split.settled?ACCENT+"44":"#f59e0b44"),borderRadius:8,padding:"5px 9px",cursor:"pointer",color:t.split.settled?ACCENT:"#f59e0b",fontSize:9,fontWeight:700}}>{t.split.settled?"Acertado":"Marcar acertado"}</button>
+                    {t.split.settled
+                      ?<span style={{flexShrink:0,background:ACCENT+"22",border:"1px solid "+ACCENT+"44",borderRadius:8,padding:"5px 9px",color:ACCENT,fontSize:9,fontWeight:700}}>Recebido</span>
+                      :<button onClick={()=>openSh("receiveSplit",{origAccId:t.accId,txId:t.id,origDesc:t.desc,theirs,accId:""})} style={{flexShrink:0,background:"#f59e0b22",border:"1px solid #f59e0b44",borderRadius:8,padding:"5px 9px",cursor:"pointer",color:"#f59e0b",fontSize:9,fontWeight:700}}>Registrar recebimento</button>}
                   </div>
                 );})}
               </div>
@@ -1060,7 +1098,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
                     return true;
                   }).sort((a,b)=>b.date.localeCompare(a.date));
                 }
-                const total=list.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-tx.amount),0);
+                const total=list.reduce((s,tx)=>s+(tx.type==="in"?tx.amount:-mySplitShare(tx)),0);
                 let futureRows=[];
                 const futureType=extType==="todos"?"out":extType;
                 if(selFuture){
@@ -1127,7 +1165,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
                       <span style={{fontSize:14,fontWeight:900,color:total>=0?"#16a34a":"#ef4444"}}>{total>=0?"+":"-"}{fmt(Math.abs(total))}</span>
                     </div>
                     {list.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:12}}>Nenhum lançamento encontrado com esses filtros.</div>}
-                    {list.map((tx,i)=>(<div key={tx.id+i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:26,height:26,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={12} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.sourceName} · {tx.date.split("-").reverse().join("/")}</div></div><div style={{fontSize:12,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444",flexShrink:0}}>{tx.type==="in"?"+":"-"}{fmt(tx.amount)}</div></div>))}
+                    {list.map((tx,i)=>{
+                      const splitPerson = tx.split ? splitPeople.find(p=>p.id===tx.split.personId) : null;
+                      const shownAmount = tx.type==="in" ? tx.amount : mySplitShare(tx);
+                      return(<div key={tx.id+i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:C.card,border:"1px solid "+C.b1,borderRadius:10,marginBottom:6}}><div style={{width:26,height:26,borderRadius:7,flexShrink:0,background:tx.type==="in"?"#dcfce744":"#fee2e244",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={tx.type==="in"?"up":"down"} size={12} color={tx.type==="in"?"#16a34a":"#ef4444"}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{tx.desc}</div><div style={{fontSize:9,color:C.muted}}>{tx.cat} · {tx.sourceName} · {tx.date.split("-").reverse().join("/")}</div>{splitPerson&&<div style={{fontSize:8,color:"#f59e0b"}}>Total pago {fmt(tx.amount)} · {splitPerson.name} deve {fmt(tx.amount-shownAmount)} · {tx.split.settled?"recebido":"pendente"}</div>}</div><div style={{fontSize:12,fontWeight:800,color:tx.type==="in"?"#16a34a":"#ef4444",flexShrink:0}}>{tx.type==="in"?"+":"-"}{fmt(shownAmount)}</div></div>);
+                    })}
                   </>)}
                 </div>);
               })()}
@@ -1412,6 +1454,11 @@ export default function YesodModule({ onBack, dark, setDark }) {
         <div style={{background:C.b1,borderRadius:10,padding:"11px 13px",marginBottom:14,textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>SALDO DEVEDOR</div><div style={{fontSize:20,fontWeight:900,color:"#ef4444"}}>{fmt(f.remaining||0)}</div></div>
         <FS label="Conta" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/>
         <Btn color="#ef4444" onClick={quitarDivida}><Ico n="check" size={14}/> Confirmar Quitação</Btn>
+      </Sheet>)}
+      {sh==="receiveSplit"&&(<Sheet title="Registrar Recebimento" onClose={close} C={C}>
+        <div style={{background:C.b1,borderRadius:10,padding:"11px 13px",marginBottom:14,textAlign:"center"}}><div style={{fontSize:9,color:C.muted,fontWeight:700,marginBottom:2}}>VALOR A RECEBER</div><div style={{fontSize:20,fontWeight:900,color:ACCENT}}>{fmt(f.theirs||0)}</div></div>
+        <FS label="Em qual conta caiu o reembolso" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/>
+        <Btn color={ACCENT} onClick={receiveSplit}><Ico n="check" size={14}/> Confirmar Recebimento</Btn>
       </Sheet>)}
       {(sh==="addInv"||sh==="editInv")&&(<Sheet title={sh==="addInv"?"Novo Investimento":"Editar Investimento"} onClose={close} C={C}>{sh==="addInv"&&<><FS label="Banco/Corretora" value={f.bankId||""} onChange={v=>F({bankId:v})} opts={bankOpts()} C={C}/><FS label="Categoria" value={f.subCat||"rf_pub"} onChange={v=>F({subCat:v})} opts={iCatOpts()} C={C}/></>}<FI label="Nome do ativo" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Tesouro IPCA+" C={C}/><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><FI label="Aplicado (R$)" value={f.invested||0} onChange={v=>F({invested:v})} type="number" min={0} C={C}/><FI label="Saldo atual (R$)" value={f.balance||0} onChange={v=>F({balance:v})} type="number" min={0} C={C}/></div>{sh==="addInv"&&(<>
         <div style={{fontSize:10,color:C.muted,marginBottom:8,lineHeight:1.6}}>Se o valor aplicado já saiu de uma conta sua, escolha de onde — vai debitar de lá. Deixe em branco se for um ativo que você já tinha antes do app (não debita nada).</div>

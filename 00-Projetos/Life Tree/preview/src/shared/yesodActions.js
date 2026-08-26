@@ -621,6 +621,7 @@ export function deleteYesodSplitPerson(a) {
 // descrição entre todas as transações que TÊM split, mais recente desempata.
 export function markYesodSplitSettled(a) {
   const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
   const q = (a.match || "").toLowerCase();
   let found = null;
   accs.forEach(acc => (acc.txs || []).forEach(t => {
@@ -630,6 +631,24 @@ export function markYesodSplitSettled(a) {
   }));
   if (!found) return { ok: false, message: "Não encontrei lançamento dividido com '" + a.match + "'." };
   const settled = a.settled !== false;
+  // Marcar como acertado agora lança o reembolso de verdade numa conta (25/08/2026, mesmo
+  // princípio "tudo ligado a conta" da UI — ver receiveSplit em YesodModule.jsx) — antes só
+  // trocava a cor, sem gerar dinheiro nenhum. Marcar como pendente de novo continua sendo só
+  // correção manual do campo (não reverte um reembolso já lançado).
+  if (settled && !found.tx.split.settled) {
+    const acc = findAccount(accs, banks, a.account);
+    if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra registrar o reembolso." };
+    const theirs = Math.round(found.tx.amount * (found.tx.split.theirPercent / 100));
+    const updated = accs.map(x => {
+      let next = x;
+      if (x.id === found.accId) next = { ...next, txs: next.txs.map(t => t.id === found.tx.id ? { ...t, split: { ...t.split, settled: true } } : t) };
+      if (x.id === acc.id) next = { ...next, txs: [...next.txs, { id: "t"+uid(), desc: "Reembolso: " + found.tx.desc, amount: theirs, type: "in", date: todayS(), cat: "Reembolso", method: "ted" }] };
+      return next;
+    });
+    writeJSON("accs", updated);
+    notifyYesodUpdated();
+    return { ok: true, message: "Reembolso de " + theirs + " registrado em " + acc.name + " e '" + found.tx.desc + "' marcado como acertado." };
+  }
   writeJSON("accs", accs.map(acc => acc.id === found.accId ? { ...acc, txs: acc.txs.map(t => t.id === found.tx.id ? { ...t, split: { ...t.split, settled } } : t) } : acc));
   notifyYesodUpdated();
   return { ok: true, message: "'" + found.tx.desc + "' marcado como " + (settled ? "acertado" : "pendente") + "." };

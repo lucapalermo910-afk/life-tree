@@ -556,8 +556,8 @@ DASHBOARD (indicadores da tela principal do Yesod — dashboard_indicadores_ativ
 DIVISÃO DE DESPESAS (ex: conta de luz 50/50 com a esposa — pessoas_divisao_despesas/divisoes_pendentes no resumo)
 43. {"action":"create_split_person","name":"..."}
 44. {"action":"delete_split_person","match":"..."}
-45. {"action":"mark_split_settled","match":"texto da descrição do lançamento","settled":true} — settled:false marca como pendente de novo
-   - Pra criar um lançamento JÁ dividido, use create_transaction (ação 1) com "splitPerson":"nome" e "splitPercent":50 (% que a outra pessoa paga) — só vale pra saída em conta, não cartão.
+45. {"action":"mark_split_settled","match":"texto da descrição do lançamento","settled":true,"account":"nome da conta (opcional)"} — settled:true LANÇA de verdade o reembolso como entrada na conta indicada (ou na primeira conta, se não especificar) e só então marca acertado; settled:false só corrige o campo de volta pra pendente, sem desfazer nenhum reembolso já lançado.
+   - Pra criar um lançamento JÁ dividido, use create_transaction (ação 1) com "splitPerson":"nome" e "splitPercent":50 (% que a outra pessoa paga) — só vale pra saída em conta, não cartão. O custo contado em Fluxo/Orçamento/Score já é só a parte do usuário (desconta a parte da outra pessoa automaticamente); a parte dela conta como "a receber" no patrimônio até ser recebida.
 
 PROJEÇÃO — EVENTOS DE CENÁRIO "E SE" (eventos_projecao no resumo — soma na Projeção de Fluxo de Caixa, aba Fluxo)
 48. {"action":"add_proj_event","label":"nome opcional, ex: Viagem","deltaIn":0,"deltaOut":0,"fromM":0} — fromM: 0=imediato, 6=em 6 meses, 12=em 1 ano; deltaIn/deltaOut em R$/mês
