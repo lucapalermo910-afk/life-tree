@@ -21,6 +21,8 @@ function accBalance(acc) {
 }
 
 const addMonths = (ds, n) => { const d = new Date(ds + "T12:00:00"); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 10); };
+const addDays = (ds, n) => { const d = new Date(ds + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const freqAdd = (ds, freq) => freq === "weekly" ? addDays(ds, 7) : freq === "yearly" ? addMonths(ds, 12) : addMonths(ds, 1);
 const stmtDue = (pd, closeDay, dueDay) => {
   const d = new Date(pd + "T12:00:00");
   let m = d.getMonth(), y = d.getFullYear();
@@ -176,6 +178,37 @@ export function buildYesodContext() {
     if (days <= 7) alertas.push({ tipo: "parcela", nome: d.name, valor: d.valorParcela, vence: due, dias: days });
   });
 
+  // Atraso e juros (26/08/2026) — mesma lógica de debtLateInfo/recurringPendingDates do
+  // YesodModule.jsx, duplicada aqui (Coach roda fora do módulo montado). Dívida: cronograma
+  // completo de vencimentos a partir de startDate+dueDay, comparado com parcelasPagas.
+  // Recorrência de saída (exceto crédito): parou de lançar sozinha (ver useEffect do
+  // módulo), fica pendente até confirmar com a ação pay_recurring.
+  const debtDueDates = d => {
+    const start = new Date(d.startDate + "T12:00:00");
+    let y = start.getFullYear(), m = start.getMonth();
+    if (start.getDate() > d.dueDay) { m++; if (m > 11) { m = 0; y++; } }
+    const dates = [];
+    for (let i = 0; i < d.totalParcelas; i++) { dates.push(new Date(y, m, d.dueDay).toISOString().slice(0, 10)); m++; if (m > 11) { m = 0; y++; } }
+    return dates;
+  };
+  const contasAtrasadas = [];
+  debts.forEach(d => {
+    if (d.parcelasPagas >= d.totalParcelas) return;
+    const dates = debtDueDates(d);
+    const expected = dates.filter(dt => dt <= today).length;
+    const atraso = Math.max(0, expected - d.parcelasPagas);
+    if (atraso > 0) {
+      const oldestDue = dates[d.parcelasPagas];
+      contasAtrasadas.push({ tipo: "divida", nome: d.name, parcelas_atrasadas: atraso, valor: Math.round(d.valorParcela * atraso), dias_atraso: Math.round((new Date(today) - new Date(oldestDue)) / 864e5) });
+    }
+  });
+  recurrings.forEach(r => {
+    if (!r.active || r.type !== "out" || r.method === "credito") return;
+    const pend = []; let dt = r.nextDate, guard = 0;
+    while (dt <= today && guard < 60) { pend.push(dt); dt = freqAdd(dt, r.freq); guard++; }
+    if (pend.length) contasAtrasadas.push({ tipo: "conta_recorrente", nome: r.desc, ocorrencias_pendentes: pend.length, valor: Math.round(r.amount * pend.length), dias_atraso: Math.round((new Date(today) - new Date(pend[0])) / 864e5) });
+  });
+
   return {
     data_hoje: today,
     saldo_total_contas: Math.round(totalContas),
@@ -210,6 +243,7 @@ export function buildYesodContext() {
       },
     },
     alertas_vencimento_7dias: alertas,
+    contas_atrasadas: contasAtrasadas,
 
     // usados pelas ações pra resolver conta/cartão/categoria/etc. por nome
     contas_disponiveis: accs.map(a => a.name + " (" + bankName(a.bankId) + ")"),
@@ -594,6 +628,7 @@ RECORRÊNCIAS (além de criar uma junto com create_transaction usando "freq")
 6. {"action":"edit_recurring","match":"...","changes":{"desc":"...","amount":100,"freq":"..."}}
 7. {"action":"delete_recurring","match":"..."}
 8. {"action":"toggle_recurring","match":"..."} — pausa se ativa, retoma se pausada
+56. {"action":"pay_recurring","match":"...","account":"nome da conta (opcional)","jurosAtraso":0 (opcional, R$)} — confirma UMA ocorrência pendente de uma recorrência de SAÍDA (contas_atrasadas no resumo, tipo "conta_recorrente"); recorrências de saída (exceto crédito, que sempre cai na fatura sozinha) pararam de lançar automaticamente e ficam como "conta a pagar" até essa confirmação — jurosAtraso vira lançamento à parte. Se houver mais de uma ocorrência pendente da mesma recorrência, cada chamada confirma só a mais antiga.
 
 BANCOS / CONTAS / CARTÕES
 9. {"action":"create_bank","name":"...","color":"#hex (opcional)"}
@@ -616,7 +651,7 @@ DÍVIDAS
 22. {"action":"create_debt","name":"...","credor":"...","totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10,"valorRecebido":10000 (opcional),"account":"nome da conta (opcional)","taxaJuros":0 (opcional, %),"taxaJurosUnit":"ano|mes (opcional, padrão ano)"} — se "valorRecebido">0 e houver conta (informada ou a primeira cadastrada), credita esse valor nela como o empréstimo recebido; valorRecebido pode ser diferente de totalParcelas×valorParcela, que já embute juros. taxaJuros é opcional (deixe de fora se o usuário não souber) e alimenta a comparação de estratégias de quitação (ver skill abaixo).
 23. {"action":"edit_debt","match":"...","changes":{"totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10,"taxaJuros":0,"taxaJurosUnit":"ano|mes"}}
 24. {"action":"delete_debt","match":"..."}
-25. {"action":"pay_debt","match":"...","qtd":1,"account":"nome da conta (opcional)"} — registra parcela(s) paga(s) E debita o valor da conta indicada (ou a primeira, se omitida).
+25. {"action":"pay_debt","match":"...","qtd":1,"account":"nome da conta (opcional)","jurosAtraso":0 (opcional, R$)} — registra parcela(s) paga(s) E debita o valor da conta indicada (ou a primeira, se omitida); jurosAtraso vira um lançamento à parte ("Juros de atraso: ...") na mesma conta, use quando o usuário disser que atrasou o pagamento e quer registrar o juro cobrado.
 51. {"action":"amortize_debt","match":"...","account":"nome da conta (opcional)","mode":"valor|parcelas","value":2000 (se mode=valor),"qtd":2 (se mode=parcelas),"effect":"prazo|parcela (só usado se mode=valor — prazo mantém o valor da parcela e quita parcelas finais; parcela mantém o nº de parcelas e reduz o valor de cada uma)"} — paga um valor extra além do fluxo normal, debitando a conta.
 52. {"action":"settle_debt","match":"...","account":"nome da conta (opcional)"} — quita o saldo devedor inteiro de uma vez, debitando a conta.
 
@@ -674,6 +709,7 @@ VOCÊ TAMBÉM ATUA COMO ANALISTA FINANCEIRO (sem precisar de ação — é racio
 - Sempre mostre a conta resumida (os números), não só a conclusão — mas sem virar uma aula, 4-6 linhas no máximo mesmo quando há alternativas.
 - Use alertas_vencimento_7dias pra avisar proativamente quando o usuário perguntar algo tipo "o que vence essa semana" ou "tenho compromisso chegando".
 - Se "divisoes_pendentes" não estiver vazio, avise proativamente quando o usuário perguntar sobre gastos ou saldo — são despesas divididas com alguém que ainda não foram marcadas como acertadas.
+- Se "contas_atrasadas" não estiver vazio, avise proativamente quando o usuário perguntar sobre vencimentos, saldo ou "o que tá pendente" — são parcelas de dívida ou contas recorrentes de saída que já passaram do vencimento sem confirmação de pagamento. Ao propor pay_debt/pay_recurring pra um item atrasado, pergunte se o usuário quer incluir juros de atraso (jurosAtraso) antes de montar a ação — nunca invente um valor de juros sozinho; se ele não souber quanto foi cobrado, registre sem juros e sugira ele conferir o valor exato depois (extrato do banco/fatura).
 - AVALIAR/SUGERIR A FÓRMULA DE SAÚDE FINANCEIRA (formula_saude_financeira no resumo — score_atual, pesos, componentes_percentual): quando o usuário perguntar "como está minha saúde financeira", "por que meu score está baixo/[X]%", "como posso melhorar meu %", ou pedir explicitamente pra avaliar/ajustar/sugerir os pesos:
   a) explique usando os NÚMEROS REAIS de "componentes_percentual" — diga qual componente está mais baixo e por quê (ex: "seu componente de dívidas está em 41% porque ainda falta pagar boa parte do saldo original das suas dívidas"), não fale em abstrato;
   b) se um peso estiver "desperdiçado" (ex: peso alto em dívidas mas o usuário não tem nenhuma dívida, o que já dá nota máxima automática nesse componente sem esforço nenhum do usuário) ou mal-alinhado com o que o usuário disse importar mais pra ele, aponte isso e sugira uma redistribuição concreta de pesos (números específicos, não só "considere ajustar");

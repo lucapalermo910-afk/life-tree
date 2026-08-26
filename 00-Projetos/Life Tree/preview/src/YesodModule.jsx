@@ -327,11 +327,16 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const today = tod();
 
   // ── RECORRÊNCIAS → gera lançamentos em atraso desde a última execução ────
+  // Recorrências de SAÍDA (exceto crédito, que sempre vai pra fatura sozinha) pararam de
+  // disparar sozinhas aqui em 26/08/2026 — viram "conta a pagar" pendente até o usuário
+  // confirmar com "Pagar" (permitindo somar juros de atraso); entrada (ex: Salário) e
+  // crédito continuam automáticas, sem noção de atraso.
   useEffect(() => {
     if (!storageLoaded) return;
     let generated = 0;
     const updated = recurrings.map(r => {
       if (!r.active) return r;
+      if (r.type==="out" && r.method!=="credito") return r;
       let next = r.nextDate;
       const dates = [];
       let guard = 0;
@@ -593,24 +598,64 @@ export default function YesodModule({ onBack, dark, setDark }) {
     return Math.round(((savS*(Number(w.savRate)||0)+debtS*(Number(w.debt)||0)+budS*(Number(w.budget)||0)+emergS*(Number(w.emergency)||0)+ifS*(Number(w.if)||0))/totalW)*100);
   };
 
-  // ── ALERTAS DE VENCIMENTO — faturas e parcelas de dívida nos próximos 7 dias ──
-  const upcomingAlerts = () => {
-    const out = [];
+  // ── ALERTAS DE VENCIMENTO ── separados em ATRASADOS (parcela de dívida vencida sem
+  // registrar pagamento, recorrência de saída pendente de confirmação) e PRÓXIMOS (fatura/
+  // parcela nos próximos 7 dias) — 26/08/2026, ver "Atraso e juros" no changelog.
+  // debtDueDates: cronograma completo de vencimentos da dívida (1 data por parcela), a
+  // partir de startDate+dueDay — permite saber se o usuário está "em dia" comparando quantas
+  // datas já passaram com parcelasPagas, em vez de assumir sempre pontualidade.
+  const debtDueDates = d => {
+    const start = new Date(d.startDate+"T12:00:00");
+    let y = start.getFullYear(), m = start.getMonth();
+    if (start.getDate() > d.dueDay) { m++; if (m > 11) { m = 0; y++; } }
+    const dates = [];
+    for (let i=0;i<d.totalParcelas;i++) { dates.push(new Date(y,m,d.dueDay).toISOString().slice(0,10)); m++; if (m > 11) { m = 0; y++; } }
+    return dates;
+  };
+  const debtLateInfo = d => {
+    const dates = debtDueDates(d);
+    const expected = dates.filter(dt => dt <= today).length;
+    const atraso = Math.max(0, expected - d.parcelasPagas);
+    return { atraso, oldestDue: atraso>0 ? dates[d.parcelasPagas] : null, nextDue: d.parcelasPagas<d.totalParcelas ? dates[d.parcelasPagas] : null };
+  };
+  // recorrência de SAÍDA (exceto crédito, que sempre cai na fatura sozinha) — datas ainda
+  // não confirmadas com "Pagar" e já vencidas; type "in" e method "credito" continuam
+  // lançando sozinhas (ver useEffect de recorrências abaixo), sem noção de atraso.
+  const recurringPendingDates = r => {
+    if (!r.active || r.type!=="out" || r.method==="credito") return [];
+    const out = []; let dt = r.nextDate, guard = 0;
+    while (dt <= today && guard < 60) { out.push(dt); dt = freqAdd(dt, r.freq); guard++; }
+    return out;
+  };
+  const vencimentoAlerts = () => {
+    const overdue = [], upcoming = [];
     cards.forEach(cd => {
       const stmts = getStmts(cd);
       const next = stmts.find(s => s.due >= today);
       if (next) {
         const days = Math.round((new Date(next.due) - new Date(today)) / 864e5);
-        if (days <= 7) out.push({ id: "card-"+cd.id, label: cd.name+" · fatura", amount: next.total, due: next.due, days, color: cd.color });
+        if (days <= 7) upcoming.push({ id: "card-"+cd.id, label: cd.name+" · fatura", amount: next.total, days, color: cd.color, kind:"card", ref:cd.id });
       }
     });
     debts.forEach(d => {
       if (d.parcelasPagas >= d.totalParcelas) return;
-      const due = nextMonthlyDue(d.dueDay, today);
-      const days = Math.round((new Date(due) - new Date(today)) / 864e5);
-      if (days <= 7) out.push({ id: "debt-"+d.id, label: d.name+" · parcela", amount: d.valorParcela, due, days, color: d.color });
+      const li = debtLateInfo(d);
+      if (li.atraso > 0) {
+        const days = Math.round((new Date(today) - new Date(li.oldestDue)) / 864e5);
+        overdue.push({ id: "debt-"+d.id, label: d.name+" · "+li.atraso+" parcela"+(li.atraso>1?"s":"")+" em atraso", amount: d.valorParcela*li.atraso, days, color: d.color, kind:"debt", ref:d.id, qtd: li.atraso });
+      } else if (li.nextDue) {
+        const days = Math.round((new Date(li.nextDue) - new Date(today)) / 864e5);
+        if (days <= 7) upcoming.push({ id: "debt-"+d.id, label: d.name+" · parcela", amount: d.valorParcela, days, color: d.color, kind:"debt", ref:d.id, qtd:1 });
+      }
     });
-    return out.sort((a,b) => a.days-b.days);
+    recurrings.forEach(r => {
+      const pend = recurringPendingDates(r);
+      if (pend.length) {
+        const days = Math.round((new Date(today) - new Date(pend[0])) / 864e5);
+        overdue.push({ id: "rec-"+r.id, label: r.desc+(pend.length>1?" · "+pend.length+" pendentes":""), amount: r.amount*pend.length, days, color:"#f97316", kind:"recurring", ref:r.id, dueDate:pend[0] });
+      }
+    });
+    return { overdue: overdue.sort((a,b)=>b.days-a.days), upcoming: upcoming.sort((a,b)=>a.days-b.days) };
   };
 
   // CRUD actions
@@ -645,9 +690,44 @@ export default function YesodModule({ onBack, dark, setDark }) {
     const d=debts.find(x=>x.id===f.debtId);if(!d)return;
     const qtd=Math.max(1,Number(f.qtd||1));
     const valor=qtd*d.valorParcela;
-    setAccs(p=>p.map(a=>a.id===f.accId?{...a,txs:[...a.txs,{id:"t"+uid(),desc:"Parcela "+d.name,amount:valor,type:"out",date:today,cat:"Pagamento de dívida",method:"ted"}]}:a));
+    const juros=Number(f.jurosAtraso)||0;
+    const newTxs=[{id:"t"+uid(),desc:"Parcela "+d.name,amount:valor,type:"out",date:today,cat:"Pagamento de dívida",method:"ted"}];
+    if(juros>0) newTxs.push({id:"t"+uid(),desc:"Juros de atraso: "+d.name,amount:juros,type:"out",date:today,cat:"Juros de atraso",method:"ted"});
+    setAccs(p=>p.map(a=>a.id===f.accId?{...a,txs:[...a.txs,...newTxs]}:a));
     setDebts(p=>p.map(x=>x.id===f.debtId?{...x,parcelasPagas:Math.min(x.totalParcelas,x.parcelasPagas+qtd)}:x));
     toast_("Pagamento registrado",ACCENT);close();
+  };
+  // Confirma UMA ocorrência pendente de uma recorrência de saída (26/08/2026) — recorrências
+  // de saída (exceto crédito) pararam de lançar sozinhas, ver useEffect abaixo; o usuário
+  // confirma aqui, podendo somar juros de atraso como lançamento à parte.
+  const payRecurringOccurrence=()=>{
+    if(!f.accId){toast_("Selecione uma conta","#ef4444");return;}
+    const r=recurrings.find(x=>x.id===f.recurringId);if(!r)return;
+    const dueDate=f.dueDate;
+    const overrideKey=dueDate.slice(0,7)+"|"+r.id;
+    const amount=Object.prototype.hasOwnProperty.call(recurringOverrides,overrideKey)?Number(recurringOverrides[overrideKey]):r.amount;
+    const juros=Number(f.jurosAtraso)||0;
+    const newTxs=[{id:"t"+uid(),desc:r.desc,amount,type:"out",date:dueDate,cat:r.cat,method:r.method,recurring:r.freq,...(r.split?{split:{...r.split,settled:false}}:{})}];
+    if(juros>0) newTxs.push({id:"t"+uid(),desc:"Juros de atraso: "+r.desc,amount:juros,type:"out",date:today,cat:"Juros de atraso",method:"ted"});
+    setAccs(p=>p.map(a=>a.id===f.accId?{...a,txs:[...a.txs,...newTxs]}:a));
+    setRecurrings(p=>p.map(x=>x.id===r.id?{...x,nextDate:freqAdd(dueDate,x.freq)}:x));
+    toast_("Pagamento registrado",ACCENT);close();
+  };
+  // "Marcar em dia" (26/08/2026) — o cronograma de vencimento é inferido de startDate+dueDay
+  // (ver debtLateInfo), assumindo 1 parcela paga por mês desde o início do contrato. Uma
+  // dívida cadastrada com parcelasPagas que não reflete esse ritmo exato (ex: histórico
+  // migrado de outro controle) aparece com atraso "fantasma". Isso só reancora startDate pra
+  // que o cronograma bata com o presente — não toca parcelasPagas/valorParcela/totalParcelas,
+  // é só recalibração de data, sem efeito financeiro nenhum.
+  const recalibrarCronogramaDivida=debtId=>{
+    setDebts(p=>p.map(x=>{
+      if(x.id!==debtId) return x;
+      const nd=nextMonthlyDue(x.dueDay,today);
+      const ndDate=new Date(nd+"T12:00:00");
+      const anchor=new Date(ndDate.getFullYear(),ndDate.getMonth()-x.parcelasPagas,1);
+      return {...x,startDate:anchor.toISOString().slice(0,10)};
+    }));
+    toast_("Cronograma recalibrado",ACCENT);
   };
   // Amortização (25/08/2026) — paga um valor extra (por R$ ou por nº de parcelas) além do
   // fluxo normal de parcelas, com escolha de reduzir prazo (mantém valor da parcela, quita
@@ -914,10 +994,12 @@ export default function YesodModule({ onBack, dark, setDark }) {
           if(page.type==="debt"){
             const d=debts.find(x=>x.id===page.id);if(!d)return null;
             const restantes=d.totalParcelas-d.parcelasPagas;const saldo=restantes*d.valorParcela;const pct=Math.min(100,Math.round((d.parcelasPagas/d.totalParcelas)*100));
+            const li=debtLateInfo(d);
+            const jurosSugestao=li.atraso>0&&d.taxaJuros>0?Math.round(d.valorParcela*(d.taxaJurosUnit==="mes"?(d.taxaJuros/100):(d.taxaJuros/100)/12)*li.atraso*100)/100:0;
             return(<div style={{animation:"slideUp .3s ease"}}><BackBtn label="Dívidas"/>
               <div style={{background:"linear-gradient(135deg,"+d.color+"18,"+d.color+"06)",border:"1px solid "+d.color+"33",borderRadius:16,padding:18,marginBottom:14}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div><div style={{fontSize:11,color:C.muted,marginBottom:2}}>{d.name}</div>{d.credor&&<div style={{fontSize:12,fontWeight:700,color:d.color,marginBottom:4}}>{d.credor}</div>}<div style={{fontSize:22,fontWeight:900,color:d.color}}>{fmt(saldo)}</div>{d.taxaJuros>0&&<div style={{fontSize:9,color:C.muted,marginTop:2}}>{d.taxaJuros}% {d.taxaJurosUnit==="mes"?"a.m.":"a.a."}</div>}</div>
+                  <div><div style={{fontSize:11,color:C.muted,marginBottom:2}}>{d.name}</div>{d.credor&&<div style={{fontSize:12,fontWeight:700,color:d.color,marginBottom:4}}>{d.credor}</div>}<div style={{fontSize:22,fontWeight:900,color:d.color}}>{fmt(saldo)}</div>{d.taxaJuros>0&&<div style={{fontSize:9,color:C.muted,marginTop:2}}>{d.taxaJuros}% {d.taxaJurosUnit==="mes"?"a.m.":"a.a."}</div>}{li.atraso>0&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}><span style={{fontSize:9,color:"#ef4444",fontWeight:700}}>Atrasada · {li.atraso} parcela{li.atraso>1?"s":""}</span><button onClick={()=>recalibrarCronogramaDivida(d.id)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:9,color:C.muted,textDecoration:"underline"}}>Marcar em dia</button></div>}</div>
                   <button onClick={()=>openSh("editDebt",{id:d.id,name:d.name,credor:d.credor||"",totalParcelas:d.totalParcelas,parcelasPagas:d.parcelasPagas,valorParcela:d.valorParcela,dueDay:d.dueDay,startDate:d.startDate,color:d.color,taxaJuros:d.taxaJuros||0,taxaJurosUnit:d.taxaJurosUnit||"ano"})} style={{background:d.color+"22",border:"1px solid "+d.color+"44",borderRadius:9,padding:"6px 12px",cursor:"pointer",color:d.color,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:5}}><Ico n="edit" size={12} color={d.color}/> Editar</button>
                 </div>
                 <div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",margin:"12px 0 4px"}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div>
@@ -925,7 +1007,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>{[{l:"Total",v:d.totalParcelas,c:C.text},{l:"Pagas",v:d.parcelasPagas,c:ACCENT},{l:"Restantes",v:restantes,c:d.color}].map(s=>(<div key={s.l} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:"12px 10px",textAlign:"center"}}><div style={{fontSize:22,fontWeight:900,color:s.c}}>{s.v}</div><div style={{fontSize:10,color:C.muted,marginTop:2}}>{s.l}</div></div>))}</div>
               <div style={{display:"flex",gap:8,marginBottom:8}}>
-                <Btn full={false} style={{flex:1}} color={ACCENT} onClick={()=>openSh("payDebt",{debtId:d.id,accId:"",qtd:1})}><Ico n="check" size={13}/> Parcela</Btn>
+                <Btn full={false} style={{flex:1}} color={ACCENT} onClick={()=>openSh("payDebt",{debtId:d.id,accId:"",qtd:li.atraso>0?li.atraso:1,jurosAtraso:jurosSugestao})}><Ico n="check" size={13}/> Parcela</Btn>
                 <Btn full={false} style={{flex:1}} outline color={d.color} onClick={()=>openSh("amortizarDivida",{debtId:d.id,accId:"",mode:"valor",effect:"prazo",value:0,qtd:1})}><Ico n="down" size={13}/> Amortizar</Btn>
               </div>
               <Btn outline color="#ef4444" onClick={()=>openSh("quitarDivida",{debtId:d.id,accId:"",remaining:saldo})}><Ico n="x" size={14}/> Quitar dívida</Btn>
@@ -1016,7 +1098,26 @@ export default function YesodModule({ onBack, dark, setDark }) {
           ];
 
           const activeCards=yesodCards.map(id=>CARD_DEFS.find(d=>d.id===id)).filter(Boolean);
-          const alerts=upcomingAlerts();
+          const {overdue:overdueAlerts,upcoming:alerts}=vencimentoAlerts();
+          const openAlert=al=>{
+            if(al.kind==="card"){ nav("card",al.ref); return; }
+            if(al.kind==="debt"){
+              const d=debts.find(x=>x.id===al.ref);
+              let jurosAtraso=0;
+              if(d&&d.taxaJuros>0&&al.qtd>0){
+                const monthlyRate=d.taxaJurosUnit==="mes"?(d.taxaJuros/100):(d.taxaJuros/100)/12;
+                jurosAtraso=Math.round(d.valorParcela*monthlyRate*al.qtd*100)/100;
+              }
+              openSh("payDebt",{debtId:al.ref,accId:"",qtd:al.qtd,jurosAtraso});
+              return;
+            }
+            if(al.kind==="recurring"){
+              const r=recurrings.find(x=>x.id===al.ref);if(!r)return;
+              const overrideKey=al.dueDate.slice(0,7)+"|"+r.id;
+              const amount=Object.prototype.hasOwnProperty.call(recurringOverrides,overrideKey)?Number(recurringOverrides[overrideKey]):r.amount;
+              openSh("payRecurring",{recurringId:r.id,accId:r.accId||"",desc:r.desc,amount,dueDate:al.dueDate,jurosAtraso:0});
+            }
+          };
 
           return(<div style={{animation:"slideUp .3s ease"}}>
             {/* Score principal */}
@@ -1028,13 +1129,24 @@ export default function YesodModule({ onBack, dark, setDark }) {
               <div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:ys+"%",background:"linear-gradient(90deg,#10b981,#06b6d4)",borderRadius:99,transition:"width .6s"}}/></div>
             </div>
 
-            {/* Alertas de vencimento */}
+            {/* Alertas de vencimento — EM ATRASO (parcela de dívida vencida, recorrência de
+                saída pendente) primeiro, depois PRÓXIMOS 7 DIAS; ambos clicáveis pra pagar
+                direto dali (26/08/2026) */}
+            {overdueAlerts.length>0&&(
+              <div style={{background:C.card,border:"1px solid #ef444466",borderRadius:14,padding:12,marginBottom:14}}>
+                <div style={{fontSize:9,color:"#ef4444",fontWeight:700,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:5}}><Ico n="debt" size={11} color="#ef4444"/> EM ATRASO</div>
+                {overdueAlerts.map(al=>(<div key={al.id} onClick={()=>openAlert(al)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderTop:"1px solid "+C.b1,cursor:"pointer"}}>
+                  <div><div style={{fontSize:11,fontWeight:600}}>{al.label}</div><div style={{fontSize:9,color:"#ef4444",fontWeight:700}}>{al.days<=0?"vence hoje":al.days+"d de atraso"}</div></div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:800,color:"#ef4444"}}>{fmt(al.amount)}</span><Ico n="chev" size={11} color={C.muted}/></div>
+                </div>))}
+              </div>
+            )}
             {alerts.length>0&&(
               <div style={{background:C.card,border:"1px solid #f9731644",borderRadius:14,padding:12,marginBottom:14}}>
                 <div style={{fontSize:9,color:"#f97316",fontWeight:700,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:5}}><Ico n="debt" size={11} color="#f97316"/> VENCE NOS PRÓXIMOS 7 DIAS</div>
-                {alerts.map(al=>{const urgent=al.days<=2;return(<div key={al.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderTop:"1px solid "+C.b1}}>
+                {alerts.map(al=>{const urgent=al.days<=2;return(<div key={al.id} onClick={()=>openAlert(al)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderTop:"1px solid "+C.b1,cursor:"pointer"}}>
                   <div><div style={{fontSize:11,fontWeight:600}}>{al.label}</div><div style={{fontSize:9,color:urgent?"#ef4444":C.muted,fontWeight:urgent?700:400}}>{al.days===0?"Vence hoje":al.days===1?"Vence amanhã":"Vence em "+al.days+" dias"}</div></div>
-                  <div style={{fontSize:12,fontWeight:800,color:urgent?"#ef4444":al.color}}>{fmt(al.amount)}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12,fontWeight:800,color:urgent?"#ef4444":al.color}}>{fmt(al.amount)}</span><Ico n="chev" size={11} color={C.muted}/></div>
                 </div>);})}
               </div>
             )}
@@ -1445,17 +1557,18 @@ export default function YesodModule({ onBack, dark, setDark }) {
 
             <CfgSection title="Recorrências" count={recurrings.length} defaultOpen C={C}>
               {recurrings.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhuma recorrência — crie uma marcando a frequência ao lançar</div>}
-              {recurrings.map(r=>(
+              {recurrings.map(r=>{const pend=recurringPendingDates(r);return(
                 <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:r.active?(r.type==="in"?"#16a34a":"#ef4444"):C.b2,flexShrink:0}}/>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:pend.length?"#f97316":r.active?(r.type==="in"?"#16a34a":"#ef4444"):C.b2,flexShrink:0}}/>
                   <div style={{flex:1,opacity:r.active?1:.5}}>
                     <div style={{fontSize:12,fontWeight:600,textDecoration:r.active?"none":"line-through"}}>{r.desc}</div>
-                    <div style={{fontSize:9,color:C.muted}}>{fmt(r.amount)} · {FREQ_LABELS[r.freq]} · próxima {r.nextDate}</div>
+                    <div style={{fontSize:9,color:pend.length?"#f97316":C.muted,fontWeight:pend.length?700:400}}>{pend.length?pend.length+" pendente"+(pend.length>1?"s":"")+" desde "+pend[0].split("-").reverse().join("/"):fmt(r.amount)+" · "+FREQ_LABELS[r.freq]+" · próxima "+r.nextDate}</div>
                   </div>
+                  {pend.length>0&&<button onClick={()=>{const overrideKey=pend[0].slice(0,7)+"|"+r.id;const amount=Object.prototype.hasOwnProperty.call(recurringOverrides,overrideKey)?Number(recurringOverrides[overrideKey]):r.amount;openSh("payRecurring",{recurringId:r.id,accId:r.accId||"",desc:r.desc,amount,dueDate:pend[0],jurosAtraso:0});}} style={{background:"#f9731622",border:"1px solid #f9731644",borderRadius:8,padding:"5px 9px",cursor:"pointer",color:"#f97316",fontSize:9,fontWeight:700}}>Pagar</button>}
                   <button onClick={()=>toggleRecurring(r.id)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:C.muted}}>{r.active?"⏸":"▶"}</button>
                   <button onClick={()=>delRecurring(r.id)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button>
                 </div>
-              ))}
+              );})}
             </CfgSection>
           </div>
         )}
@@ -1578,7 +1691,17 @@ export default function YesodModule({ onBack, dark, setDark }) {
           <FS label="Creditar em" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/>
         </>)}
         <ColorPicker value={f.color||"#ef4444"} onChange={c=>F({color:c})} C={C}/><Btn color={f.color||"#ef4444"} onClick={sh==="addDebt"?addDebt:editDebt}>Salvar</Btn></Sheet>)}
-      {sh==="payDebt"&&(<Sheet title="Registrar Parcela" onClose={close} C={C}><FS label="Conta" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/><FI label="Número de parcelas" value={f.qtd||1} onChange={v=>F({qtd:Math.max(1,v)})} type="number" min={1} C={C}/><Btn color={ACCENT} onClick={payDebt}><Ico n="check" size={14}/> Confirmar</Btn></Sheet>)}
+      {sh==="payDebt"&&(<Sheet title="Registrar Parcela" onClose={close} C={C}><FS label="Conta" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/><FI label="Número de parcelas" value={f.qtd||1} onChange={v=>F({qtd:Math.max(1,v)})} type="number" min={1} C={C}/><FI label="Juros por atraso (R$, opcional)" value={f.jurosAtraso||0} onChange={v=>F({jurosAtraso:v})} type="number" min={0} C={C}/><Btn color={ACCENT} onClick={payDebt}><Ico n="check" size={14}/> Confirmar</Btn></Sheet>)}
+      {sh==="payRecurring"&&(<Sheet title="Pagar Conta" onClose={close} C={C}>
+        <div style={{background:C.b1,borderRadius:10,padding:"11px 13px",marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,marginBottom:4}}>{f.desc}</div>
+          <div style={{fontSize:20,fontWeight:900}}>{fmt(f.amount||0)}</div>
+          <div style={{fontSize:9,color:C.muted,marginTop:2}}>Vencimento: {(f.dueDate||"").split("-").reverse().join("/")}</div>
+        </div>
+        <FS label="Conta" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/>
+        <FI label="Juros por atraso (R$, opcional)" value={f.jurosAtraso||0} onChange={v=>F({jurosAtraso:v})} type="number" min={0} C={C}/>
+        <Btn color={ACCENT} onClick={payRecurringOccurrence}><Ico n="check" size={14}/> Confirmar Pagamento</Btn>
+      </Sheet>)}
       {sh==="amortizarDivida"&&(<Sheet title="Amortizar" onClose={close} C={C}>
         <FS label="Conta" value={f.accId||""} onChange={v=>F({accId:v})} opts={accOpts()} C={C}/>
         <div style={{marginBottom:11}}>

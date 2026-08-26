@@ -280,6 +280,33 @@ export function editYesodRecurring(a) {
   notifyYesodUpdated();
   return { ok: true, message: "Recorrência '" + found.desc + "' atualizada." };
 }
+// Confirma UMA ocorrência pendente de uma recorrência de saída (26/08/2026, mesmo princípio
+// de payRecurringOccurrence em YesodModule.jsx) — recorrências de saída (exceto crédito)
+// pararam de lançar sozinhas, viram "conta a pagar" até confirmar aqui, podendo somar juros
+// de atraso como lançamento à parte.
+export function payYesodRecurring(a) {
+  const recurrings = readJSON("recurrings", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const overrides = readJSON("recoverrides", {});
+  const found = findRecurring(recurrings, a.match);
+  if (!found) return { ok: false, message: "Não encontrei recorrência com '" + a.match + "'." };
+  if (found.type !== "out" || found.method === "credito") return { ok: false, message: "'" + found.desc + "' não fica pendente de confirmação (é entrada ou crédito, lança sozinha)." };
+  const today = todayS();
+  if (found.nextDate > today) return { ok: false, message: "'" + found.desc + "' não está pendente — a próxima ocorrência é em " + found.nextDate + "." };
+  const dueDate = found.nextDate;
+  const acc = a.account ? findAccount(accs, banks, a.account) : (accs.find(x => x.id === found.accId) || findAccount(accs, banks, null));
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra debitar o pagamento." };
+  const overrideKey = dueDate.slice(0,7) + "|" + found.id;
+  const amount = Object.prototype.hasOwnProperty.call(overrides, overrideKey) ? Number(overrides[overrideKey]) : found.amount;
+  const juros = Number(a.jurosAtraso) || 0;
+  const newTxs = [{ id: "t"+uid(), desc: found.desc, amount, type: "out", date: dueDate, cat: found.cat, method: found.method, recurring: found.freq, ...(found.split ? { split: { ...found.split, settled: false } } : {}) }];
+  if (juros > 0) newTxs.push({ id: "t"+uid(), desc: "Juros de atraso: " + found.desc, amount: juros, type: "out", date: today, cat: "Juros de atraso", method: "ted" });
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, ...newTxs] } : x));
+  writeJSON("recurrings", recurrings.map(r => r.id === found.id ? { ...r, nextDate: freqAdd(dueDate, r.freq) } : r));
+  notifyYesodUpdated();
+  return { ok: true, message: "Pagamento de '" + found.desc + "' (R$" + amount.toFixed(2) + ") confirmado, debitado de '" + acc.name + "'." + (juros > 0 ? " + R$" + juros.toFixed(2) + " de juros de atraso." : "") };
+}
 
 // ── BANCOS ───────────────────────────────────────────────────────────────────────
 export function createYesodBank(a) {
@@ -495,10 +522,13 @@ export function payYesodDebt(a) {
   const qtd = Math.max(1, Number(a.qtd) || 1);
   const novasPagas = Math.min(found.totalParcelas, found.parcelasPagas + qtd);
   const valor = qtd * found.valorParcela;
+  const juros = Number(a.jurosAtraso) || 0;
+  const newTxs = [{ id: "t"+uid(), desc: "Parcela " + found.name, amount: valor, type: "out", date: todayS(), cat: "Pagamento de dívida", method: "ted" }];
+  if (juros > 0) newTxs.push({ id: "t"+uid(), desc: "Juros de atraso: " + found.name, amount: juros, type: "out", date: todayS(), cat: "Juros de atraso", method: "ted" });
   writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, parcelasPagas: novasPagas } : x));
-  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Parcela " + found.name, amount: valor, type: "out", date: todayS(), cat: "Pagamento de dívida", method: "ted" }] } : x));
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, ...newTxs] } : x));
   notifyYesodUpdated();
-  return { ok: true, message: qtd + " parcela(s) de '" + found.name + "' paga(s) (" + novasPagas + "/" + found.totalParcelas + "), R$" + valor.toFixed(2) + " debitado de '" + acc.name + "'." };
+  return { ok: true, message: qtd + " parcela(s) de '" + found.name + "' paga(s) (" + novasPagas + "/" + found.totalParcelas + "), R$" + valor.toFixed(2) + " debitado de '" + acc.name + "'." + (juros > 0 ? " + R$" + juros.toFixed(2) + " de juros de atraso." : "") };
 }
 // Amortização (nova em 26/08/2026, mesmo princípio de amortizarDivida em YesodModule.jsx) —
 // paga um valor extra (por R$ ou por nº de parcelas) além do fluxo normal, com escolha de
@@ -864,6 +894,7 @@ export const YESOD_ACTION_HANDLERS = {
   create_category: createYesodCategory,
   delete_category: deleteYesodCategory,
   delete_recurring: deleteYesodRecurring,
+  pay_recurring: payYesodRecurring,
   toggle_recurring: toggleYesodRecurring,
   edit_recurring: editYesodRecurring,
   create_bank: createYesodBank,

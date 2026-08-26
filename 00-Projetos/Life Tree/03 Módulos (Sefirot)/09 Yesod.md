@@ -5,7 +5,7 @@ aliases: [Yesod]
 
 # 💰 Yesod — Finanças
 
-> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1618 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
+> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1741 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
 > Score bridge: publica `yesod` em `lifetree_scores`
 > Esta nota incorpora a auditoria funcional completa feita em 01/08/2026 (levantamento de telas/entidades/gaps que também existe como [artefato web](https://claude.ai/code/artifact/477b284f-23ed-447d-a614-5ff541796195)) — é a referência canônica do estado do módulo daqui pra frente, não só notas de implementação.
 
@@ -26,7 +26,7 @@ Reorganizado em 01/08/2026 de 9 pra 5 abas, e de novo em 25/08/2026 (Dívidas en
 | Investimento | `invs` | `bankId`, `subCat` (10 subcategorias em 4 grupos: Renda Fixa, Renda Variável, Multimercado, Internacional), `name`, `invested`, `balance`, `rate`, `maturity` |
 | Orçamento | `budgets` | `cat`, `limit` |
 | Categorias | `catsout` / `catsin` | listas de string, editáveis (seed: 11 de saída, 5 de entrada) |
-| Recorrência | `recurrings` | `desc`/`amount`/`type`/`cat`/`method`, `accId`/`cardId`, `freq` (weekly/monthly/yearly), `nextDate`, `active` |
+| Recorrência | `recurrings` | `desc`/`amount`/`type`/`cat`/`method`, `accId`/`cardId`, `freq` (weekly/monthly/yearly), `nextDate`, `active`. Saída (exceto crédito) não lança mais sozinha ao vencer — fica pendente até confirmar com "Pagar", ver leva 14 |
 | Hábito / Meta financeira | `yhabits` / `ygoals` | `title`, `freq` (só hábito), `xp`, `done` |
 
 Saldo de conta é sempre derivado (`accBal`, soma de `txs`), nunca armazenado — a única exceção é `boxes[].balance`, ajustado diretamente por `boxMove`.
@@ -34,7 +34,7 @@ Saldo de conta é sempre derivado (`accBal`, soma de `txs`), nunca armazenado �
 ## Telas
 Visão rápida do que cada tela mostra e permite fazer — detalhe de implementação de cada uma está em [[#Funcionalidades|Funcionalidades]] abaixo.
 
-- **Yesod → Visão Geral** — única seção da aba desde 25/08/2026 (IF saiu, Metas saiu — sem controle segmentado, é a aba toda) — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento (faturas/dívidas ≤7 dias, destaque vermelho se ≤2) · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo. Botão "Registrar" no header (renomeado de "Lançar" em 25/08/2026; também aparece em Orçamento → Fluxo desde a mesma leva).
+- **Yesod → Visão Geral** — única seção da aba desde 25/08/2026 (IF saiu, Metas saiu — sem controle segmentado, é a aba toda) — score "Saúde Financeira" (0–100%, fórmula em [[#Score do módulo|Score]]) com barra e XP acumulado · banner de alertas de vencimento — seção **"Em atraso"** (parcela de dívida vencida, recorrência de saída pendente, 26/08/2026) + "Vence nos próximos 7 dias" (faturas/dívidas, destaque vermelho se ≤2), ambas clicáveis pra abrir o pagamento direto · painel de indicadores (12 disponíveis, usuário escolhe quais e em que ordem) · checklist de hábitos financeiros próprios do módulo. Botão "Registrar" no header (renomeado de "Lançar" em 25/08/2026; também aparece em Orçamento → Fluxo desde a mesma leva).
 - **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Vista colapsada por padrão (segunda leva do dia, 25/08/2026 — a vista cheia tinha destaque demais): mostra só o card de progresso da Meta de Independência Financeira + botão "+ Objetivo"; tocar no card abre o detalhe completo como sub-página (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, taxa de poupança 6 meses, editar meta, e o checklist "Outras Metas" — livre, criar/concluir com XP/apagar, não só IF, no mesmo espírito de múltiplos objetivos do Hod).
 - **Orçamento** — controle segmentado **Fluxo** / **Orçamento** (desde 25/08/2026, Fluxo primeiro por ser o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
 - **Bolsos** — cada seção com um totalizador compacto no topo (uma linha, cor própria — trocou o card grande de destaque que só "Dívidas" tinha, 25/08/2026): Contas — verde (saldo, editar/apagar inline, tocar → extrato **agrupado por mês desde 25/08/2026**, cada grupo com o saldo daquele mês; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** — roxo (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento, todas as faturas passadas já listadas sem filtro — nested em Contas desde 23/08/2026) · Caixinhas — azul (saldo/meta/%/data alvo/**taxa de juros editável (%a.a. ou %a.m.), desde 25/08/2026**, mesmas ações, tocar → **Depositar/Retirar agora exige escolher uma conta (dinheiro sai/entra de verdade), mais histórico mensal de saldo e projeção futura pela taxa, 25/08/2026**) · Investimentos — âmbar (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria, **Aportar/Resgatar ligados a conta desde 25/08/2026, além do já existente Atualizar saldo**) · **Dívidas e Financiamentos** — vermelho (5ª seção desde 25/08/2026, antes aba própria — lista com progresso, criar (**ganhou "Valor recebido" + conta pra creditar, 25/08/2026**)/apagar, tocar → **Parcela/Amortizar (por valor ou parcelas, reduzindo prazo ou parcela)/Quitar dívida — os três ligados a conta, 25/08/2026**).
@@ -738,6 +738,66 @@ direto em vez de supor.
 `npm run build` limpo; `coachSkills.js` sem nenhum problema de lint. Com as 5 skills de
 planejamento implementadas, o estudo 3 (habilidades do Coach) está completo — 3A (paridade
 de ações, leva 7) e 3B (as 5 skills, levas 10-13).
+
+### Atraso e juros — parcela de dívida/conta recorrente atrasada, alerta clicável pra pagar direto, "Marcar em dia" (26/08/2026, leva 14)
+Usuário lembrou que, do mesmo jeito que dá pra amortizar uma dívida, também dá pra atrasar
+um pagamento — e isso costuma gerar juros. Pediu (1) um jeito de registrar esse juro no
+pagamento de uma dívida OU de uma conta recorrente, e (2) que o card de aviso de vencimento
+mostre contas não pagas e permita clicar pra pagar direto dali. Escopo confirmado com o
+usuário via pergunta: aplica nos dois — Dívidas (que já tinham cronograma dueDay+startDate)
+E Recorrências de saída (Conta de Luz, Aluguel etc.), sabendo que isso muda o comportamento
+destas últimas.
+
+- **Detecção de atraso em Dívida** — `debtDueDates(d)`/`debtLateInfo(d)`: gera o cronograma
+  completo de vencimentos a partir de `startDate`+`dueDay` (1 data por parcela) e compara
+  quantas datas já passaram com `parcelasPagas`. Se `parcelasPagas` estiver atrás do
+  esperado, a dívida aparece como "Atrasada · N parcelas" na página de detalhe.
+- **Recorrências de SAÍDA pararam de lançar sozinhas** (exceto método crédito, que sempre
+  cai na fatura sozinha, e tipo entrada como Salário, que continua automático) — viram
+  "conta a pagar" pendente até o usuário confirmar com o novo botão "Pagar" (em Config →
+  Recorrências, mostra "N pendente(s) desde DD/MM"). `recurringPendingDates(r)` lista as
+  ocorrências não confirmadas.
+- **Juros por atraso** — campo opcional novo no sheet "Registrar Parcela" (Dívida) e no novo
+  sheet "Pagar Conta" (Recorrência): lança um valor extra como transação separada ("Juros de
+  atraso: ...", categoria própria), sem alterar `parcelasPagas`/`valorParcela`/`totalParcelas`
+  da dívida nem a estrutura da recorrência — é só um custo real a mais que saiu da conta. No
+  botão "Parcela" da página de detalhe da dívida, se houver `taxaJuros` cadastrado, o campo
+  já vem pré-preenchido com uma sugestão (parcela × taxa mensal equivalente × parcelas em
+  atraso), sempre editável.
+- **Alertas clicáveis** — a Visão Geral ganhou uma seção **"EM ATRASO"** (vermelha) acima da
+  já existente "Vence nos próximos 7 dias" (laranja), juntando parcelas de dívida atrasadas
+  e recorrências de saída pendentes. Clicar em qualquer alerta (das duas seções) abre direto
+  o sheet de pagamento correspondente — dívida abre "Registrar Parcela" com a quantidade e o
+  juros sugerido já preenchidos; recorrência abre "Pagar Conta" com a ocorrência mais antiga
+  pendente; fatura de cartão navega pro detalhe do cartão (não existe ação de "pagar fatura"
+  no app, então só leva pra tela onde dá pra ver o que compõe ela).
+- **"Marcar em dia"** — achado importante ao testar: a detecção de atraso assume 1 parcela
+  paga por mês desde `startDate`, o que produz atraso "fantasma" grande em dívidas que já
+  existiam antes desse recurso (cadastradas com `parcelasPagas` que não reflete
+  literalmente um ritmo mensal perfeito desde o início do contrato — ex.: dívida migrada de
+  outro controle). Botão novo na página de detalhe, ao lado do badge "Atrasada", reancora
+  `startDate` pra que o cronograma bata com hoje — não toca `parcelasPagas`/`valorParcela`/
+  `totalParcelas`, é recalibração pura de data, zero efeito financeiro.
+- **Coach**: `pay_debt` ganhou `jurosAtraso` opcional; nova ação `pay_recurring` confirma
+  uma ocorrência pendente de recorrência de saída (mesma lógica de "uma de cada vez"); novo
+  campo `contas_atrasadas` no resumo (dívidas + recorrências pendentes, com dias de atraso)
+  com skill dedicado no systemPrompt — o Coach avisa proativamente quando perguntado sobre
+  vencimentos/saldo, e SEMPRE pergunta se o usuário quer incluir juros antes de montar a
+  ação (nunca inventa um valor de juro sozinho).
+
+Testado no navegador (com dados de teste manipulados via `localStorage` pra simular atraso,
+já que os dados semeados originais não tinham nenhum item vencido): seção "EM ATRASO"
+apareceu corretamente com "Financiamento Carro" (503d, artefato do cronograma antigo) e
+"Empréstimo Pessoal" (680d); clicar no alerta da dívida abriu "Registrar Parcela" com
+qtd=17 e juros sugerido R$327,60 (1250 × 18,5%/12 × 17, confere); "Marcar em dia" limpou o
+badge sem alterar nenhum outro número (48/15/33, saldo, %); simulada uma recorrência
+"Internet" vencida — Config → Recorrências mostrou "1 pendente desde DD/MM" com botão
+"Pagar"; confirmado o pagamento com R$15 de juros — gerou as 2 transações certas
+(desc/valor/data/categoria) e avançou `nextDate` em 1 mês; testado também caso com 2
+ocorrências pendentes acumuladas (Aluguel) — "Pagar" resolve só a mais antiga por vez,
+confirmado que a segunda continua pendente depois. `npm run build` limpo; `YesodModule.jsx`
+manteve o baseline de lint (35 problemas, nenhum novo); `coachSkills.js`/`yesodActions.js`
+sem nenhum problema.
 
 ## Persistência
 Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
