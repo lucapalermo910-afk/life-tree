@@ -652,6 +652,35 @@ marcada, correto, já que a única despesa repetida da seed — Netflix+Spotify 
 marcada como recorrência). `npm run build` limpo; `coachSkills.js` sem nenhum problema de
 lint (exit 0, mesmo padrão de sempre).
 
+### Coach ganha mais 2 skills de planejamento — Sistema de Poupança Automática e Orçamento Sem Culpa (26/08/2026, leva 11)
+Continuação do estudo 3B, seguindo a ordem recomendada (Expense Leak Detector → **Automatic
+Savings System → Budget Without Shame** → Debt Elimination → Diversified Income Plan). As
+duas usam só dados já disponíveis no contexto — nenhum campo novo em `buildYesodContext`.
+
+- **Sistema de Poupança Automática**: novo skill no `systemPrompt` — monta uma hierarquia de
+  prioridade (reserva-tampão → reserva de emergência completa, comparando com a cobertura
+  real em `formula_saude_financeira` → demais metas), recomenda % de poupança calculado de
+  `capacidade_poupanca_media_mensal` ÷ `renda_mes_atual` (nunca um número genérico), sugere
+  Caixinhas pra metas de curto prazo e Investimentos pra longo prazo, e — como o app não tem
+  débito automático bancário de verdade — propõe um hábito financeiro (`create_yhabit`) na
+  frequência da transferência como o mecanismo mais próximo de "automação" que existe hoje
+  (lembrete recorrente + XP), sendo explícito sobre essa limitação. Fecha com 3 projeções
+  (conservadora/moderada/agressiva) usando os números reais.
+- **Orçamento Sem Culpa**: novo skill — classifica categorias em necessidade/desejo pelo
+  nome (o app não tem essa marcação), monta uma versão do 50/30/20 ADAPTADA à renda/gasto
+  reais (não a proporção padrão engessada — se necessidades já passam de 50%, reajusta as
+  três fatias e explica a troca), propõe limites ancorados no gasto real recente (não
+  arbitrários), inclui rotina de revisão semanal e reserva explícita de "diversão sem
+  culpa". Instrução de tom explícita: nunca julgar gasto passado, só apontar o plano daqui
+  pra frente — e perguntar diretamente sobre gatilho de gasto emocional/impulso, única
+  informação que os dados do app não têm.
+
+`npm run build` limpo; `coachSkills.js` sem nenhum problema de lint. Como nenhum campo novo
+de contexto foi criado (as duas skills reusam `renda_mes_atual`/`capacidade_poupanca_media_
+mensal`/`caixinhas`/`orcamentos`/`gastos_por_categoria_*` já testados na leva anterior), a
+verificação foi releitura do texto do prompt + build/lint limpos, sem nova simulação de
+matemática.
+
 ## Persistência
 Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
