@@ -478,6 +478,50 @@ patrimônio ficou idêntico ao de antes (ativo virou caixa — evento neutro, co
 `npm run build`/`eslint` limpos — 34 problemas, mesmo baseline (YesodModule.jsx,
 yesodActions.js, coachSkills.js todos limpos).
 
+### Coach ganha paridade com a UI — box_move/create_debt/pay_debt/create_investment ligados a conta, 4 ações novas (26/08/2026, leva 7)
+Usuário trouxe 3 estudos pro módulo (Config como hub, revisão da fórmula do %, Coach com
+paridade total + skills de planejamento financeiro — resumo completo dado em chat, não
+registrado aqui por ainda não terem sido todos implementados) e pediu pra começar pela
+correção mais urgente: as ações do Coach que ficaram **desatualizadas** conforme a UI ganhou
+a exigência de "tudo ligado a conta" ao longo desta sessão.
+
+Confirmado no código: `box_move`, `create_debt`, `pay_debt` e `create_investment` em
+`yesodActions.js` ainda eram as versões de antes desta sessão inteira — sem nenhuma noção de
+conta. Pedir pro Coach "deposita R$500 na Reserva de Emergência" ou "cria uma dívida de
+R$10.000" mexia no número sem debitar/creditar conta nenhuma, quebrando silenciosamente a
+mesma disciplina que a UI já garantia (accBal, patrimônio líquido ficando incoerentes com o
+que o Coach "fez").
+
+Corrigido, espelhando exatamente as funções da UI já testadas nesta sessão:
+- `box_move` — exige/usa uma conta (primeira, se omitida), lança a tx real de débito
+  (depósito) ou crédito (retirada) nela — mesma lógica de `boxMoveLinked`.
+- `create_debt` — ganhou `valorRecebido`+`account` — credita o principal recebido numa conta
+  ao criar — mesma lógica de `addDebt`.
+- `pay_debt` — exige/usa uma conta e debita o valor da(s) parcela(s) — mesma lógica de
+  `payDebt`.
+- `create_investment` — ganhou `account` — debita o valor aplicado ao criar, quando
+  informado — mesma lógica de `addInv`.
+
+Quatro ações novas, sem equivalente nenhum no Coach antes:
+- `amortize_debt` — por valor (R$, com escolha de reduzir prazo ou parcela) ou por número de
+  parcelas — mesma lógica de `amortizarDivida`.
+- `settle_debt` — quitação geral do saldo devedor — mesma lógica de `quitarDivida`.
+- `invest_aportar` / `invest_resgatar` — aporte e resgate ligados a conta, resgate reduz o
+  aplicado proporcionalmente — mesma lógica de `invAportar`/`invResgatar`.
+
+`systemPrompt` (`coachSkills.js`) documentado com os campos/ações novas. `npm run
+build`/`eslint` limpos (exit 0 em ambos os arquivos). Sem teste via chat real (exigiria API
+key configurada, mesmo padrão já adotado nesta sessão pra ações de coach) — confiança vem de
+espelhar função por função a lógica da UI já testada visualmente.
+
+**Pendente dos 3 estudos** (ainda não implementado, só a correção acima):
+Config como hub central (índice de tudo + preferências do módulo — cor, apelido, densidade,
+confirmação de exclusão) e revisão da fórmula do % de Saúde Financeira (usuário pediu que a
+fórmula em si vire configurável em Config, ajustável a qualquer momento, em vez de eu fixar
+uma nova composição agora) ficam pra próximas levas. Skills de planejamento financeiro (b-e:
+Expense Leak Detector, Automatic Savings System, Budget Without Shame, Debt Elimination —
+este último precisa de campo de juros na Dívida, que não existe hoje) também pendentes.
+
 ## Persistência
 Prefixo `lifetree_fin_` — 22 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
