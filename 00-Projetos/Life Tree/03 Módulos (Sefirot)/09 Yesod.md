@@ -5,7 +5,7 @@ aliases: [Yesod]
 
 # 💰 Yesod — Finanças
 
-> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1195 linhas, 25/08/2026) · **fecha como v10** (ver [[08 Versões]])
+> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1545 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
 > Score bridge: publica `yesod` em `lifetree_scores`
 > Esta nota incorpora a auditoria funcional completa feita em 01/08/2026 (levantamento de telas/entidades/gaps que também existe como [artefato web](https://claude.ai/code/artifact/477b284f-23ed-447d-a614-5ff541796195)) — é a referência canônica do estado do módulo daqui pra frente, não só notas de implementação.
 
@@ -38,7 +38,7 @@ Visão rápida do que cada tela mostra e permite fazer — detalhe de implementa
 - **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Vista colapsada por padrão (segunda leva do dia, 25/08/2026 — a vista cheia tinha destaque demais): mostra só o card de progresso da Meta de Independência Financeira + botão "+ Objetivo"; tocar no card abre o detalhe completo como sub-página (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, taxa de poupança 6 meses, editar meta, e o checklist "Outras Metas" — livre, criar/concluir com XP/apagar, não só IF, no mesmo espírito de múltiplos objetivos do Hod).
 - **Orçamento** — controle segmentado **Fluxo** / **Orçamento** (desde 25/08/2026, Fluxo primeiro por ser o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
 - **Bolsos** — cada seção com um totalizador compacto no topo (uma linha, cor própria — trocou o card grande de destaque que só "Dívidas" tinha, 25/08/2026): Contas — verde (saldo, editar/apagar inline, tocar → extrato **agrupado por mês desde 25/08/2026**, cada grupo com o saldo daquele mês; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** — roxo (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento, todas as faturas passadas já listadas sem filtro — nested em Contas desde 23/08/2026) · Caixinhas — azul (saldo/meta/%/data alvo/**taxa de juros editável (%a.a. ou %a.m.), desde 25/08/2026**, mesmas ações, tocar → **Depositar/Retirar agora exige escolher uma conta (dinheiro sai/entra de verdade), mais histórico mensal de saldo e projeção futura pela taxa, 25/08/2026**) · Investimentos — âmbar (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria, **Aportar/Resgatar ligados a conta desde 25/08/2026, além do já existente Atualizar saldo**) · **Dívidas e Financiamentos** — vermelho (5ª seção desde 25/08/2026, antes aba própria — lista com progresso, criar (**ganhou "Valor recebido" + conta pra creditar, 25/08/2026**)/apagar, tocar → **Parcela/Amortizar (por valor ou parcelas, reduzindo prazo ou parcela)/Quitar dívida — os três ligados a conta, 25/08/2026**).
-- **Config** — Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
+- **Config** — ganhou seção **Preferências** em 26/08/2026 (primeira do tipo, antes só existiam listas "item + Adicionar"): card **Fórmula de Saúde Financeira** com os 5 pesos do % da Visão Geral editáveis + meta de reserva em meses + "Restaurar padrão" (ver [[#Score do módulo (recomposto 26/08/2026 — pesos agora configuráveis)|Score]]) · Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
 
 ## Funcionalidades
 
@@ -111,26 +111,60 @@ Além dos hábitos/metas gerais da Árvore, Yesod tem sua própria lista fixa de
 ### Independência Financeira (IF)
 Meta de patrimônio (`ifGoal`) e gasto mensal esperado na aposentadoria (`ifMonthly`) — usados tanto na aba "IF" quanto na fórmula de score.
 
-### Score do módulo
+### Score do módulo (recomposto 26/08/2026 — pesos agora configuráveis)
+Fórmula antiga (fixa, 6 componentes) tinha problemas concretos encontrados numa auditoria a
+pedido do usuário: hábitos/metas nunca "resetavam" (uma vez marcado feito, ficava feito pra
+sempre — 25% do score só crescia, nunca refletia recaída/comportamento atual); progresso de
+dívida era média simples entre dívidas sem pesar pelo saldo (uma dívida de R$500 quitada e
+uma de R$50.000 intocada empatavam em 50%); orçamento era binário (estourar 1% ou 500% do
+limite pontuava igual); não existia reserva de emergência no score, apesar do módulo já ter
+tudo pra calcular isso; IF pesava 25% mas é métrica de décadas — dominava o score de quem
+está no início da jornada mesmo com disciplina diária impecável.
+
+Recomposta em 5 componentes, com **pesos editáveis em Config → Preferências**
+(`scoreWeights`, persistido em `lifetree_fin_scoreweights`, default
+`{savRate:25,debt:20,budget:20,emergency:20,if:15,emergencyTargetMonths:6}` — não precisam
+somar 100, a fórmula normaliza pelo total informado; zerar um peso tira o componente do
+cálculo). Hábitos/metas **saíram do cálculo** — continuam dando XP e aparecendo em Visão
+Geral/Objetivos normalmente, só não influenciam mais o %.
+
 ```js
 const calcYesodScore = () => {
   const cf0 = cashflowMonth(-1);
   const savRate = cf0.ins>0 ? Math.max(0,(cf0.ins-cf0.outs)/cf0.ins) : 0;
+  const savS = Math.min(1, savRate/0.2);
+
+  // pondera pelo valor ORIGINAL de cada dívida (não média simples) — equivale a
+  // 1 − saldo_devedor_total/valor_original_total
+  const totalDebtOriginal = debts.reduce((s,d)=>s+d.totalParcelas*d.valorParcela,0);
+  const debtS = debts.length===0 ? 1 : (totalDebtOriginal>0 ? Math.max(0,1-totDebtRem/totalDebtOriginal) : 1);
+
+  // mede a distância proporcional ao limite por categoria, não um binário dentro/fora
+  const budS = budgets.length===0 ? 0.5 : budgets.reduce((s,b)=>{
+    const spend=budgetSpend(b.cat);
+    return s+(spend<=b.limit?1:Math.max(0,1-(spend-b.limit)/b.limit));
+  },0)/budgets.length;
+
+  // componente novo: contas+caixinhas ÷ gasto médio mensal, meta configurável em meses
+  const avgMonthlyExpense=[-1,-2,-3].reduce((s,o)=>s+cashflowMonth(o).outs,0)/3;
+  const emergS = Math.min(1, (totAcc+totBox)/avgMonthlyExpense/(scoreWeights.emergencyTargetMonths||6));
+
   const ifN = ifGoal || ifMonthly*300 || 1;
-  const debtS = debts.length>0 ? debts.reduce((s,d)=>s+(d.parcelasPagas/d.totalParcelas),0)/debts.length : 1;
-  const budS = budgets.length>0 ? budgets.filter(b=>budgetSpend(b.cat)<=b.limit).length/budgets.length : 0.5;
-  const habS = yHabits.filter(h=>h.done).length/(yHabits.length||1);
-  const goaS = yGoals.filter(g=>g.done).length/(yGoals.length||1);
-  return Math.round((
-    Math.min(1,savRate/0.2)*0.20 +      // taxa de poupança, 20%
-    Math.min(1,net/ifN)*0.25 +          // progresso rumo à IF, 25%
-    debtS*0.15 +                        // dívidas quitadas, 15%
-    budS*0.15 +                         // orçamento respeitado, 15%
-    habS*0.13 +                         // hábitos financeiros, 13%
-    goaS*0.12                           // metas financeiras, 12%
-  )*100);
+  const ifS = Math.min(1, net/ifN);
+
+  const w = scoreWeights;
+  const totalW = w.savRate+w.debt+w.budget+w.emergency+w.if;
+  return Math.round(((savS*w.savRate + debtS*w.debt + budS*w.budget + emergS*w.emergency + ifS*w.if)/totalW)*100);
 };
 ```
+
+**Coach** ganhou a ação `update_score_weights` (só corrige os campos informados) e o
+contexto `formula_saude_financeira` (pesos atuais + cada sub-componente já calculado com os
+dados reais, pro Coach não recalcular às cegas) — quando o usuário pergunta sobre o score ou
+pede avaliação/sugestão, o systemPrompt instrui a explicar com os números reais, apontar peso
+"desperdiçado" (ex: peso alto em dívida sem nenhuma dívida cadastrada) e só aplicar a mudança
+depois que o usuário topar a redistribuição na conversa — nunca decide sozinho reduzir um
+peso só pra "otimizar" o número.
 
 ### Categorias customizáveis (01/08/2026)
 `catsOut`/`catsIn` deixaram de ser constantes fixas (`D_CATS_OUT`/`D_CATS_IN` continuam como seed inicial) e viraram estado persistido, editável em Config → "Categorias de Saída"/"Categorias de Entrada" (adicionar via sheet, remover com botão x). Todos os seletores de categoria do módulo (lançamento, orçamento) usam essas listas.
@@ -514,16 +548,47 @@ build`/`eslint` limpos (exit 0 em ambos os arquivos). Sem teste via chat real (e
 key configurada, mesmo padrão já adotado nesta sessão pra ações de coach) — confiança vem de
 espelhar função por função a lógica da UI já testada visualmente.
 
-**Pendente dos 3 estudos** (ainda não implementado, só a correção acima):
-Config como hub central (índice de tudo + preferências do módulo — cor, apelido, densidade,
-confirmação de exclusão) e revisão da fórmula do % de Saúde Financeira (usuário pediu que a
-fórmula em si vire configurável em Config, ajustável a qualquer momento, em vez de eu fixar
-uma nova composição agora) ficam pra próximas levas. Skills de planejamento financeiro (b-e:
-Expense Leak Detector, Automatic Savings System, Budget Without Shame, Debt Elimination —
-este último precisa de campo de juros na Dívida, que não existe hoje) também pendentes.
+**Status dos 3 estudos** (26/08/2026): item 2 (fórmula do % configurável) **implementado**,
+ver "Config ganha Preferências..." abaixo e [[#Score do módulo (recomposto 26/08/2026 — pesos agora configuráveis)|Score]].
+Restam: Config como hub central — o "índice de tudo" espelhando Contas/Cartões/Caixinhas/
+Investimentos/Dívidas/Bancos/Categorias/Recorrências/Pessoas/Objetivos dentro de Config, e
+outras preferências do módulo (cor de destaque, apelido, densidade visual, confirmação de
+exclusão — essa última é a lacuna de segurança mais real hoje, nenhum delete pede
+confirmação). Skills de planejamento financeiro (b-e: Expense Leak Detector, Automatic
+Savings System, Budget Without Shame, Debt Elimination — este último precisa de campo de
+juros na Dívida, que não existe hoje) também pendentes.
+
+### Config ganha "Preferências" — fórmula de Saúde Financeira configurável + skill do Coach de avaliar/sugerir pesos (26/08/2026, leva 8)
+Primeira peça concreta do estudo "Config como hub", por ser a mais imediatamente acionável:
+o usuário pediu explicitamente que a fórmula do % (ver seção "Score do módulo" acima) virasse
+ajustável em Config a qualquer momento, em vez de eu fixar uma composição nova sem opção de
+mudança — e que o Coach pudesse ajudar a avaliar/sugerir esses pesos.
+
+- Nova seção **"PREFERÊNCIAS"** em Config — primeira do tipo (até então só existiam listas
+  "item + Adicionar" tipo Bancos/Categorias). Card "Fórmula de Saúde Financeira": 5 pesos
+  editáveis + meta de reserva em meses + "Restaurar padrão".
+- `scoreWeights` novo estado persistido (`lifetree_fin_scoreweights`), a fórmula recomposta
+  já descrita na seção "Score do módulo" acima.
+- Coach ganhou a ação `update_score_weights` (só corrige os campos informados) e o contexto
+  `formula_saude_financeira` (pesos + cada sub-componente já calculado com dados reais). Novo
+  skill no systemPrompt: ao ser perguntado sobre o score, o Coach explica com números reais
+  (não em abstrato), aponta peso "desperdiçado" e só aplica a mudança depois que o usuário
+  topar a redistribuição — nunca decide sozinho "otimizar" o número reduzindo um peso.
+- Bônus: `patrimonio_liquido` no contexto do Coach (`buildYesodContext`) estava desatualizado
+  desde a correção de patrimônio líquido de uma leva anterior (não descontava fatura de
+  cartão nem somava despesas divididas a receber) — corrigido pra bater com a UI.
+
+Testado no navegador: fórmula recomposta fez o score pular de 43% pra 76% com os pesos
+padrão (matemática conferida via réplica exata em JS, bateu 76% exato); mudar um peso
+recalculou o score em tempo real; "Restaurar padrão" volta aos valores default exatos;
+simulado o write exato que `update_score_weights` faria via `localStorage` (mesmo padrão
+readJSON+patch+writeJSON das outras ações do Coach) e confirmado que a UI lê e reflete o
+formato certinho. `npm run build` limpo; `YesodModule.jsx` mantém o mesmo baseline de lint
+(35 problemas — só mais um `catch(_)` esperado pro novo efeito de persistência, mesmo padrão
+de sempre); `coachSkills.js`/`yesodActions.js` sem nenhum problema.
 
 ## Persistência
-Prefixo `lifetree_fin_` — 22 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
+Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).
 
 ## Padrão de tema
 `const C = dark ? DARK : LIGHT;` — dentro do componente, **correto** (não usa o anti-padrão de variável global mutável que afeta Geburah/Hod/Tiphareth).
