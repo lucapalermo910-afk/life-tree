@@ -5,7 +5,7 @@ aliases: [Yesod]
 
 # 💰 Yesod — Finanças
 
-> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1545 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
+> Status: ✅ Integrado na Árvore · Arquivo: `preview/src/YesodModule.jsx` (~1609 linhas, 26/08/2026) · **fecha como v10** (ver [[08 Versões]])
 > Score bridge: publica `yesod` em `lifetree_scores`
 > Esta nota incorpora a auditoria funcional completa feita em 01/08/2026 (levantamento de telas/entidades/gaps que também existe como [artefato web](https://claude.ai/code/artifact/477b284f-23ed-447d-a614-5ff541796195)) — é a referência canônica do estado do módulo daqui pra frente, não só notas de implementação.
 
@@ -38,7 +38,7 @@ Visão rápida do que cada tela mostra e permite fazer — detalhe de implementa
 - **Objetivos** — aba própria desde 25/08/2026 (antes: seção "IF" dentro de Yesod + checklist "Metas" dentro de Visão Geral). Vista colapsada por padrão (segunda leva do dia, 25/08/2026 — a vista cheia tinha destaque demais): mostra só o card de progresso da Meta de Independência Financeira + botão "+ Objetivo"; tocar no card abre o detalhe completo como sub-página (patrimônio atual vs. necessário pela regra dos 4%, projeção de anos/meses pela poupança média dos últimos 3 meses, taxa de poupança 6 meses, editar meta, e o checklist "Outras Metas" — livre, criar/concluir com XP/apagar, não só IF, no mesmo espírito de múltiplos objetivos do Hod).
 - **Orçamento** — controle segmentado **Fluxo** / **Orçamento** (desde 25/08/2026, Fluxo primeiro por ser o mais usado): **Fluxo** (carrossel de 6 sub-views que antes vivia na aba Yesod — Fluxo de Caixa com gráfico realizado+esperado do ano inteiro + lançamentos filtráveis embutidos, ver seção própria; Taxa de Poupança; Progresso Dívidas; Rendimento Investimentos; Evolução Patrimonial; Projeção) · **Orçamento** (lista por categoria com limite/gasto real/%/alerta "ACIMA", criar/editar/apagar). A aba "Extrato" existiu como 3º pill por 2 dias e foi removida — voltou a viver dentro do próprio Fluxo.
 - **Bolsos** — cada seção com um totalizador compacto no topo (uma linha, cor própria — trocou o card grande de destaque que só "Dívidas" tinha, 25/08/2026): Contas — verde (saldo, editar/apagar inline, tocar → extrato **agrupado por mês desde 25/08/2026**, cada grupo com o saldo daquele mês; botão "Banco" de criação rápida removido em 25/08/2026 por duplicar Config → Bancos) **com Cartões aninhado dentro** — roxo (limite usado com barra de cor por %, mesmas ações, tocar → faturas por vencimento, todas as faturas passadas já listadas sem filtro — nested em Contas desde 23/08/2026) · Caixinhas — azul (saldo/meta/%/data alvo/**taxa de juros editável (%a.a. ou %a.m.), desde 25/08/2026**, mesmas ações, tocar → **Depositar/Retirar agora exige escolher uma conta (dinheiro sai/entra de verdade), mais histórico mensal de saldo e projeção futura pela taxa, 25/08/2026**) · Investimentos — âmbar (4 categorias com total e ganho/perda, tocar → detalhe por subcategoria, **Aportar/Resgatar ligados a conta desde 25/08/2026, além do já existente Atualizar saldo**) · **Dívidas e Financiamentos** — vermelho (5ª seção desde 25/08/2026, antes aba própria — lista com progresso, criar (**ganhou "Valor recebido" + conta pra creditar, 25/08/2026**)/apagar, tocar → **Parcela/Amortizar (por valor ou parcelas, reduzindo prazo ou parcela)/Quitar dívida — os três ligados a conta, 25/08/2026**).
-- **Config** — ganhou seção **Preferências** em 26/08/2026 (primeira do tipo, antes só existiam listas "item + Adicionar"): card **Fórmula de Saúde Financeira** com os 5 pesos do % da Visão Geral editáveis + meta de reserva em meses + "Restaurar padrão" (ver [[#Score do módulo (recomposto 26/08/2026 — pesos agora configuráveis)|Score]]) · Bancos (único lugar de CRUD, sem equivalente browsável em outra tela) · Categorias de Saída/Entrada (criar/apagar) · Recorrências (pausar/retomar, apagar).
+- **Config** — ganhou seção **Preferências** em 26/08/2026 (primeira do tipo, antes só existiam listas "item + Adicionar"): card **Fórmula de Saúde Financeira** com os 5 pesos do % da Visão Geral editáveis + meta de reserva em meses + "Restaurar padrão" (ver [[#Score do módulo (recomposto 26/08/2026 — pesos agora configuráveis)|Score]]). Na mesma data (leva 9) virou hub completo: seção **"Índice de tudo"** espelha Contas/Cartões/Caixinhas/Investimentos/Dívidas e Financiamentos (mesmo total/linhas/editar/apagar de Bolsos, cada tipo num cartão colapsável fechado por padrão) e a seção **"Gerenciar"** (Bancos, Categorias de Saída/Entrada, Pessoas p/ Dividir Despesas, Recorrências) ganhou o mesmo cartão colapsável, agora com contagem — continuam abertas por padrão.
 
 ## Funcionalidades
 
@@ -586,6 +586,34 @@ readJSON+patch+writeJSON das outras ações do Coach) e confirmado que a UI lê 
 formato certinho. `npm run build` limpo; `YesodModule.jsx` mantém o mesmo baseline de lint
 (35 problemas — só mais um `catch(_)` esperado pro novo efeito de persistência, mesmo padrão
 de sempre); `coachSkills.js`/`yesodActions.js` sem nenhum problema.
+
+### Config ganha "Índice de tudo" — Contas/Cartões/Caixinhas/Investimentos/Dívidas espelhados, seções colapsáveis (26/08/2026, leva 9)
+Segunda peça do estudo "Config como hub": além de guardar o que não tem lugar em outra tela,
+Config passa a espelhar TODO item do módulo (criar/editar/apagar de qualquer entidade sem
+precisar navegar até Bolsos), como pedido na primeira parte do estudo original.
+
+- Refatoração prévia: as 5 linhas de item de Bolsos (Conta/Cartão/Caixinha/categoria de
+  Investimento/Dívida) foram extraídas de JSX inline pra funções `renderAccRow`/
+  `renderCardRow`/`renderBoxRow`/`renderInvCatRow`/`renderDebtRow` dentro do componente —
+  Bolsos continua chamando exatamente as mesmas (`accs.map(renderAccRow)` etc.), sem nenhuma
+  mudança de comportamento ali; agora a mesma função também é chamada em Config.
+- `CfgSection` — componente novo, cartão colapsável (título + contagem + botão "Adicionar" +
+  seta), corpo só monta quando aberto. Usado nas 5 novas seções espelhadas (fechadas por
+  padrão, pra não virar uma segunda Bolsos sempre visível) e retrofitado nas 4 seções que já
+  existiam em Config — Bancos/Categorias de Saída/Categorias de Entrada/Pessoas — e em
+  Recorrências (essas 5 continuam abertas por padrão, comportamento inalterado, só ganharam a
+  contagem e a seta de colapsar).
+- Nova seção **"ÍNDICE DE TUDO"** em Config, entre Preferências e a seção (renomeada)
+  **"GERENCIAR"**: Contas/Cartões/Caixinhas/Investimentos/Dívidas e Financiamentos, cada uma
+  com o mesmo `MiniTotal` de Bolsos + as linhas reais (mesmo clique → navega pro detalhe,
+  mesmo editar/apagar inline).
+
+Testado no navegador: Config → Índice de tudo mostra as 5 seções fechadas com contagem
+certa (Contas 3, Cartões 2, Caixinhas 3, Investimentos 5, Dívidas 4); abrir "Contas" mostra
+o `MiniTotal` (R$ 82.525,10) e as 3 contas com os mesmos valores/ícones/botões de Bolsos;
+Bolsos conferido depois — visualmente idêntico a antes da refatoração (mesmas contas,
+mesmos totais, mesmo layout). `npm run build` limpo; `YesodModule.jsx` manteve o mesmo
+baseline de lint (35 problemas, nenhum novo).
 
 ## Persistência
 Prefixo `lifetree_fin_` — 23 chaves: `banks`, `accs` (inclui a conta virtual Carteira), `cards`, `boxes`, `debts`, `invs`, `budgets`, `yhabits`, `ygoals`, `ifgoal`, `ifmonthly`, `finxp`, `patrimsnaps` (agora gravado de verdade, ver acima), `boxsnaps` (novo, 25/08/2026 — histórico mensal de saldo por Caixinha, mesmo padrão de `patrimsnaps` mas não retroativo), `scoreweights` (novo, 26/08/2026 — pesos da fórmula de Saúde Financeira), `catsout`, `catsin`, `recurrings`, `yesodcards`, `projevents` (12/08/2026, substitui `projscenario`), `splitpeople`, `recoverrides` (novo, 23/08/2026), `plannedItems` (novo, 23/08/2026). ~~`scenarios`~~ removida 23/08/2026 junto com a aba (chave antiga fica órfã no localStorage de quem já tinha usado, inofensiva). Segue o padrão correto (localStorage, não `window.storage`) — tema (`dark`) não é persistido aqui, vem só de `App.jsx` (ver [[02 Arquitetura]]).

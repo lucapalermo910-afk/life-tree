@@ -129,6 +129,27 @@ function Btn({ children, onClick, color, sm, outline, full=true, style: s={} }) 
   const c = color||ACCENT;
   return (<button onClick={onClick} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:sm?"7px 13px":"11px 18px",borderRadius:10,cursor:"pointer",background:outline?"transparent":"linear-gradient(135deg,"+c+"dd,"+c+"88)",border:outline?"1.5px solid "+c:"none",color:outline?c:"#fff",fontWeight:700,fontSize:sm?11:13,width:full?"100%":"auto",...s}}>{children}</button>);
 }
+// Card colapsável usado no "Índice de tudo" de Config (26/08/2026) -- cabeçalho com
+// título+contagem+Adicionar+seta, corpo só renderiza quando aberto (evita montar tudo de
+// uma vez numa tela que agora espelha o app inteiro).
+function CfgSection({ title, count, defaultOpen, onAdd, addLabel, C, children }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  return (
+    <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,marginBottom:10,overflow:"hidden"}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:14,cursor:"pointer"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:12,fontWeight:700}}>{title}</span>
+          {count!=null&&<span style={{fontSize:10,fontWeight:700,color:C.muted,background:C.surface,borderRadius:99,padding:"1px 7px"}}>{count}</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {onAdd&&<button onClick={e=>{e.stopPropagation();onAdd();}} style={{background:C.b1,border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,color:ACCENT}}><Ico n="plus" size={11}/> {addLabel||"Adicionar"}</button>}
+          <div style={{transform:open?"rotate(90deg)":"none",transition:"transform .15s",display:"flex"}}><Ico n="chev" size={12} color={C.muted}/></div>
+        </div>
+      </div>
+      {open&&<div style={{padding:"0 14px 14px"}}>{children}</div>}
+    </div>
+  );
+}
 // Gráfico de linha da Projeção de Fluxo de Caixa — sem lib de charts, SVG cru igual ao
 // resto do módulo. "base" é a trajetória sem ajuste de cenário; "scenario" (opcional) é
 // a trajetória com os ajustes do usuário somados — desenhada por cima, tracejada, só
@@ -797,6 +818,15 @@ export default function YesodModule({ onBack, dark, setDark }) {
   const bankOpts=()=>banks.map(b=>({v:b.id,l:b.name}));
   const iCatOpts=()=>ICAT.flatMap(c=>c.sub.map(s=>({v:s.id,l:c.label+" - "+s.label})));
 
+  // Renderizadores de linha extraídos de Bolsos (26/08/2026) -- usados tanto em Bolsos
+  // quanto no "Índice de tudo" de Config, pra não duplicar a mesma lógica de
+  // clique/editar/apagar em dois lugares.
+  const renderAccRow=ac=>{const bk2=bkOf(ac.bankId);const accColor=ac.isCash?"#f59e0b":(bk2?.color||ACCENT);const bal=accBal(ac);return(<div key={ac.id} onClick={()=>nav("account",ac.id)} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:36,height:36,borderRadius:10,background:accColor+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n={ac.isCash?"wallet":"bank"} size={16} color={accColor}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{ac.isCash?"Carteira":bk2?.name}</div><div style={{fontSize:10,color:C.muted}}>{ac.isCash?"Dinheiro":ac.name}</div></div><div style={{fontSize:16,fontWeight:900,color:bal>=0?ACCENT:"#ef4444"}}>{fmt(bal)}</div>{!ac.isCash&&(<><button onClick={e=>{e.stopPropagation();openSh("editAcc",{id:ac.id,bankId:ac.bankId,name:ac.name});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delAcc(ac.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></>)}</div></div>);};
+  const renderCardRow=cd=>{const stmts=getStmts(cd);const debt=stmts.reduce((s,st)=>s+st.total,0);const used=Math.min(100,Math.round((debt/cd.limit)*100));return(<div key={cd.id} onClick={()=>nav("card",cd.id)} style={{background:C.card,border:"1px solid "+cd.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:cd.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="card" size={16} color={cd.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{cd.name}</div><div style={{fontSize:9,color:C.muted}}>Fecha {cd.closeDay} · Vence {cd.dueDay}</div></div><button onClick={e=>{e.stopPropagation();openSh("editCard",{id:cd.id,bankId:cd.bankId,name:cd.name,limit:cd.limit,closeDay:cd.closeDay,dueDay:cd.dueDay,color:cd.color});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delCard(cd.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:5}}><div style={{height:"100%",width:used+"%",background:used>80?"#ef4444":used>50?"#f59e0b":cd.color,borderRadius:99}}/></div><div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted}}><span>Usado: {fmt(debt)}</span><span>Limite: {fmt(cd.limit)}</span></div></div>);};
+  const renderBoxRow=bx=>{const pct=Math.min(100,Math.round((bx.balance/bx.goal)*100));return(<div key={bx.id} onClick={()=>nav("box",bx.id)} style={{background:C.card,border:"1px solid "+bx.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:bx.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="piggy" size={16} color={bx.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{bx.name}</div><div style={{fontSize:9,color:C.muted}}>Meta: {fmt(bx.goal)}{bx.targetDate?" · até "+bx.targetDate.split("-").reverse().join("/"):""}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:15,fontWeight:900,color:bx.color}}>{fmt(bx.balance)}</div><div style={{fontSize:9,color:C.muted}}>{pct}%</div></div><button onClick={e=>{e.stopPropagation();openSh("editBox",{id:bx.id,name:bx.name,goal:bx.goal,targetDate:bx.targetDate||"",color:bx.color,rate:bx.rate||0,rateUnit:bx.rateUnit||"ano"});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delBox(bx.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:bx.color,borderRadius:99}}/></div></div>);};
+  const renderInvCatRow=cat=>{const ci=invs.filter(i=>cat.sub.some(s=>s.id===i.subCat));const tot=ci.reduce((s,i)=>s+i.balance,0);const gain=tot-ci.reduce((s,i)=>s+i.invested,0);return(<div key={cat.id} onClick={()=>nav("inv",cat.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px",background:C.card,border:"1px solid "+(ci.length?cat.color+"22":C.b1),borderRadius:12,marginBottom:8,cursor:"pointer",opacity:ci.length?1:.5}}><div style={{width:10,height:10,borderRadius:"50%",background:cat.color}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:700}}>{cat.label}</div>{ci.length>0&&<div style={{fontSize:9,color:gain>=0?"#10b981":"#ef4444",fontWeight:600}}>{gain>=0?"+":""}{fmt(gain)}</div>}{ci.length===0&&<div style={{fontSize:9,color:C.muted}}>Nenhum ativo</div>}</div>{ci.length>0&&<div style={{fontSize:14,fontWeight:800,color:cat.color}}>{fmt(tot)}</div>}<Ico n="chev" size={12} color={C.muted}/></div>);};
+  const renderDebtRow=d=>{const restantes=d.totalParcelas-d.parcelasPagas;const saldo=restantes*d.valorParcela;const pct=Math.min(100,Math.round((d.parcelasPagas/d.totalParcelas)*100));return(<div key={d.id} onClick={()=>nav("debt",d.id)} style={{background:C.card,border:"1px solid "+d.color+"33",borderRadius:14,padding:14,marginBottom:10,cursor:"pointer"}}><div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}><div style={{width:8,height:8,borderRadius:"50%",background:d.color,marginTop:5,flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{d.name}</div><div style={{fontSize:9,color:C.muted}}>{d.credor&&<span style={{color:d.color}}>{d.credor} </span>}{fmt(d.valorParcela)}/mês</div></div><div style={{textAlign:"right"}}><div style={{fontSize:15,fontWeight:900,color:d.color}}>{fmt(saldo)}</div><div style={{fontSize:9,color:C.muted}}>saldo devedor</div></div><button onClick={e=>{e.stopPropagation();delDebt(d.id);}} style={{background:C.b1,border:"none",borderRadius:99,width:22,height:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={10} color={C.muted}/></button></div><div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>Pago: {pct}% · {d.parcelasPagas}/{d.totalParcelas} parcelas</div></div>);};
+
   return (
     <div style={{fontFamily:"system-ui,sans-serif",background:C.bg,minHeight:"100vh",maxWidth:430,margin:"0 auto",color:C.text}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px 0"}}>
@@ -1293,29 +1323,29 @@ export default function YesodModule({ onBack, dark, setDark }) {
           <div style={{animation:"slideUp .3s ease"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Contas</span><Btn sm full={false} onClick={()=>openSh("addAcc",{bankId:banks[0]?.id||"",name:""})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
             <MiniTotal label="TOTAL EM CONTAS" value={fmt(totAcc)} color={ACCENT} C={C}/>
-            {accs.map(ac=>{const bk2=bkOf(ac.bankId);const accColor=ac.isCash?"#f59e0b":(bk2?.color||ACCENT);const bal=accBal(ac);return(<div key={ac.id} onClick={()=>nav("account",ac.id)} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:36,height:36,borderRadius:10,background:accColor+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n={ac.isCash?"wallet":"bank"} size={16} color={accColor}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{ac.isCash?"Carteira":bk2?.name}</div><div style={{fontSize:10,color:C.muted}}>{ac.isCash?"Dinheiro":ac.name}</div></div><div style={{fontSize:16,fontWeight:900,color:bal>=0?ACCENT:"#ef4444"}}>{fmt(bal)}</div>{!ac.isCash&&(<><button onClick={e=>{e.stopPropagation();openSh("editAcc",{id:ac.id,bankId:ac.bankId,name:ac.name});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delAcc(ac.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></>)}</div></div>);})}
+            {accs.map(renderAccRow)}
             {/* Cartões aninhado dentro de Contas (reorganização 23/08/2026, ver 04 Bugs
                 Conhecidos) — divisor mais leve que o das outras seções, pra ler como
                 subseção de Contas em vez de seção irmã */}
             <div style={{height:1,background:C.b1,margin:"12px 0",opacity:.6}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:11,fontWeight:800,color:C.muted}}>Cartões</span><Btn sm full={false} onClick={()=>openSh("addCard",{bankId:banks[0]?.id||"",name:"",limit:5000,closeDay:10,dueDay:25,color:ACCENT})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
             <MiniTotal label="TOTAL EM FATURAS" value={fmt(totCardDebt)} color="#8b5cf6" C={C}/>
-            {cards.map(cd=>{const stmts=getStmts(cd);const debt=stmts.reduce((s,st)=>s+st.total,0);const used=Math.min(100,Math.round((debt/cd.limit)*100));return(<div key={cd.id} onClick={()=>nav("card",cd.id)} style={{background:C.card,border:"1px solid "+cd.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:cd.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="card" size={16} color={cd.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{cd.name}</div><div style={{fontSize:9,color:C.muted}}>Fecha {cd.closeDay} · Vence {cd.dueDay}</div></div><button onClick={e=>{e.stopPropagation();openSh("editCard",{id:cd.id,bankId:cd.bankId,name:cd.name,limit:cd.limit,closeDay:cd.closeDay,dueDay:cd.dueDay,color:cd.color});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delCard(cd.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:5}}><div style={{height:"100%",width:used+"%",background:used>80?"#ef4444":used>50?"#f59e0b":cd.color,borderRadius:99}}/></div><div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted}}><span>Usado: {fmt(debt)}</span><span>Limite: {fmt(cd.limit)}</span></div></div>);})}
+            {cards.map(renderCardRow)}
             <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Caixinhas</span><Btn sm full={false} onClick={()=>openSh("addBox",{name:"",goal:0,color:ACCENT,rate:0,rateUnit:"ano"})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
             <MiniTotal label="TOTAL EM CAIXINHAS" value={fmt(totBox)} color="#06b6d4" C={C}/>
-            {boxes.map(bx=>{const pct=Math.min(100,Math.round((bx.balance/bx.goal)*100));return(<div key={bx.id} onClick={()=>nav("box",bx.id)} style={{background:C.card,border:"1px solid "+bx.color+"22",borderRadius:14,padding:14,marginBottom:8,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:10,background:bx.color+"22",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ico n="piggy" size={16} color={bx.color}/></div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{bx.name}</div><div style={{fontSize:9,color:C.muted}}>Meta: {fmt(bx.goal)}{bx.targetDate?" · até "+bx.targetDate.split("-").reverse().join("/"):""}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:15,fontWeight:900,color:bx.color}}>{fmt(bx.balance)}</div><div style={{fontSize:9,color:C.muted}}>{pct}%</div></div><button onClick={e=>{e.stopPropagation();openSh("editBox",{id:bx.id,name:bx.name,goal:bx.goal,targetDate:bx.targetDate||"",color:bx.color,rate:bx.rate||0,rateUnit:bx.rateUnit||"ano"});}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={e=>{e.stopPropagation();delBox(bx.id);}} style={{background:"none",border:"none",cursor:"pointer",padding:3,display:"flex"}}><Ico n="x" size={13} color={C.muted}/></button></div><div style={{height:4,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:bx.color,borderRadius:99}}/></div></div>);})}
+            {boxes.map(renderBoxRow)}
             <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Investimentos</span><Btn sm full={false} onClick={()=>openSh("addInv",{bankId:banks[0]?.id||"",subCat:"rf_pub",name:"",invested:0,balance:0,rate:"",maturity:"",accId:""})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
             <MiniTotal label="TOTAL INVESTIDO" value={fmt(totInv)} color="#f59e0b" C={C}/>
-            {ICAT.map(cat=>{const ci=invs.filter(i=>cat.sub.some(s=>s.id===i.subCat));const tot=ci.reduce((s,i)=>s+i.balance,0);const gain=tot-ci.reduce((s,i)=>s+i.invested,0);return(<div key={cat.id} onClick={()=>nav("inv",cat.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px",background:C.card,border:"1px solid "+(ci.length?cat.color+"22":C.b1),borderRadius:12,marginBottom:8,cursor:"pointer",opacity:ci.length?1:.5}}><div style={{width:10,height:10,borderRadius:"50%",background:cat.color}}/><div style={{flex:1}}><div style={{fontSize:12,fontWeight:700}}>{cat.label}</div>{ci.length>0&&<div style={{fontSize:9,color:gain>=0?"#10b981":"#ef4444",fontWeight:600}}>{gain>=0?"+":""}{fmt(gain)}</div>}{ci.length===0&&<div style={{fontSize:9,color:C.muted}}>Nenhum ativo</div>}</div>{ci.length>0&&<div style={{fontSize:14,fontWeight:800,color:cat.color}}>{fmt(tot)}</div>}<Ico n="chev" size={12} color={C.muted}/></div>);})}
+            {ICAT.map(renderInvCatRow)}
             {/* Dívidas e Financiamentos — era aba própria no rodapé, virou 5ª seção de
                 Bolsos em 25/08/2026 (usuário: "consigo ver tudo numa única aba") */}
             <div style={{height:1,background:C.b1,margin:"14px 0"}}/>
             <div id="yesod-dividas" style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:12,fontWeight:800}}>Dívidas e Financiamentos</span><Btn sm full={false} onClick={()=>openSh("addDebt",{name:"",credor:"",totalParcelas:12,parcelasPagas:0,valorParcela:0,dueDay:10,startDate:today,color:"#ef4444",valorRecebido:0,accId:""})}><Ico n="plus" size={11}/> Adicionar</Btn></div>
             <MiniTotal label="TOTAL EM DÍVIDAS" value={fmt(totDebtRem)} color="#ef4444" C={C}/>
             {debts.length===0&&<div style={{textAlign:"center",padding:32,color:C.muted,fontSize:12}}>Nenhuma dívida cadastrada</div>}
-            {debts.map(d=>{const restantes=d.totalParcelas-d.parcelasPagas;const saldo=restantes*d.valorParcela;const pct=Math.min(100,Math.round((d.parcelasPagas/d.totalParcelas)*100));return(<div key={d.id} onClick={()=>nav("debt",d.id)} style={{background:C.card,border:"1px solid "+d.color+"33",borderRadius:14,padding:14,marginBottom:10,cursor:"pointer"}}><div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}><div style={{width:8,height:8,borderRadius:"50%",background:d.color,marginTop:5,flexShrink:0}}/><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700}}>{d.name}</div><div style={{fontSize:9,color:C.muted}}>{d.credor&&<span style={{color:d.color}}>{d.credor} </span>}{fmt(d.valorParcela)}/mês</div></div><div style={{textAlign:"right"}}><div style={{fontSize:15,fontWeight:900,color:d.color}}>{fmt(saldo)}</div><div style={{fontSize:9,color:C.muted}}>saldo devedor</div></div><button onClick={e=>{e.stopPropagation();delDebt(d.id);}} style={{background:C.b1,border:"none",borderRadius:99,width:22,height:22,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={10} color={C.muted}/></button></div><div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:pct+"%",background:d.color,borderRadius:99}}/></div><div style={{fontSize:9,color:C.muted}}>Pago: {pct}% · {d.parcelasPagas}/{d.totalParcelas} parcelas</div></div>);})}
+            {debts.map(renderDebtRow)}
           </div>
         )}
 
@@ -1367,19 +1397,56 @@ export default function YesodModule({ onBack, dark, setDark }) {
               <div style={{fontSize:9,color:C.muted,textAlign:"right"}}>Total: {(Number(scoreWeights.savRate)||0)+(Number(scoreWeights.debt)||0)+(Number(scoreWeights.budget)||0)+(Number(scoreWeights.emergency)||0)+(Number(scoreWeights.if)||0)}%</div>
             </div>
 
+            {/* Índice de tudo (26/08/2026) — espelho de todo item do módulo (mesma
+                lógica de clique/editar/apagar de Bolsos, via renderXRow extraídos), pra
+                Config funcionar como hub único de criar/editar em vez de precisar navegar
+                até cada aba. Seções começam fechadas -- é uma tela que agora repete tudo
+                que já existe em Bolsos, então some por padrão pra não virar uma segunda
+                Bolsos sempre visível. */}
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:4}}>ÍNDICE DE TUDO</div>
+            <div style={{fontSize:9,color:C.muted,marginBottom:10,lineHeight:1.6}}>Todo item do módulo, num só lugar. Toque no título de cada seção pra abrir.</div>
+            <CfgSection title="Contas" count={accs.length} onAdd={()=>openSh("addAcc",{bankId:banks[0]?.id||"",name:""})} C={C}>
+              <MiniTotal label="TOTAL EM CONTAS" value={fmt(totAcc)} color={ACCENT} C={C}/>
+              {accs.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhuma conta cadastrada</div>}
+              {accs.map(renderAccRow)}
+            </CfgSection>
+            <CfgSection title="Cartões" count={cards.length} onAdd={()=>openSh("addCard",{bankId:banks[0]?.id||"",name:"",limit:5000,closeDay:10,dueDay:25,color:ACCENT})} C={C}>
+              <MiniTotal label="TOTAL EM FATURAS" value={fmt(totCardDebt)} color="#8b5cf6" C={C}/>
+              {cards.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhum cartão cadastrado</div>}
+              {cards.map(renderCardRow)}
+            </CfgSection>
+            <CfgSection title="Caixinhas" count={boxes.length} onAdd={()=>openSh("addBox",{name:"",goal:0,color:ACCENT,rate:0,rateUnit:"ano"})} C={C}>
+              <MiniTotal label="TOTAL EM CAIXINHAS" value={fmt(totBox)} color="#06b6d4" C={C}/>
+              {boxes.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhuma caixinha cadastrada</div>}
+              {boxes.map(renderBoxRow)}
+            </CfgSection>
+            <CfgSection title="Investimentos" count={invs.length} onAdd={()=>openSh("addInv",{bankId:banks[0]?.id||"",subCat:"rf_pub",name:"",invested:0,balance:0,rate:"",maturity:"",accId:""})} C={C}>
+              <MiniTotal label="TOTAL INVESTIDO" value={fmt(totInv)} color="#f59e0b" C={C}/>
+              {ICAT.map(renderInvCatRow)}
+            </CfgSection>
+            <CfgSection title="Dívidas e Financiamentos" count={debts.length} onAdd={()=>openSh("addDebt",{name:"",credor:"",totalParcelas:12,parcelasPagas:0,valorParcela:0,dueDay:10,startDate:today,color:"#ef4444",valorRecebido:0,accId:""})} C={C}>
+              <MiniTotal label="TOTAL EM DÍVIDAS" value={fmt(totDebtRem)} color="#ef4444" C={C}/>
+              {debts.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhuma dívida cadastrada</div>}
+              {debts.map(renderDebtRow)}
+            </CfgSection>
+
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:8,marginTop:14}}>GERENCIAR</div>
             {[
               {title:"Bancos",items:banks,addSh:"addBank",addInit:{name:"",color:ACCENT},render:b=><div key={b.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}><div style={{width:8,height:8,borderRadius:"50%",background:b.color}}/><span style={{flex:1,fontSize:12,fontWeight:600}}>{b.name}</span><button onClick={()=>openSh("editBank",{id:b.id,name:b.name,color:b.color})} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="edit" size={12} color={C.muted}/></button><button onClick={()=>delBank(b.id)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button></div>},
               {title:"Categorias de Saída",items:catsOut,addSh:"addCatOut",addInit:{name:""},render:c=><div key={c} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}><span style={{flex:1,fontSize:12,fontWeight:600}}>{c}</span><button onClick={()=>delCatOut(c)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button></div>},
               {title:"Categorias de Entrada",items:catsIn,addSh:"addCatIn",addInit:{name:""},render:c=><div key={c} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}><span style={{flex:1,fontSize:12,fontWeight:600}}>{c}</span><button onClick={()=>delCatIn(c)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button></div>},
               {title:"Pessoas p/ Dividir Despesas",items:splitPeople,addSh:"addSplitPerson",addInit:{name:""},render:p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}><span style={{flex:1,fontSize:12,fontWeight:600}}>{p.name}</span><button onClick={()=>delSplitPerson(p.id)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button></div>}
-            ].map(sec=>(<div key={sec.title} style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><span style={{fontSize:12,fontWeight:700}}>{sec.title}</span><Btn sm full={false} onClick={()=>openSh(sec.addSh,sec.addInit)}><Ico n="plus" size={11}/> Adicionar</Btn></div>{sec.items.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhuma categoria</div>}{sec.items.map(item=>sec.render(item))}</div>))}
+            ].map(sec=>(
+              <CfgSection key={sec.title} title={sec.title} count={sec.items.length} defaultOpen onAdd={()=>openSh(sec.addSh,sec.addInit)} C={C}>
+                {sec.items.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhum item</div>}
+                {sec.items.map(item=>sec.render(item))}
+              </CfgSection>
+            ))}
 
-            {/* Recorrências */}
-            <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:10}}>
-              <span style={{fontSize:12,fontWeight:700}}>Recorrências</span>
+            <CfgSection title="Recorrências" count={recurrings.length} defaultOpen C={C}>
               {recurrings.length===0&&<div style={{textAlign:"center",padding:10,color:C.muted,fontSize:11}}>Nenhuma recorrência — crie uma marcando a frequência ao lançar</div>}
               {recurrings.map(r=>(
-                <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginTop:8}}>
+                <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.surface,borderRadius:9,marginBottom:6}}>
                   <div style={{width:8,height:8,borderRadius:"50%",background:r.active?(r.type==="in"?"#16a34a":"#ef4444"):C.b2,flexShrink:0}}/>
                   <div style={{flex:1,opacity:r.active?1:.5}}>
                     <div style={{fontSize:12,fontWeight:600,textDecoration:r.active?"none":"line-through"}}>{r.desc}</div>
@@ -1389,7 +1456,7 @@ export default function YesodModule({ onBack, dark, setDark }) {
                   <button onClick={()=>delRecurring(r.id)} style={{background:C.b1,border:"none",borderRadius:6,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n="x" size={12} color="#ef4444"/></button>
                 </div>
               ))}
-            </div>
+            </CfgSection>
           </div>
         )}
 
