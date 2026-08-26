@@ -407,31 +407,58 @@ export function deleteYesodBox(a) {
   notifyYesodUpdated();
   return { ok: true, message: "Caixinha '" + found.name + "' removida." };
 }
+// Ligado a conta desde 26/08/2026 (mesmo princípio de boxMoveLinked em YesodModule.jsx) —
+// antes só ajustava boxes[].balance isolado, dinheiro "aparecia"/"desaparecia" sem sair de
+// lugar nenhum, ficando pra trás quando a UI ganhou essa exigência.
 export function boxMoveYesod(a) {
   const boxes = readJSON("boxes", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
   const found = findByField(boxes, "name", a.match);
   if (!found) return { ok: false, message: "Não encontrei caixinha com '" + a.match + "'." };
   const amount = Math.abs(Number(a.amount) || 0);
   if (!amount) return { ok: false, message: "Valor inválido." };
-  const delta = a.moveType === "out" ? -amount : amount;
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra ligar a movimentação." };
+  const moveType = a.moveType === "out" ? "out" : "in";
+  const delta = moveType === "out" ? -amount : amount;
+  const accTx = moveType === "in"
+    ? { id: "t"+uid(), desc: "Depósito em " + found.name, amount, type: "out", date: todayS(), cat: "Transferência", method: "ted" }
+    : { id: "t"+uid(), desc: "Retirada de " + found.name, amount, type: "in", date: todayS(), cat: "Transferência", method: "ted" };
   writeJSON("boxes", boxes.map(x => x.id === found.id ? { ...x, balance: x.balance + delta } : x));
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, accTx] } : x));
   notifyYesodUpdated();
-  return { ok: true, message: (a.moveType === "out" ? "Retirada" : "Depósito") + " de R$" + amount.toFixed(2) + " em '" + found.name + "' registrado." };
+  return { ok: true, message: (moveType === "out" ? "Retirada" : "Depósito") + " de R$" + amount.toFixed(2) + " em '" + found.name + "' registrado, ligado à conta '" + acc.name + "'." };
 }
 
 // ── DÍVIDAS ──────────────────────────────────────────────────────────────────────
+// valorRecebido+account desde 26/08/2026 (mesmo princípio de addDebt em YesodModule.jsx) —
+// o principal recebido (pode ser diferente da soma das parcelas, que já embute juros) credita
+// de verdade numa conta ao criar, quando informado.
 export function createYesodDebt(a) {
   const debts = readJSON("debts", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
   const name = (a.name || "").trim();
   if (!name) return { ok: false, message: "Nome da dívida vazio." };
+  const startDate = a.startDate || todayS();
   writeJSON("debts", [...debts, {
     id: "d"+uid(), name, credor: a.credor || "",
     totalParcelas: Number(a.totalParcelas) || 12, parcelasPagas: Number(a.parcelasPagas) || 0,
     valorParcela: Number(a.valorParcela) || 0, dueDay: Number(a.dueDay) || 10,
-    startDate: a.startDate || todayS(), color: a.color || "#ef4444",
+    startDate, color: a.color || "#ef4444",
   }]);
+  const valorRecebido = Number(a.valorRecebido) || 0;
+  let creditMsg = "";
+  if (valorRecebido > 0) {
+    const acc = findAccount(accs, banks, a.account);
+    if (acc) {
+      writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Empréstimo: " + name, amount: valorRecebido, type: "in", date: startDate, cat: "Empréstimo", method: "ted" }] } : x));
+      creditMsg = " R$" + valorRecebido.toFixed(2) + " creditado em '" + acc.name + "'.";
+    }
+  }
   notifyYesodUpdated();
-  return { ok: true, message: "Dívida '" + name + "' criada." };
+  return { ok: true, message: "Dívida '" + name + "' criada." + creditMsg };
 }
 export function editYesodDebt(a) {
   const debts = readJSON("debts", []);
@@ -453,21 +480,90 @@ export function deleteYesodDebt(a) {
   notifyYesodUpdated();
   return { ok: true, message: "Dívida '" + found.name + "' removida." };
 }
+// Ligado a conta desde 26/08/2026 (mesmo princípio de payDebt em YesodModule.jsx) — era a
+// única ação de dívida que mexia em parcelasPagas sem debitar dinheiro de lugar nenhum.
 export function payYesodDebt(a) {
   const debts = readJSON("debts", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
   const found = findByField(debts, "name", a.match);
   if (!found) return { ok: false, message: "Não encontrei dívida com '" + a.match + "'." };
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra debitar o pagamento." };
   const qtd = Math.max(1, Number(a.qtd) || 1);
   const novasPagas = Math.min(found.totalParcelas, found.parcelasPagas + qtd);
+  const valor = qtd * found.valorParcela;
   writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, parcelasPagas: novasPagas } : x));
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Parcela " + found.name, amount: valor, type: "out", date: todayS(), cat: "Pagamento de dívida", method: "ted" }] } : x));
   notifyYesodUpdated();
-  return { ok: true, message: qtd + " parcela(s) de '" + found.name + "' registrada(s) como paga(s) (" + novasPagas + "/" + found.totalParcelas + ")." };
+  return { ok: true, message: qtd + " parcela(s) de '" + found.name + "' paga(s) (" + novasPagas + "/" + found.totalParcelas + "), R$" + valor.toFixed(2) + " debitado de '" + acc.name + "'." };
+}
+// Amortização (nova em 26/08/2026, mesmo princípio de amortizarDivida em YesodModule.jsx) —
+// paga um valor extra (por R$ ou por nº de parcelas) além do fluxo normal, com escolha de
+// reduzir prazo (mantém valor da parcela, quita parcelas finais) ou reduzir parcela (mantém
+// nº de parcelas, diminui o valor de cada uma). Sempre debita de uma conta.
+export function amortizeYesodDebt(a) {
+  const debts = readJSON("debts", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const found = findByField(debts, "name", a.match);
+  if (!found) return { ok: false, message: "Não encontrei dívida com '" + a.match + "'." };
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra debitar a amortização." };
+  const remaining = (found.totalParcelas - found.parcelasPagas) * found.valorParcela;
+  if (remaining <= 0) return { ok: false, message: "'" + found.name + "' já está quitada." };
+  const debitTx = amortValue => ({ id: "t"+uid(), desc: "Amortização " + found.name, amount: amortValue, type: "out", date: todayS(), cat: "Amortização de dívida", method: "ted" });
+
+  if (a.mode === "parcelas") {
+    const qtd = Math.max(1, Math.min(found.totalParcelas - found.parcelasPagas, Number(a.qtd) || 1));
+    const amortValue = qtd * found.valorParcela;
+    writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, debitTx(amortValue)] } : x));
+    writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, parcelasPagas: x.parcelasPagas + qtd } : x));
+    notifyYesodUpdated();
+    return { ok: true, message: "Amortizadas " + qtd + " parcela(s) (R$" + amortValue.toFixed(2) + ") de '" + found.name + "', debitado de '" + acc.name + "'." };
+  }
+
+  const amortValue = Math.max(0, Math.min(Number(a.value) || 0, remaining));
+  if (!amortValue) return { ok: false, message: "Valor de amortização inválido." };
+  const remainingAfter = remaining - amortValue;
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, debitTx(amortValue)] } : x));
+  if (a.effect === "parcela") {
+    const remainingInstallments = found.totalParcelas - found.parcelasPagas;
+    const newValorParcela = remainingAfter <= 0 ? 0 : remainingAfter / remainingInstallments;
+    writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, valorParcela: newValorParcela, ...(remainingAfter <= 0 ? { parcelasPagas: x.totalParcelas } : {}) } : x));
+  } else {
+    const newTotalParcelas = remainingAfter <= 0 ? found.parcelasPagas : found.parcelasPagas + Math.ceil(remainingAfter / found.valorParcela);
+    writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, totalParcelas: newTotalParcelas } : x));
+  }
+  notifyYesodUpdated();
+  return { ok: true, message: "Amortização de R$" + amortValue.toFixed(2) + " em '" + found.name + "' registrada (" + (a.effect === "parcela" ? "parcela reduzida" : "prazo reduzido") + "), debitado de '" + acc.name + "'." };
+}
+// Quitação geral (nova em 26/08/2026, mesmo princípio de quitarDivida em YesodModule.jsx) —
+// paga o saldo devedor inteiro de uma vez, de uma conta.
+export function settleYesodDebt(a) {
+  const debts = readJSON("debts", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const found = findByField(debts, "name", a.match);
+  if (!found) return { ok: false, message: "Não encontrei dívida com '" + a.match + "'." };
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra debitar a quitação." };
+  const remaining = (found.totalParcelas - found.parcelasPagas) * found.valorParcela;
+  if (remaining <= 0) return { ok: false, message: "'" + found.name + "' já está quitada." };
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Quitação " + found.name, amount: remaining, type: "out", date: todayS(), cat: "Quitação de dívida", method: "ted" }] } : x));
+  writeJSON("debts", debts.map(x => x.id === found.id ? { ...x, parcelasPagas: x.totalParcelas } : x));
+  notifyYesodUpdated();
+  return { ok: true, message: "'" + found.name + "' quitada (R$" + remaining.toFixed(2) + " debitado de '" + acc.name + "')." };
 }
 
 // ── INVESTIMENTOS ────────────────────────────────────────────────────────────────
+// Debita conta quando "invested">0, desde 26/08/2026 (mesmo princípio de addInv em
+// YesodModule.jsx) — só debita se "account" for informado (deixe de fora se for um ativo que
+// já existia antes do app, sem debitar nada).
 export function createYesodInvestment(a) {
   const invs = readJSON("invs", []);
   const banks = readJSON("banks", []);
+  const accs = readJSON("accs", []);
   const name = (a.name || "").trim();
   if (!name) return { ok: false, message: "Nome do ativo vazio." };
   const bank = findByField(banks, "name", a.bank);
@@ -476,8 +572,17 @@ export function createYesodInvestment(a) {
     invested: Number(a.invested) || 0, balance: Number(a.balance ?? a.invested) || 0,
     rate: a.rate || "", maturity: a.maturity || "",
   }]);
+  const invested = Number(a.invested) || 0;
+  let debitMsg = "";
+  if (invested > 0 && a.account) {
+    const acc = findAccount(accs, banks, a.account);
+    if (acc) {
+      writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Aporte inicial: " + name, amount: invested, type: "out", date: todayS(), cat: "Investimento", method: "ted" }] } : x));
+      debitMsg = " R$" + invested.toFixed(2) + " debitado de '" + acc.name + "'.";
+    }
+  }
   notifyYesodUpdated();
-  return { ok: true, message: "Investimento '" + name + "' criado." };
+  return { ok: true, message: "Investimento '" + name + "' criado." + debitMsg };
 }
 export function editYesodInvestment(a) {
   const invs = readJSON("invs", []);
@@ -510,6 +615,42 @@ export function updateYesodInvestmentBalance(a) {
   writeJSON("invs", invs.map(x => x.id === found.id ? { ...x, balance } : x));
   notifyYesodUpdated();
   return { ok: true, message: "Saldo de '" + found.name + "' atualizado para R$" + balance.toFixed(2) + "." };
+}
+// Aportar/Resgatar (novos em 26/08/2026, mesmo princípio de invAportar/invResgatar em
+// YesodModule.jsx) — diferente de updateYesodInvestmentBalance acima (ajuste de valor de
+// mercado, sem tocar em conta nenhuma), estes movimentam uma conta de verdade.
+export function investAportarYesod(a) {
+  const invs = readJSON("invs", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const found = findByField(invs, "name", a.match);
+  if (!found) return { ok: false, message: "Não encontrei investimento com '" + a.match + "'." };
+  const amount = Math.abs(Number(a.amount) || 0);
+  if (!amount) return { ok: false, message: "Valor inválido." };
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra debitar o aporte." };
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Aporte em " + found.name, amount, type: "out", date: todayS(), cat: "Investimento", method: "ted" }] } : x));
+  writeJSON("invs", invs.map(x => x.id === found.id ? { ...x, invested: x.invested + amount, balance: x.balance + amount } : x));
+  notifyYesodUpdated();
+  return { ok: true, message: "Aporte de R$" + amount.toFixed(2) + " em '" + found.name + "' registrado, debitado de '" + acc.name + "'." };
+}
+export function investResgatarYesod(a) {
+  const invs = readJSON("invs", []);
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const found = findByField(invs, "name", a.match);
+  if (!found) return { ok: false, message: "Não encontrei investimento com '" + a.match + "'." };
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada pra creditar o resgate." };
+  const amount = Math.min(Math.abs(Number(a.amount) || 0), found.balance);
+  if (!amount) return { ok: false, message: "Valor inválido." };
+  // Resgate reduz invested proporcionalmente ao que saiu do balance, pra manter o % de
+  // rendimento coerente antes/depois de um resgate parcial (mesma regra da UI).
+  const proportion = found.balance > 0 ? amount / found.balance : 1;
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Resgate de " + found.name, amount, type: "in", date: todayS(), cat: "Investimento", method: "ted" }] } : x));
+  writeJSON("invs", invs.map(x => x.id === found.id ? { ...x, balance: x.balance - amount, invested: Math.max(0, x.invested - x.invested * proportion) } : x));
+  notifyYesodUpdated();
+  return { ok: true, message: "Resgate de R$" + amount.toFixed(2) + " de '" + found.name + "' registrado, creditado em '" + acc.name + "'." };
 }
 
 // ── ORÇAMENTO ────────────────────────────────────────────────────────────────────
@@ -727,10 +868,14 @@ export const YESOD_ACTION_HANDLERS = {
   edit_debt: editYesodDebt,
   delete_debt: deleteYesodDebt,
   pay_debt: payYesodDebt,
+  amortize_debt: amortizeYesodDebt,
+  settle_debt: settleYesodDebt,
   create_investment: createYesodInvestment,
   edit_investment: editYesodInvestment,
   delete_investment: deleteYesodInvestment,
   update_investment_balance: updateYesodInvestmentBalance,
+  invest_aportar: investAportarYesod,
+  invest_resgatar: investResgatarYesod,
   create_budget: createYesodBudget,
   edit_budget: editYesodBudget,
   delete_budget: deleteYesodBudget,

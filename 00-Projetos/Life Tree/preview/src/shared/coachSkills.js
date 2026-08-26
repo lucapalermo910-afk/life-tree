@@ -518,19 +518,23 @@ CAIXINHAS (metas com valor e prazo — reserva de emergência, viagem, etc.)
 18. {"action":"create_box","name":"...","goal":10000,"targetDate":"YYYY-MM-DD (opcional)"}
 19. {"action":"edit_box","match":"...","changes":{"name":"...","goal":10000,"targetDate":"YYYY-MM-DD"}}
 20. {"action":"delete_box","match":"..."}
-21. {"action":"box_move","match":"...","moveType":"in|out","amount":100}
+21. {"action":"box_move","match":"...","moveType":"in|out","amount":100,"account":"nome da conta (opcional)"} — SEMPRE liga a uma conta de verdade (débito no depósito, crédito na retirada); sem "account" usa a primeira conta cadastrada.
 
 DÍVIDAS
-22. {"action":"create_debt","name":"...","credor":"...","totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10}
+22. {"action":"create_debt","name":"...","credor":"...","totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10,"valorRecebido":10000 (opcional),"account":"nome da conta (opcional)"} — se "valorRecebido">0 e houver conta (informada ou a primeira cadastrada), credita esse valor nela como o empréstimo recebido; valorRecebido pode ser diferente de totalParcelas×valorParcela, que já embute juros.
 23. {"action":"edit_debt","match":"...","changes":{"totalParcelas":12,"parcelasPagas":0,"valorParcela":500,"dueDay":10}}
 24. {"action":"delete_debt","match":"..."}
-25. {"action":"pay_debt","match":"...","qtd":1} — registra parcela(s) paga(s)
+25. {"action":"pay_debt","match":"...","qtd":1,"account":"nome da conta (opcional)"} — registra parcela(s) paga(s) E debita o valor da conta indicada (ou a primeira, se omitida).
+51. {"action":"amortize_debt","match":"...","account":"nome da conta (opcional)","mode":"valor|parcelas","value":2000 (se mode=valor),"qtd":2 (se mode=parcelas),"effect":"prazo|parcela (só usado se mode=valor — prazo mantém o valor da parcela e quita parcelas finais; parcela mantém o nº de parcelas e reduz o valor de cada uma)"} — paga um valor extra além do fluxo normal, debitando a conta.
+52. {"action":"settle_debt","match":"...","account":"nome da conta (opcional)"} — quita o saldo devedor inteiro de uma vez, debitando a conta.
 
 INVESTIMENTOS
-26. {"action":"create_investment","name":"...","bank":"...","invested":1000,"balance":1000,"rate":"..."}
+26. {"action":"create_investment","name":"...","bank":"...","invested":1000,"balance":1000,"rate":"...","account":"nome da conta (opcional)"} — se "invested">0 e "account" for informado, debita esse valor da conta (deixe "account" de fora se for um ativo que já existia antes do app, sem debitar nada).
 27. {"action":"edit_investment","match":"...","changes":{"invested":1000,"balance":1000,"rate":"..."}}
 28. {"action":"delete_investment","match":"..."}
-29. {"action":"update_investment_balance","match":"...","balance":1200} — pra "atualiza meu CDB pra R$1.200"
+29. {"action":"update_investment_balance","match":"...","balance":1200} — só ajusta o valor de mercado, SEM tocar em conta nenhuma (pra isso, use as ações 53/54 abaixo)
+53. {"action":"invest_aportar","match":"...","amount":500,"account":"nome da conta (opcional)"} — aporte de verdade: debita a conta e soma o valor no aplicado e no saldo do investimento.
+54. {"action":"invest_resgatar","match":"...","amount":500,"account":"nome da conta (opcional)"} — resgate de verdade: credita a conta, reduz o saldo do investimento, e reduz o valor aplicado NA MESMA PROPORÇÃO do resgate (mantém o % de rendimento coerente).
 
 ORÇAMENTO POR CATEGORIA
 30. {"action":"create_budget","cat":"...","limit":500}
