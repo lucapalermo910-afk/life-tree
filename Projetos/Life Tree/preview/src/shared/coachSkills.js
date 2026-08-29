@@ -76,6 +76,12 @@ export function buildYesodContext() {
   // patrimonio_liquido bater com o que a UI mostra.
   const totalFaturaCartao = cards.reduce((s, c) => s + (c.txs || []).reduce((ss, t) => ss + (t.type === "in" ? -t.amount : t.amount), 0), 0);
   const totalAReceber = accs.reduce((s, a) => s + (a.txs || []).reduce((ss, t) => ss + (t.split && !t.split.settled ? t.amount * ((Number(t.split.theirPercent) || 0) / 100) : 0), 0), 0);
+  // Espelha totalAReceber pro lado inverso (26/08/2026, ver sharedOwed em YesodModule.jsx)
+  // — despesa que a outra pessoa pagou e o usuário ainda deve a parte dele é passivo real,
+  // senão patrimonio_liquido calculado aqui divergiria do que a UI mostra sempre que
+  // houver alguma pendência "a pagar".
+  const sharedOwed = readJSON("lifetree_fin_sharedowed", []);
+  const totalAPagar = sharedOwed.filter(o => !o.settled).reduce((s, o) => s + (Number(o.amount) || 0), 0);
 
   // custo líquido de uma transação dividida — a parte da outra pessoa nunca foi gasto de
   // verdade do usuário, mesma lógica de mySplitShare em YesodModule.jsx.
@@ -147,7 +153,7 @@ export function buildYesodContext() {
   const emergTarget = scoreWeights.emergencyTargetMonths || 6;
   const emergMonths = avgMonthlyExpense > 0 ? (totalContas + totalCaixinhas) / avgMonthlyExpense : 0;
   const emergS = Math.min(1, emergMonths / emergTarget);
-  const netLiquido = totalContas + totalCaixinhas + totalInvestido - dividaRestante - totalFaturaCartao + totalAReceber;
+  const netLiquido = totalContas + totalCaixinhas + totalInvestido - dividaRestante - totalFaturaCartao + totalAReceber - totalAPagar;
   const ifN = ifGoal || (ifMonthly ? ifMonthly * 300 : 0) || 1;
   const ifS = Math.min(1, netLiquido / ifN);
   const totalPesos = (Number(scoreWeights.savRate) || 0) + (Number(scoreWeights.debt) || 0) + (Number(scoreWeights.budget) || 0) + (Number(scoreWeights.emergency) || 0) + (Number(scoreWeights.if) || 0);
@@ -217,6 +223,7 @@ export function buildYesodContext() {
     divida_restante: Math.round(dividaRestante),
     fatura_cartao_aberto: Math.round(totalFaturaCartao),
     a_receber_despesas_divididas: Math.round(totalAReceber),
+    a_pagar_despesas_divididas: Math.round(totalAPagar),
     patrimonio_liquido: Math.round(netLiquido),
     capacidade_poupanca_media_mensal: Math.round(poupancaMedia),
     meta_independencia_financeira: ifGoal || (ifMonthly ? ifMonthly * 300 : null),
@@ -276,9 +283,12 @@ export function buildYesodContext() {
 
     // Divisão de despesas (ex: conta de luz 50/50 com a esposa) — ver YesodModule.jsx,
     // campo split em accs[].txs[]. "pendente" = ainda não marcado como acertado na tela.
+    // modo_acerto (26/08/2026): "conta_a_conta" (padrão, acerta cada despesa separada) ou
+    // "liquido" (soma tudo que a pessoa deve com tudo que o usuário deve a ela e fecha na
+    // diferença — ver net_settle). Configurável por pessoa em Config → Pessoas.
     pessoas_divisao_despesas: (() => {
       const people = readJSON("lifetree_fin_splitpeople", []);
-      return people.map(p => p.name);
+      return people.map(p => ({ nome: p.name, modo_acerto: p.settlementMode === "net" ? "liquido" : "conta_a_conta" }));
     })(),
     divisoes_pendentes: (() => {
       const people = readJSON("lifetree_fin_splitpeople", []);
@@ -293,6 +303,16 @@ export function buildYesodContext() {
         }
       }));
       return out;
+    })(),
+    // Sentido inverso (26/08/2026, ver sharedOwed em YesodModule.jsx) — despesas que a
+    // OUTRA pessoa pagou e o usuário ainda deve a parte dele. Quitar com pay_owed (uma) ou
+    // net_settle (todas as pendências com a pessoa de uma vez, incluindo divisoes_pendentes).
+    despesas_a_pagar: (() => {
+      const people = readJSON("lifetree_fin_splitpeople", []);
+      return sharedOwed.filter(o => !o.settled).map(o => ({
+        desc: o.desc, data: o.date, valor: o.amount,
+        pessoa: people.find(p => p.id === o.personId)?.name || "?",
+      }));
     })(),
 
     // Eventos de "e se" ativos na Projeção de Fluxo de Caixa (aba Fluxo → Projeção) — cada
@@ -687,11 +707,17 @@ DASHBOARD (indicadores da tela principal do Yesod — dashboard_indicadores_ativ
 41. {"action":"remove_dashboard_card","cardId":"..."}
 42. {"action":"set_dashboard_cards","cardIds":["...","..."]} — substitui a lista inteira (usado pra reordenar)
 
-DIVISÃO DE DESPESAS (ex: conta de luz 50/50 com a esposa — pessoas_divisao_despesas/divisoes_pendentes no resumo)
+DIVISÃO DE DESPESAS (ex: conta de luz 50/50 com a esposa — pessoas_divisao_despesas/divisoes_pendentes/despesas_a_pagar no resumo)
 43. {"action":"create_split_person","name":"..."}
 44. {"action":"delete_split_person","match":"..."}
 45. {"action":"mark_split_settled","match":"texto da descrição do lançamento","settled":true,"account":"nome da conta (opcional)"} — settled:true LANÇA de verdade o reembolso como entrada na conta indicada (ou na primeira conta, se não especificar) e só então marca acertado; settled:false só corrige o campo de volta pra pendente, sem desfazer nenhum reembolso já lançado.
    - Pra criar um lançamento JÁ dividido, use create_transaction (ação 1) com "splitPerson":"nome" e "splitPercent":50 (% que a outra pessoa paga) — só vale pra saída em conta, não cartão. O custo contado em Fluxo/Orçamento/Score já é só a parte do usuário (desconta a parte da outra pessoa automaticamente); a parte dela conta como "a receber" no patrimônio até ser recebida.
+   - Isso tudo é o sentido "eu paguei, a outra pessoa me deve". Pro sentido INVERSO — a outra pessoa pagou e o usuário deve a parte dele — use as ações 57-61 abaixo (26/08/2026, ver despesas_a_pagar no resumo).
+57. {"action":"create_owed","person":"nome","desc":"ex: Mercado","amount":100,"date":"YYYY-MM-DD (opcional)","cat":"categoria opcional, pra quando for pago"} — registra que a OUTRA pessoa pagou e o usuário deve "amount" (já a parte dele, não o total da despesa). NÃO lança nada em conta agora — só fica pendente em despesas_a_pagar até ser quitado com pay_owed ou net_settle. Pessoa precisa já existir (create_split_person).
+58. {"action":"delete_owed","match":"texto da descrição"} — apaga um registro feito errado (não desfaz pagamento nenhum, só remove a pendência).
+59. {"action":"pay_owed","match":"texto da descrição","account":"nome da conta (opcional)"} — quita UMA despesa a pagar pendente: lança a saída de verdade na conta (ou a primeira cadastrada) e só então marca como paga.
+60. {"action":"net_settle","person":"nome","account":"nome da conta (opcional, só é usada se o saldo líquido não for zero)"} — fecha TODAS as pendências com essa pessoa de uma vez (tudo que ela deve ao usuário em divisoes_pendentes MENOS tudo que o usuário deve a ela em despesas_a_pagar), numa única transação com a diferença. Prefira esta ação em vez de várias mark_split_settled/pay_owed separadas quando o usuário disser algo como "acerta tudo com [pessoa]" ou "fecha a conta com [pessoa]".
+61. {"action":"set_settlement_mode","person":"nome","mode":"item|net"} — muda como o app agrupa as pendências dessa pessoa na tela: "item" (padrão, cada despesa aparece e se acerta separada) ou "net" (aparece já agrupada como saldo líquido). Não executa nenhum acerto sozinho, só muda a apresentação/agrupamento — use net_settle pra de fato quitar.
 
 PROJEÇÃO — EVENTOS DE CENÁRIO "E SE" (eventos_projecao no resumo — soma na Projeção de Fluxo de Caixa, aba Fluxo)
 48. {"action":"add_proj_event","label":"nome opcional, ex: Viagem","deltaIn":0,"deltaOut":0,"fromM":0} — fromM: 0=imediato, 6=em 6 meses, 12=em 1 ano; deltaIn/deltaOut em R$/mês
@@ -708,7 +734,7 @@ VOCÊ TAMBÉM ATUA COMO ANALISTA FINANCEIRO (sem precisar de ação — é racio
 - Múltiplos objetivos ao mesmo tempo: some a necessidade mensal de CADA caixinha/meta com prazo, compare a soma com capacidade_poupanca_media_mensal, e diga se cabe tudo junto. Se não couber, ajude a priorizar (qual meta tem prazo mais apertado, qual é mais importante pro usuário) usando o mesmo tipo de alternativa do item acima (máximo possível, renda extra necessária, ou quitar dívida primeiro) em vez de só dizer "não dá".
 - Sempre mostre a conta resumida (os números), não só a conclusão — mas sem virar uma aula, 4-6 linhas no máximo mesmo quando há alternativas.
 - Use alertas_vencimento_7dias pra avisar proativamente quando o usuário perguntar algo tipo "o que vence essa semana" ou "tenho compromisso chegando".
-- Se "divisoes_pendentes" não estiver vazio, avise proativamente quando o usuário perguntar sobre gastos ou saldo — são despesas divididas com alguém que ainda não foram marcadas como acertadas.
+- Se "divisoes_pendentes" e/ou "despesas_a_pagar" não estiverem vazios, avise proativamente quando o usuário perguntar sobre gastos ou saldo — são despesas divididas com alguém que ainda não foram acertadas (divisoes_pendentes = a receber; despesas_a_pagar = a pagar, 26/08/2026). Se a mesma pessoa aparecer nos dois ao mesmo tempo, sugira net_settle em vez de acertar item por item — normalmente é o que o usuário quer quando pede pra "colocar em dia" com alguém.
 - Se "contas_atrasadas" não estiver vazio, avise proativamente quando o usuário perguntar sobre vencimentos, saldo ou "o que tá pendente" — são parcelas de dívida ou contas recorrentes de saída que já passaram do vencimento sem confirmação de pagamento. Ao propor pay_debt/pay_recurring pra um item atrasado, pergunte se o usuário quer incluir juros de atraso (jurosAtraso) antes de montar a ação — nunca invente um valor de juros sozinho; se ele não souber quanto foi cobrado, registre sem juros e sugira ele conferir o valor exato depois (extrato do banco/fatura).
 - AVALIAR/SUGERIR A FÓRMULA DE SAÚDE FINANCEIRA (formula_saude_financeira no resumo — score_atual, pesos, componentes_percentual): quando o usuário perguntar "como está minha saúde financeira", "por que meu score está baixo/[X]%", "como posso melhorar meu %", ou pedir explicitamente pra avaliar/ajustar/sugerir os pesos:
   a) explique usando os NÚMEROS REAIS de "componentes_percentual" — diga qual componente está mais baixo e por quê (ex: "seu componente de dívidas está em 41% porque ainda falta pagar boa parte do saldo original das suas dívidas"), não fale em abstrato;

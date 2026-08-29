@@ -413,6 +413,64 @@ E em `App.jsx`, todo `<XxxModule .../>` deve passar `dark={dark} setDark={setDar
 
 **Correção:** loop agora ignora séries com `s.feito!==true` antes de considerar pro PR. Verificado no navegador: suggestion/badge de PR só aparece depois que a série é de fato marcada como concluída.
 
+## Yesod — auditoria de código, UX e performance (26/08/2026)
+
+> Pedido do usuário depois da leva de despesas divididas bidirecionais (a receber/a pagar, modo de acerto conta-a-conta/líquido por pessoa): "análise completa das funcionalidades do módulo, da qualidade da experiência do usuário, da performance e do código, parecer honesto". Levantamento feito lendo `YesodModule.jsx` inteiro (1985 linhas), `yesodActions.js` inteiro, `App.jsx`, cruzado com [[11 Plano de Decomposição — Arquivos Monolíticos]] e este próprio documento. Build de produção rodado de verdade pro número de bundle. Itens abaixo entram priorizados em [[05 Roadmap]].
+
+### 🟢 `saveEditTx` ignorava o princípio de "dinheiro precisa se mover antes de status mudar" — corrigido em 26/08/2026
+**Onde:** `YesodModule.jsx`, `saveEditTx` (sheet "Editar Lançamento", toggle "Pendente/Acertado").
+
+**Problema:** o próprio módulo declara em comentário (linhas ~370-377) que o status de uma despesa dividida só pode virar "acertado" quando dinheiro de verdade se move numa conta — foi exatamente por isso que `receiveSplit`/`paySplit`/`netSettle` existem (os dois últimos construídos nesta sessão, seguindo essa mesma regra). Mas `saveEditTx` escrevia `settled:!!f.splitSettled` direto do toggle do formulário, sem gerar nenhuma transação. Editar um lançamento dividido por qualquer motivo (corrigir a descrição, por exemplo) permitia marcar "Acertado" sem nenhum reembolso/pagamento real ter acontecido — subestimava o patrimônio líquido de forma silenciosa, sem transação que explicasse a mudança. Bug pré-existente (não introduzido na sessão de 26/08), mas duas ações novas daquele dia (`paySplit`/`netSettle`) passaram a depender da mesma regra sem essa brecha ter sido fechada.
+
+**Correção:** removido o toggle "Pendente/Acertado" de dentro de "Editar Lançamento" — `f.splitSettled` continua carregando o valor original da transação (setado ao abrir o sheet) mas não é mais editável pela UI, então `saveEditTx` sempre preserva o status como estava. Quem quer acertar usa `receiveSplit`/`paySplit`/`netSettle`, os únicos caminhos que geram a transação real. Verificado no navegador: editar "Internet Compartilhada" (despesa dividida já recebida) não mostra mais o toggle, formulário vai direto de "% que a outra pessoa paga" pro botão Salvar.
+
+### 🟢 Card "Despesas Divididas" cortava em 8 itens sem jeito de ver o resto — corrigido em 26/08/2026
+**Onde:** `YesodModule.jsx`, card "DESPESAS DIVIDIDAS" (`combined.slice(0,8)`).
+
+**Problema:** os totais "a receber"/"a pagar" no topo do card sempre somaram a lista completa de pendências, mas só as 8 primeiras apareciam na tela. A partir da 9ª pendência (plausível num casal usando "conta a conta" no dia a dia), o total mostrado deixava de bater com o que dava pra tocar — e não existia nenhum outro lugar no app pra acertar o item que ficasse de fora (extrato da conta só mostra split como texto sem ação; "Índice de tudo" do Config não lista despesas divididas). O item ficava invisível e inacertável até outras pendências fecharem e empurrarem ele de volta pro topo.
+
+**Correção:** adicionado estado `despesasExpanded` — a lista mostra os 8 mais recentes por padrão, com um botão "Ver mais N pendências" que expande pra lista inteira (e "Ver menos" pra recolher) quando há mais de 8. Os totais já somavam tudo desde antes; agora todo item que compõe o total também é alcançável pra acertar.
+
+### 🟡 `sharedOwed`, `splitPeople` e `recurrings` não têm fluxo de edição
+**Onde:** `YesodModule.jsx`.
+
+**Problema:** toda outra entidade do módulo (Conta, Cartão, Caixinha, Dívida, Investimento) tem sheet de editar; essas três só têm adicionar+apagar. Um erro de digitação (valor/descrição de uma despesa "a pagar", nome de uma pessoa, valor de uma recorrência) só se corrige apagando e recriando — no caso de `recurrings`, apagar perde toda a configuração (frequência, categoria, split) sem confirmação.
+
+**Ação recomendada:** adicionar `editOwed`/`editSplitPerson`/`editRecurring`, mesmo padrão dos sheets já existentes (`editAcc`, `editDebt` etc.).
+
+### 🟢 Nenhum delete/edição do Yesod pedia confirmação — corrigido em 26/08/2026, agora configurável
+**Onde:** `YesodModule.jsx` — 9 deletes de entidade (`delAcc`, `delBank`, `delCard`, `delBox`, `delDebt`, `delInv`, `delRecurring`, `delSplitPerson`, `delOwed`) e 7 "Salvar" de edição (`editBank`, `editAcc`, `editCard`, `editBox`, `editDebt`, `editInv`, `saveEditTx`).
+
+**Problema:** `delAcc` em particular apagava a conta **e o array inteiro de transações dela** — potencialmente meses de histórico — sem confirmação e sem undo (dado só existe em `localStorage`, não tem "restaurar do servidor"). Um toque errado no ícone pequeno de X era irreversível.
+
+**Correção:** nova chave `confirmDestructive` em Config → Preferências → Segurança ("Confirmar antes de editar/apagar", **default ligado**, o usuário escolhe explicitamente desligar se quiser). Helper `guard(run, msg, danger)` abre um sheet de confirmação genérico antes de rodar a ação real quando a chave está ligada, e roda na hora quando desligada — aplicado nos 9 deletes e nas 7 edições de entidade acima. Deletar um lançamento isolado ou uma categoria continua instantâneo de propósito (baixo risco, alta frequência — guardar isso violaria o princípio de fricção zero do próprio roadmap). Testado no navegador nos dois estados: com a chave ligada, apagar um cartão abre "Confirmar Exclusão" com o nome do cartão e o aviso de que não pode ser desfeito; com a chave desligada, o mesmo delete acontece na hora, como sempre foi.
+
+### 🟢 Coach (`yesodActions.js`) sem paridade com a leva de despesas divididas bidirecionais — corrigido em 26/08/2026
+**Onde:** `preview/src/shared/yesodActions.js` e `preview/src/shared/coachSkills.js` (`buildYesodContext`).
+
+**Problema:** busca por `sharedOwed`, `settlementMode`, `payer`, `netSettle`, `paySplit` no arquivo inteiro: zero ocorrências. `markYesodSplitSettled` cobria corretamente o lado antigo (eu pago, o outro me deve), mas não existia ação nenhuma pra: registrar uma despesa que a outra pessoa pagou, quitar um pagamento pendente, fazer um acerto líquido, ou ler/mudar o modo de acerto (`item`/`net`) de uma pessoa. Pedir pro Coach "registra que minha esposa pagou o mercado, devo a metade" não tinha caminho de código pra funcionar — metade das duas interfaces do módulo (toque vs. chat) não via a feature nova. Além disso, `patrimonio_liquido` calculado pelo Coach nunca descontava as pendências "a pagar" — divergia silenciosamente do que a UI mostrava sempre que houvesse alguma.
+
+**Correção:** 5 ações novas em `yesodActions.js` (`create_owed`, `delete_owed`, `pay_owed`, `net_settle`, `set_settlement_mode`), registradas em `YESOD_ACTION_HANDLERS` e documentadas no prompt do Coach (`coachSkills.js`, ações 57-61). `buildYesodContext` ganhou `totalAPagar` (mesma lógica de `totPayable` em `YesodModule.jsx`) subtraído de `patrimonio_liquido`, mais os campos `despesas_a_pagar` e `a_pagar_despesas_divididas` no resumo, e `pessoas_divisao_despesas` passou a incluir `modo_acerto` por pessoa. Orientação proativa atualizada pra sugerir `net_settle` quando a mesma pessoa aparece em `divisoes_pendentes` e `despesas_a_pagar` ao mesmo tempo.
+
+### 🟡 `netSettle` pode absorver silenciosamente uma pendência criada depois de o sheet abrir
+**Onde:** `YesodModule.jsx`, `netSettle()`.
+
+**Problema:** o sheet de acerto líquido calcula `net`/`count` no momento de abrir (`openSh("netSettle", {net: g.net, count: g.count, ...})`), mas a confirmação varre **todas** as pendências ainda abertas daquela pessoa no momento do clique, não só as do snapshot mostrado. Se uma nova pendência daquela pessoa aparecer entre abrir e confirmar (ex: uma recorrência dividida disparando em segundo plano), ela entra no acerto sem nunca ter aparecido no banner — justamente a feature cujo objetivo era deixar claro o que está sendo acertado, pra evitar registro errado. Janela estreita, app de um usuário só, mas é uma inconsistência real.
+
+**Ação recomendada:** recalcular `net`/`count` a partir do estado atual no clique de "Confirmar Acerto", não confiar no snapshot de abertura.
+
+### 🟢 Quase zero memoização — `cashflowMonth`/`allTxs` recalculados do zero em cada render — corrigido em 26/08/2026
+**Onde:** `YesodModule.jsx` — só 1 `useMemo` no arquivo inteiro (`retroPatrimData`). `allTxs()` (varredura completa de contas+cartões) era chamada em 4 pontos; `cashflowMonth()` (que chamava `allTxs()` internamente e filtrava a lista inteira de novo por cima) era chamada **13 vezes** só dentro da view de Fluxo, várias dentro de loops `[-5..0].map()`.
+
+**Problema:** invisível com dado de seed (dezenas de transações). Sem nenhuma barreira de memoização entre estado e essas recomputações, cada tecla digitada num campo de busca ou cada fechamento de toast re-renderizava o módulo e reprocessava tudo de novo — ia pesar conforme o histórico real de transações crescesse.
+
+**Correção:** `allTxs` virou `useMemo` (dependências `accs`/`cards`/`banks`, mesmo padrão de `retroPatrimData`) — deixou de ser função, é o array já pronto. Novo `txsByMonth` (`useMemo` sobre `allTxs`) agrupa as transações por `YYYY-MM` uma única vez; `cashflowMonth`, `monthTotals`, `budgetSpend` e o filtro de lançamentos do gráfico de Fluxo passaram de "filtrar a lista inteira por prefixo de data, a cada chamada" pra "lookup O(1) no mapa por mês + somar só as transações daquele mês" — de O(total de transações) por chamada pra O(transações daquele mês). Verificado no navegador: Fluxo de Caixa (12 meses, Realizado+Esperado), Orçamento por categoria e a lista de 29 lançamentos de Ago/26 (soma batendo exatamente com o saldo do card, R$48.034,10) continuam corretos após a mudança.
+
+### 🔵 Bundle de produção medido: 1,07MB JS (268KB gzip) num chunk único
+**Onde:** `preview/vite.config.js` (sem `manualChunks`), `App.jsx` (10 módulos importados estaticamente no topo, nenhum `React.lazy`).
+
+**Problema:** confirma com número real o que já era P1 do [[05 Roadmap]] ("sem code splitting") — quem abre a Árvore só pra ver Finanças baixa 268KB gzip de módulos que talvez nunca abra na sessão. Não é um achado novo, é a medição concreta de um item já conhecido.
+
 ## Ver também
 - [[Arquitetura]]
 - [[Como Rodar]]

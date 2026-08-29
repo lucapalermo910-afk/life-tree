@@ -720,6 +720,18 @@ export function updateYesodIFGoal(a) {
   return { ok: true, message: "Meta de Independência Financeira atualizada." };
 }
 
+// resetIfBaseline: função pura (não vive no Context) porque precisa ser chamável de fora do
+// Yesod — o Kether chama isso ao criar o plano da IF (KetherModule.jsx, criarIfPlan), e o
+// próprio Yesod chama no botão "Recalcular base do plano" (ObjetivosTab.jsx). Lê o último
+// lifetree_fin_ifstatus publicado pelo Context (ver yesod/context.js, ifProjection) em vez
+// de recalcular a projeção aqui — evita duplicar a fórmula financeira fora do Context.
+export function resetIfBaseline() {
+  const status = readJSON("ifstatus", null);
+  writeJSON("ifbaseline", { capturedAt: todayS(), monthsLeft: status?.projection?.monthsLeft ?? null, net: status?.projection?.net ?? 0 });
+  notifyYesodUpdated();
+  return { ok: true, message: "Base do plano de Independência Financeira recalculada." };
+}
+
 // Pesos da Fórmula de Saúde Financeira (26/08/2026, ver formula_saude_financeira no
 // contexto e calcYesodScore em YesodModule.jsx) — só corrige os campos informados, mantém
 // os demais como estavam. Não precisam somar 100 (a fórmula normaliza sozinha).
@@ -840,6 +852,96 @@ export function markYesodSplitSettled(a) {
   return { ok: true, message: "'" + found.tx.desc + "' marcado como " + (settled ? "acertado" : "pendente") + "." };
 }
 
+// ── SENTIDO INVERSO — outra pessoa pagou, o usuário deve a parte dele (26/08/2026) ──
+// Espelha o que YesodModule.jsx faz com f.payer==="other" dentro do próprio launch() e
+// com sharedOwed/paySplit/netSettle — não existia nenhuma ação de coach pra isso até
+// agora (gap achado na auditoria de 26/08/2026, ver 04 Bugs Conhecidos.md). Não nasce de
+// nenhuma transação de conta (o dinheiro nunca passou pela conta do usuário), fica numa
+// lista à parte (sharedowed) até ser paga de verdade.
+function findOwed(list, matchText) {
+  const q = (matchText || "").toLowerCase();
+  const candidates = list.filter(o => o.desc.toLowerCase().includes(q));
+  if (!candidates.length) return null;
+  const pending = candidates.filter(o => !o.settled);
+  const pool = pending.length ? pending : candidates;
+  return pool.sort((a, b) => b.date.localeCompare(a.date))[0];
+}
+export function createYesodOwed(a) {
+  const people = readJSON("splitpeople", []);
+  const person = findByField(people, "name", a.person);
+  if (!person) return { ok: false, message: "Não encontrei a pessoa '" + a.person + "'. Cadastre com create_split_person primeiro." };
+  const amount = Math.abs(Number(a.amount) || 0);
+  if (!amount) return { ok: false, message: "Valor inválido." };
+  const desc = a.desc || "Despesa dividida";
+  const owed = readJSON("sharedowed", []);
+  writeJSON("sharedowed", [...owed, { id: "ow"+uid(), personId: person.id, desc, amount, cat: a.cat || "Outros", date: a.date || todayS(), settled: false }]);
+  notifyYesodUpdated();
+  return { ok: true, message: "Registrado: você deve R$" + amount.toFixed(2) + " a " + person.name + " (" + desc + ")." };
+}
+export function deleteYesodOwed(a) {
+  const owed = readJSON("sharedowed", []);
+  const found = findOwed(owed, a.match);
+  if (!found) return { ok: false, message: "Não encontrei despesa a pagar com '" + a.match + "'." };
+  writeJSON("sharedowed", owed.filter(o => o.id !== found.id));
+  notifyYesodUpdated();
+  return { ok: true, message: "'" + found.desc + "' removida." };
+}
+// Quita uma despesa "a pagar" pendente — mesmo princípio de markYesodSplitSettled: lança
+// a saída de verdade numa conta e só então marca como paga.
+export function payYesodOwed(a) {
+  const owed = readJSON("sharedowed", []);
+  const found = findOwed(owed.filter(o => !o.settled), a.match);
+  if (!found) return { ok: false, message: "Não encontrei despesa a pagar pendente com '" + a.match + "'." };
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const acc = findAccount(accs, banks, a.account);
+  if (!acc) return { ok: false, message: "Nenhuma conta cadastrada." };
+  const people = readJSON("splitpeople", []);
+  const personName = people.find(p => p.id === found.personId)?.name || "?";
+  writeJSON("accs", accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: "Pagamento a " + personName + ": " + found.desc, amount: found.amount, type: "out", date: todayS(), cat: found.cat || "Divisão de despesas", method: "ted" }] } : x));
+  writeJSON("sharedowed", owed.map(o => o.id === found.id ? { ...o, settled: true } : o));
+  notifyYesodUpdated();
+  return { ok: true, message: "Pagamento de R$" + found.amount.toFixed(2) + " a " + personName + " registrado em " + acc.name + "." };
+}
+// Acerto líquido — fecha TODAS as pendências (a receber E a pagar) com uma pessoa de uma
+// vez, numa única transação com a diferença. Mesmo cálculo de netSettle em
+// YesodModule.jsx — se o líquido zerar exatamente, fecha tudo sem gerar transação.
+export function netSettleYesod(a) {
+  const people = readJSON("splitpeople", []);
+  const person = findByField(people, "name", a.person);
+  if (!person) return { ok: false, message: "Não encontrei a pessoa '" + a.person + "'." };
+  const accs = readJSON("accs", []);
+  const banks = readJSON("banks", []);
+  const owed = readJSON("sharedowed", []);
+  const pendReceivable = [];
+  accs.forEach(acc => (acc.txs || []).forEach(t => { if (t.split && !t.split.settled && t.split.personId === person.id) pendReceivable.push(t); }));
+  const pendPayable = owed.filter(o => o.personId === person.id && !o.settled);
+  if (!pendReceivable.length && !pendPayable.length) return { ok: false, message: "Nenhuma pendência com " + person.name + "." };
+  const totRecv = pendReceivable.reduce((s, t) => s + t.amount * (t.split.theirPercent / 100), 0);
+  const totPay = pendPayable.reduce((s, o) => s + o.amount, 0);
+  const net = totRecv - totPay;
+  const count = pendReceivable.length + pendPayable.length;
+  let workingAccs = accs;
+  if (net !== 0) {
+    const acc = findAccount(accs, banks, a.account);
+    if (!acc) return { ok: false, message: "Nenhuma conta cadastrada." };
+    workingAccs = accs.map(x => x.id === acc.id ? { ...x, txs: [...x.txs, { id: "t"+uid(), desc: (net > 0 ? "Acerto líquido de " : "Acerto líquido a ") + person.name, amount: Math.abs(net), type: net > 0 ? "in" : "out", date: todayS(), cat: net > 0 ? "Reembolso" : "Divisão de despesas", method: "ted" }] } : x);
+  }
+  writeJSON("accs", workingAccs.map(x => ({ ...x, txs: x.txs.map(t => (t.split && t.split.personId === person.id && !t.split.settled) ? { ...t, split: { ...t.split, settled: true } } : t) })));
+  writeJSON("sharedowed", owed.map(o => (o.personId === person.id && !o.settled) ? { ...o, settled: true } : o));
+  notifyYesodUpdated();
+  return { ok: true, message: net === 0 ? (count + " pendência(s) com " + person.name + " fechada(s), saldo zerado.") : ("Acerto líquido de R$" + Math.abs(net).toFixed(2) + " " + (net > 0 ? "recebido de " : "pago a ") + person.name + " registrado, fechando " + count + " pendência(s).") };
+}
+export function setYesodSettlementMode(a) {
+  const people = readJSON("splitpeople", []);
+  const person = findByField(people, "name", a.person);
+  if (!person) return { ok: false, message: "Não encontrei a pessoa '" + a.person + "'." };
+  const raw = (a.mode || "").toLowerCase();
+  const mode = (raw === "net" || raw.includes("liquid")) ? "net" : "item";
+  writeJSON("splitpeople", people.map(p => p.id === person.id ? { ...p, settlementMode: mode } : p));
+  notifyYesodUpdated();
+  return { ok: true, message: person.name + " agora acerta despesas divididas no modo " + (mode === "net" ? "líquido" : "conta a conta") + "." };
+}
 
 // ── PROJEÇÃO — eventos de cenário ("e se") ───────────────────────────────────────
 export function addYesodProjEvent(a) {
@@ -926,6 +1028,7 @@ export const YESOD_ACTION_HANDLERS = {
   edit_budget: editYesodBudget,
   delete_budget: deleteYesodBudget,
   update_if_goal: updateYesodIFGoal,
+  reset_if_baseline: resetIfBaseline,
   update_score_weights: updateYesodScoreWeights,
   create_yhabit: createYesodHabit,
   toggle_yhabit: toggleYesodHabit,
@@ -939,6 +1042,11 @@ export const YESOD_ACTION_HANDLERS = {
   create_split_person: createYesodSplitPerson,
   delete_split_person: deleteYesodSplitPerson,
   mark_split_settled: markYesodSplitSettled,
+  create_owed: createYesodOwed,
+  delete_owed: deleteYesodOwed,
+  pay_owed: payYesodOwed,
+  net_settle: netSettleYesod,
+  set_settlement_mode: setYesodSettlementMode,
   add_proj_event: addYesodProjEvent,
   delete_proj_event: deleteYesodProjEvent,
   clear_proj_events: clearYesodProjEvents,

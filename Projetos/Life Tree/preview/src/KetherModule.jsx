@@ -6,13 +6,19 @@ import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
 import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { BINAH_ACTION_HANDLERS } from "./shared/binahActions.js";
+import { typeColor, typeLabel, phaseLabel } from "./hod/helpers.js";
+import { fmt } from "./yesod/constants.js";
 
 // Protótipo do Desejo (Kether) — mesmo padrão do Controle/Malkuth (19/08/2026), mas pro
 // lado das metas em vez dos hábitos: "assim como o Controle cuida dos hábitos, o Desejo
-// cuida das metas". Duas peças: (1) aba METAS — agregação bidirecional das metas reais
+// cuida das metas". Três peças: (1) aba METAS — agregação bidirecional das metas reais
 // dos 3 módulos que têm um conceito limpo de meta com done/toggle (Yesod/Hod/Tiphareth,
-// mesmo mecanismo do Controle); (2) DESEJOS — lista própria do Kether onde cada desejo
-// (ex: "morar na Itália") pode derivar metas concretas em módulos impactados (ex:
+// mesmo mecanismo do Controle); (2) PROJETOS (26/08/2026) — espelho read-only do motor de
+// projetos do Hod (`lifetree_hod_projects`), o único módulo com esse conceito; sem toggle
+// porque fase de projeto não é um "feito/não feito" binário (avança por critério — ver
+// `hod/constants.js` CRITERIA_BY_TYPE — não cabe num toque só, mesma lógica de deixar
+// Geburah/Binah read-only no Controle); (3) DESEJOS — lista própria do Kether onde cada
+// desejo (ex: "morar na Itália") pode derivar metas concretas em módulos impactados (ex:
 // "aprender Italiano" no Binah, "poupança de mudança" no Yesod, "emprego na Itália" no
 // Hod), criadas de verdade nesses módulos ao salvar o desejo.
 
@@ -29,6 +35,9 @@ const IC = {
   plus: "M12 5v14M5 12h14",
   x:    "M18 6 6 18M6 6l12 12",
   key:  ["M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"],
+  target: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z","M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12Z","M12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"],
+  alert: ["M12 9v4","M12 17h.01","M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"],
+  zap:  "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
 };
 function Ico({ n, size = 16, color = "currentColor", sw = 1.5 }) {
   const d = IC[n]; if (!d) return null;
@@ -84,6 +93,11 @@ const STATUS_LOOKUP = {
 };
 
 const DESEJOS_KEY = "lifetree_keth_desejos";
+// IF_PLAN_KEY: objetivo principal "métrico" — diferente de um Desejo (que é uma lista livre
+// de secundários), a Independência Financeira já existe no Yesod com seu próprio % (patrimônio
+// ÷ meta pela regra dos 4%, ver lifetree_fin_ifstatus). Este card só guarda os secundários/
+// ações vinculados a ela; o progresso em si nunca é duplicado aqui, sempre lido do Yesod.
+const IF_PLAN_KEY = "lifetree_keth_if_plan";
 const uid = () => Math.random().toString(36).slice(2, 8);
 
 export default function KetherModule({ onBack, dark, setDark }) {
@@ -104,6 +118,31 @@ export default function KetherModule({ onBack, dark, setDark }) {
   const [draftMetas, setDraftMetas] = useState([]);
   const [draftModule, setDraftModule] = useState("yesod");
   const [draftMetaTitle, setDraftMetaTitle] = useState("");
+
+  // ── Objetivo Principal métrico: Independência Financeira (piloto financeiro, 29/08/2026) ──
+  const [ifPlan, setIfPlan] = useState(() => readOtherModule(IF_PLAN_KEY, null));
+  const [ifMetaInput, setIfMetaInput] = useState("");
+  const [ifAcaoInput, setIfAcaoInput] = useState("");
+  const [ifAcaoFreq, setIfAcaoFreq] = useState("Diário");
+  const saveIfPlan = next => { setIfPlan(next); try { localStorage.setItem(IF_PLAN_KEY, JSON.stringify(next)); } catch {} };
+  const criarIfPlan = () => {
+    YESOD_ACTION_HANDLERS.reset_if_baseline();
+    saveIfPlan({ metas: [], acoes: [] });
+  };
+  const addIfMeta = () => {
+    if (!ifMetaInput.trim()) return;
+    YESOD_ACTION_HANDLERS.create_ygoal({ title: ifMetaInput.trim(), xp: 150 });
+    saveIfPlan({ ...ifPlan, metas: [...ifPlan.metas, { id: "ifm" + uid(), title: ifMetaInput.trim() }] });
+    setIfMetaInput("");
+  };
+  const removeIfMeta = id => saveIfPlan({ ...ifPlan, metas: ifPlan.metas.filter(m => m.id !== id) });
+  const addIfAcao = () => {
+    if (!ifAcaoInput.trim()) return;
+    YESOD_ACTION_HANDLERS.create_yhabit({ title: ifAcaoInput.trim(), freq: ifAcaoFreq, xp: 20 });
+    saveIfPlan({ ...ifPlan, acoes: [...ifPlan.acoes, { id: "ifa" + uid(), title: ifAcaoInput.trim(), freq: ifAcaoFreq }] });
+    setIfAcaoInput("");
+  };
+  const removeIfAcao = id => saveIfPlan({ ...ifPlan, acoes: ifPlan.acoes.filter(a => a.id !== id) });
 
   const saveDesejos = next => {
     setDesejos(next);
@@ -128,6 +167,14 @@ export default function KetherModule({ onBack, dark, setDark }) {
   const metas = Object.entries(GOAL_ADAPTERS).flatMap(([moduleId, ad]) =>
     ad.read().map(item => ({ ...item, moduleId, moduleLabel: ad.label, color: ad.color }))
   );
+  const projects = readOtherModule("lifetree_hod_projects", []);
+
+  // ifStatus: publicado pelo Yesod (Context) — progresso, projeção e "fora da rota" nunca
+  // recalculados aqui, só refletidos. null enquanto o Yesod nunca foi aberto nesta sessão.
+  const ifStatus = readOtherModule("lifetree_fin_ifstatus", null);
+  const liveYGoals = readOtherModule("lifetree_fin_ygoals", []);
+  const liveYHabits = readOtherModule("lifetree_fin_yhabits", []);
+  const ifPct = ifStatus ? Math.min(100, Math.round((ifStatus.projection.net / ifStatus.projection.ifNeeded) * 100)) : 0;
 
   return (
     <div style={{ fontFamily: "system-ui,sans-serif", background: C.bg, minHeight: "100vh", maxWidth: 430, margin: "0 auto", color: C.text }}>
@@ -154,9 +201,110 @@ export default function KetherModule({ onBack, dark, setDark }) {
         <div style={{ background: "linear-gradient(135deg," + ACCENT + "22," + ACCENT + "06)", border: "1px solid " + ACCENT + "44", borderRadius: 14, padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>PROTÓTIPO — TESTE DE INTEGRAÇÃO</div>
           <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>
-            Metas monitoradas nos 2 sentidos (Finanças, Profissional, Autocuidado) + desejos que derivam metas em até 6 módulos.
+            Metas monitoradas nos 2 sentidos (Finanças, Profissional, Autocuidado) + projetos do Profissional (só leitura) + desejos que derivam metas em até 6 módulos.
           </div>
         </div>
+
+        {ifStatus && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>OBJETIVO PRINCIPAL</div>
+            <div style={{ background: C.card, border: "1px solid " + ACCENT + "33", borderRadius: 12, padding: 13 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 9 }}>
+                <Ico n="target" size={14} color={ACCENT}/>
+                <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800 }}>Independência Financeira</span>
+                <span style={{ fontSize: 8.5, fontWeight: 700, padding: "2.5px 7px", borderRadius: 5, background: "#10b98122", color: "#10b981" }}>Finanças</span>
+              </div>
+
+              {ifStatus.risk.atRisk && (
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "#ef444418", border: "1px solid #ef444444", borderRadius: 9, padding: "8px 10px", marginBottom: 11 }}>
+                  <Ico n="alert" size={13} color="#ef4444"/>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 800, color: "#ef4444", marginBottom: 1 }}>Fora da rota</div>
+                    <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.4 }}>{ifStatus.risk.reason} — atrasa ~{ifStatus.risk.delta} {ifStatus.risk.delta === 1 ? "mês" : "meses"}.</div>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+                <span style={{ fontSize: 22, fontWeight: 900, color: ACCENT }}>{ifPct}%</span>
+                <span style={{ fontSize: 10, color: C.muted }}>{fmt(ifStatus.projection.net)} de {fmt(ifStatus.projection.ifNeeded)}</span>
+              </div>
+              <div style={{ height: 5, borderRadius: 99, background: C.b1, overflow: "hidden", marginTop: 6, marginBottom: 12 }}>
+                <div style={{ height: "100%", width: ifPct + "%", background: ACCENT, borderRadius: 99 }}/>
+              </div>
+
+              {!ifPlan ? (
+                <div style={{ textAlign: "center", padding: "10px 4px" }}>
+                  <div style={{ fontSize: 11, color: C.muted, marginBottom: 9 }}>Ainda não tem um plano pra chegar nessa meta.</div>
+                  <button onClick={criarIfPlan} style={{ background: ACCENT, border: "none", borderRadius: 8, padding: "8px 16px", color: "#04222a", fontWeight: 700, fontSize: 11, cursor: "pointer" }}>Criar plano</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, margin: "4px 0 6px" }}>OBJETIVOS SECUNDÁRIOS</div>
+                  {ifPlan.metas.map(m => {
+                    const live = liveYGoals.find(g => g.title === m.title);
+                    const done = live?.done || false;
+                    return (
+                      <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+                        <button onClick={() => YESOD_ACTION_HANDLERS.toggle_ygoal({ match: m.title })}
+                          style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: "pointer",
+                            border: "1.5px solid " + (done ? "#10b981" : C.b2), background: done ? "#10b981" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                          {done && <Ico n="check" size={9} color="#fff" sw={2.5}/>}
+                        </button>
+                        <span style={{ flex: 1, fontSize: 11, color: done ? C.muted : C.text, textDecoration: done ? "line-through" : "none" }}>{m.title}</span>
+                        <button onClick={() => removeIfMeta(m.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, opacity: .5, display: "flex" }}>
+                          <Ico n="x" size={10}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <input value={ifMetaInput} onChange={e => setIfMetaInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addIfMeta()}
+                      placeholder="Ex: Elevar poupança pra 25%"
+                      style={{ flex: 1, background: C.bg, border: "1px solid " + C.b2, borderRadius: 8, padding: "7px 10px", color: C.text, fontSize: 11, outline: "none" }}/>
+                    <button onClick={addIfMeta} style={{ background: C.b1, border: "none", borderRadius: 8, width: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Ico n="plus" size={12} color={C.dim}/>
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: 9, color: "#b45309", fontWeight: 700, letterSpacing: 1, margin: "14px 0 6px" }}>AÇÕES</div>
+                  {ifPlan.acoes.map(a => {
+                    const live = liveYHabits.find(h => h.title === a.title);
+                    const done = live?.done || false;
+                    return (
+                      <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+                        <button onClick={() => YESOD_ACTION_HANDLERS.toggle_yhabit({ match: a.title })}
+                          style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: "pointer",
+                            border: "1.5px solid " + (done ? "#b45309" : C.b2), background: done ? "#b45309" : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                          {done && <Ico n="check" size={9} color="#fff" sw={2.5}/>}
+                        </button>
+                        <span style={{ flex: 1, fontSize: 11, color: done ? C.muted : C.text, textDecoration: done ? "line-through" : "none" }}>{a.title}</span>
+                        <span style={{ fontSize: 9, color: C.muted }}>{a.freq}</span>
+                        <button onClick={() => removeIfAcao(a.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, opacity: .5, display: "flex" }}>
+                          <Ico n="x" size={10}/>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                    <input value={ifAcaoInput} onChange={e => setIfAcaoInput(e.target.value)} onKeyDown={e => e.key === "Enter" && addIfAcao()}
+                      placeholder="Ex: Revisar orçamento"
+                      style={{ flex: 1, background: C.bg, border: "1px solid " + C.b2, borderRadius: 8, padding: "7px 10px", color: C.text, fontSize: 11, outline: "none" }}/>
+                    <select value={ifAcaoFreq} onChange={e => setIfAcaoFreq(e.target.value)}
+                      style={{ background: C.bg, border: "1px solid " + C.b2, borderRadius: 8, padding: "7px 6px", color: C.text, fontSize: 10, outline: "none" }}>
+                      <option>Diário</option><option>Semanal</option><option>Mensal</option>
+                    </select>
+                    <button onClick={addIfAcao} style={{ background: C.b1, border: "none", borderRadius: 8, width: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Ico n="plus" size={12} color={C.dim}/>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>METAS</div>
         {metas.length === 0 && (
@@ -177,6 +325,24 @@ export default function KetherModule({ onBack, dark, setDark }) {
               <div style={{ fontSize: 12, fontWeight: 600, color: item.done ? C.muted : C.text, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</div>
               <div style={{ fontSize: 9, color: item.color }}>{item.moduleLabel}</div>
             </div>
+          </div>
+        ))}
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "20px 0 10px" }}>
+          <span style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>PROJETOS</span>
+        </div>
+        {projects.length === 0 && (
+          <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 12 }}>
+            Nenhum projeto no Profissional ainda.
+          </div>
+        )}
+        {projects.map(p => (
+          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: C.card, border: "1px solid " + typeColor(p.type) + "22", borderRadius: 12, marginBottom: 7 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{p.name}</div>
+              <div style={{ fontSize: 9, color: typeColor(p.type) }}>Profissional · {typeLabel(p.type)}</div>
+            </div>
+            <span style={{ fontSize: 9, fontWeight: 700, color: typeColor(p.type), background: typeColor(p.type) + "18", borderRadius: 6, padding: "3px 8px" }}>{phaseLabel(p)}</span>
           </div>
         ))}
 

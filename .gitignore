@@ -6,3 +6,13 @@ Thumbs.db
 # Obsidian vault local state (not shared content)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+
+# Rede de segurança geral — cada projeto já tem seu próprio .gitignore mais
+# específico (ex: Projetos/Life Tree/preview/.gitignore), isso aqui é só reforço
+# pra nunca commitar dependências/segredos por acidente em algum projeto futuro
+# que ainda não tenha o próprio .gitignore.
+node_modules
+dist
+.env
+.env.local
+.vercel

@@ -52,6 +52,16 @@ Réplica exata do exemplo do usuário: desejo "Morar na Itália" com 3 metas der
 ### Achado no processo — bug real corrigido de quebra
 A lista "SEFIROT → ÁREAS" do Config sempre abria a página genérica de área (`AreaPage`, já removida — ver abaixo), mesmo pros 9 sefirot que já tinham módulo de verdade — só a árvore principal roteava certo. Consolidado numa função só (`goToSefira`), usada pelos dois lugares agora — clicar em qualquer sefirá no Config abre o módulo real, igual clicar na árvore.
 
+## Terceira peça — "Projetos" do Hod, read-only (26/08/2026)
+
+Pedido do usuário depois de fechar a decomposição do Yesod: "os objetivos e projetos [precisam refletir] no desejo" — a peça 1 (Metas) já cobria objetivos de 3 módulos, mas nenhum módulo tem um conceito de **projeto** de verdade exceto o Hod (motor de projetos com fase/canvas/clientes, ver [[08 Hod]]). Adicionada uma 3ª seção "PROJETOS" entre Metas e Desejos, espelhando `lifetree_hod_projects` inteiro (todos os projetos, os 3 tipos — serviço/negócio/conteúdo).
+
+**Por que read-only, sem toggle:** diferente de Metas (`done` booleano, 1 toque), a fase de um projeto (`exploracao→validacao→estruturacao→escala` pro tipo negócio, etc. — 4 conjuntos de fases por tipo, ver `hod/constants.js` `PHASES_BY_TYPE`) avança por critério de múltiplos passos (`CRITERIA_BY_TYPE` — ex. "pelo menos 3 experimentos concluídos", "pelo menos 1 cliente ativo"), não cabe num toque só. Mesma lógica já usada pro Geburah/Binah no Controle e pro Netzach/Chokmah/Binah aqui no Kether: read-only, badge de status, edição continua exclusiva do módulo de origem.
+
+Reaproveitados os helpers puros já existentes do Hod em vez de duplicar lógica de label/cor — `typeColor`/`typeLabel`/`phaseLabel` (`hod/helpers.js`, extraídos no passo de decomposição do Hod em 22/08/2026), os mesmos que `hod/ConfigTab.jsx` já usa pro "Índice de tudo" de lá. `useCoachDataSync("hod", refresh)` já existia (peça das Metas), não precisou de fiação nova pra sincronização.
+
+Testado ao vivo: os 3 projetos seed do Hod (Professor Particular/serviço/Operação, Despachante Digital Europa/negócio/Exploração, Canal LifeTree/conteúdo/Ideação) aparecem com badge de fase e cor por tipo corretos, batendo com o que `hod/ConfigTab.jsx` mostra pro mesmo dado. `npm run build`/`eslint` limpos, zero erro de console.
+
 ## Camada de RPG do hub removida (19/08/2026)
 Pedido do usuário, na mesma sessão: já que Controle/Malkuth cobre hábitos e Desejo/Kether cobre metas — dos módulos reais —, a lista de desejos genérica do hub (título + custo em moedas) e os elementos de "evolução de RPG" (moedas, nível/XP global) perderam sentido. Removidos de `App.jsx`:
 - **Moedas + nível/XP global** — estado (`coins`,`xp`,`lvl`/`getLevel`/`LVL_T`/`LVL_N`), badge do header, barra de XP abaixo do header, card de nível na aba "Status", "Jornada de Níveis".
