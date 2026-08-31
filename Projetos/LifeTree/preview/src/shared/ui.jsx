@@ -57,6 +57,26 @@ export function Sheet({ C, title, onClose, children, wide }) {
   );
 }
 
+// Aceita tanto "245.90" (ponto-decimal, já testado/relado em toda a base) quanto o padrão
+// brasileiro de milhar ("500.000" → 500000, "1.234.567,89" → 1234567.89) — achado 29/08/2026:
+// usuário reportou não conseguir ajustar a Meta de IF do Yesod; causa raiz era digitar
+// "500.000" pra dizer "500 mil" e o campo salvar `Number("500.000")` = 500 (ponto = decimal,
+// zeros viram casas decimais, sem aviso nenhum). Heurística: se tem vírgula, ela é o separador
+// decimal e todo "." antes dela é milhar (removido); sem vírgula, um "." com exatamente 3
+// dígitos depois (e nada de decimal de moeda tem 3 casas) é tratado como milhar — só 1-2
+// dígitos depois do único "." continua sendo decimal, preservando o caso já testado "245.90".
+export function parseBRNumber(raw) {
+  if (raw.includes(",")) {
+    const [intPart, decPart] = raw.split(",");
+    return Number(intPart.replace(/\./g, "") + "." + (decPart || ""));
+  }
+  const dotGroups = raw.split(".");
+  if (dotGroups.length > 1 && dotGroups[dotGroups.length - 1].length === 3) {
+    return Number(dotGroups.join(""));
+  }
+  return Number(raw);
+}
+
 export function FI({ C, label, value, onChange, type = "text", placeholder, min, max, step, hint }) {
   const isNum = type === "number";
   // Inputs decimais precisam de estado de texto próprio: um <input type="number"> nativo
@@ -75,10 +95,10 @@ export function FI({ C, label, value, onChange, type = "text", placeholder, min,
         onChange={e => {
           if (!isNum) { onChange(e.target.value); return; }
           const raw = e.target.value;
-          if (!/^-?\d*\.?\d*$/.test(raw)) return;
+          if (!/^-?[\d.]*,?\d*$/.test(raw)) return;
           setText(raw);
-          if (raw === "" || raw === "-" || raw === ".") { onChange(0); return; }
-          const n = Number(raw);
+          if (raw === "" || raw === "-" || raw === "." || raw === ",") { onChange(0); return; }
+          const n = parseBRNumber(raw);
           if (!Number.isNaN(n)) onChange(n);
         }}
         style={{ width: "100%", background: C.bg, border: "1px solid " + C.b2, borderRadius: 10, padding: "10px 13px", color: C.text, fontSize: 13, outline: "none", boxSizing: "border-box" }} />
@@ -136,4 +156,134 @@ export function Btn({ children, onClick, color, sm, outline, full = true, style:
 
 export function Badge({ label, color = "#818cf8" }) {
   return <span style={{ fontSize: 9, padding: "3px 8px", borderRadius: 99, background: color + "22", color, fontWeight: 700, whiteSpace: "nowrap", letterSpacing: .3 }}>{label}</span>;
+}
+
+// GoalCard/PlanoCard — genéricos, movidos do mockup de Geburah (geburah/ObjetivosTab.jsx,
+// descartado em 29/08/2026 na revisão de arquitetura do objetivo+plano com IA — ver
+// C:\Users\mcrel\.claude\plans\majestic-roaming-umbrella.md) pra virar reaproveitável pelos
+// módulos que entrarem no motor genérico (Yesod primeiro). Mesmo motivo do resto deste
+// arquivo: um componente só, não uma cópia por módulo.
+
+function CheckIcon({ color = "currentColor", size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+function PlusIcon({ color = "currentColor", size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+// Card de resumo do objetivo — % + gauge, clique abre o detalhe. Visual copiado 1:1 do card
+// da Meta de Independência Financeira do Yesod (padrão que o usuário pediu explicitamente
+// pra generalizar, 29/08/2026) — `statLine` é livre pra caber tanto o caso com métrica real
+// ("R$X de R$Y") quanto o caso sem métrica (% vem dos passos do plano concluídos).
+export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick }) {
+  const p = Math.max(0, Math.min(100, pct || 0));
+  return (
+    <div onClick={onClick} style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
+      {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
+      <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
+      </div>
+    </div>
+  );
+}
+
+// Linha de texto editável inline (passo do plano ou item de impacto) — input sem borda
+// visível que parece texto estático até o usuário tocar nele, com um × pra apagar a linha.
+function EditableRow({ C, value, onChange, onRemove, strike, dim }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          flex: 1, border: "none", background: "transparent", outline: "none", padding: 0,
+          fontSize: 11, fontFamily: "inherit", color: dim ? C.muted : C.text,
+          textDecoration: strike ? "line-through" : "none",
+        }}
+      />
+      <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, opacity: 0.5, flexShrink: 0 }}>
+        <XIcon color={C.muted} size={11} />
+      </button>
+    </div>
+  );
+}
+function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
+  return (
+    <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 0", display: "flex", alignItems: "center", gap: 4, color: accent, fontSize: 10, fontWeight: 700 }}>
+      <PlusIcon color={accent} size={10} /> {label}
+    </button>
+  );
+}
+
+// Plano gerado pelo Coach — passo a passo + impacto positivo/negativo, tudo editável.
+// `onUpdate` recebe um updater (prev => next), mesma assinatura de um setState — quem chama
+// decide se aplica direto (plano ainda em confirmação, ex: `pendingCoachAction`) ou dentro de
+// uma lista já persistida (objetivo salvo) — ver usos em App.jsx/yesod/ObjetivosTab.jsx.
+export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8" }) {
+  const editStep = (id, title) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, title } : s)) }));
+  const removeStep = (id) => onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) }));
+  const addStep = () => onUpdate((p) => ({ ...p, steps: [...p.steps, { id: "st" + Date.now(), title: "", done: false }] }));
+
+  const editImpacto = (kind, i, text) => onUpdate((p) => ({ ...p, [kind]: p[kind].map((t, idx) => (idx === i ? text : t)) }));
+  const removeImpacto = (kind, i) => onUpdate((p) => ({ ...p, [kind]: p[kind].filter((_, idx) => idx !== i) }));
+  const addImpacto = (kind) => onUpdate((p) => ({ ...p, [kind]: [...p[kind], ""] }));
+
+  return (
+    <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 14 }}>
+      <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PASSO A PASSO</div>
+      {plano.steps.map((s) => (
+        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
+          <button
+            onClick={() => onToggleStep(s.id)}
+            style={{
+              width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer", padding: 0,
+              border: "1.5px solid " + (s.done ? "#10b981" : C.b2), background: s.done ? "#10b981" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            {s.done && <CheckIcon color="#fff" size={10} />}
+          </button>
+          <div style={{ flex: 1 }}>
+            <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} onRemove={() => removeStep(s.id)} strike={s.done} dim={s.done} />
+          </div>
+        </div>
+      ))}
+      <AddRowBtn C={C} onClick={addStep} label="Adicionar passo" accent={accent} />
+
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 9, color: "#10b981", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>IMPACTO POSITIVO</div>
+          {plano.impactoPositivo.map((t, i) => (
+            <div key={i} style={{ marginBottom: 5 }}>
+              <EditableRow C={C} value={t} onChange={(v) => editImpacto("impactoPositivo", i, v)} onRemove={() => removeImpacto("impactoPositivo", i)} />
+            </div>
+          ))}
+          <AddRowBtn C={C} onClick={() => addImpacto("impactoPositivo")} label="Adicionar" accent={accent} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 9, color: "#ef4444", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PONTOS DE ATENÇÃO</div>
+          {plano.impactoNegativo.map((t, i) => (
+            <div key={i} style={{ marginBottom: 5 }}>
+              <EditableRow C={C} value={t} onChange={(v) => editImpacto("impactoNegativo", i, v)} onRemove={() => removeImpacto("impactoNegativo", i)} />
+            </div>
+          ))}
+          <AddRowBtn C={C} onClick={() => addImpacto("impactoNegativo")} label="Adicionar" accent={accent} />
+        </div>
+      </div>
+
+      <div style={{ fontSize: 9, color: C.muted, textAlign: "center", marginTop: 10 }}>
+        Toque em qualquer passo ou impacto pra editar o texto — × remove a linha.
+      </div>
+    </div>
+  );
 }

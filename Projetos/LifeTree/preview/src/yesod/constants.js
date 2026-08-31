@@ -37,7 +37,7 @@ export const accLabel = (a, banks) => a.isCash ? "Carteira" : (banks.find(b=>b.i
 export const D_CATS_OUT = ["Alimentação","Moradia","Transporte","Saude","Educação","Lazer","Vestuário","Serviços","Tecnologia","Assinaturas","Outros"];
 export const D_CATS_IN  = ["Salario","Freelance","Aluguel recebido","Reembolso","Outros"];
 export const PAY_METHODS = [{v:"credito",l:"Credito"},{v:"debito",l:"Debito"},{v:"pix",l:"PIX"},{v:"ted",l:"TED"},{v:"dinheiro",l:"Dinheiro"}];
-export const TABS = [{id:"yesod",icon:"treelife",label:"Yesod"},{id:"orc",icon:"alvo",label:"Orçamento"},{id:"bolsos",icon:"bank",label:"Bolsos"},{id:"goals",icon:"target",label:"Objetivos"},{id:"cfg",icon:"gear",label:"Config"}];
+export const TABS = [{id:"yesod",icon:"treelife",label:"Yesod"},{id:"orc",icon:"barchart",label:"Orçamento"},{id:"bolsos",icon:"bank",label:"Bolsos"},{id:"goals",icon:"target",label:"Objetivos"},{id:"cfg",icon:"gear",label:"Config"}];
 // A aba Yesod tinha um controle segmentado Visão Geral/IF (Yesod/Fluxo/IF originalmente,
 // 01/08/2026) — a seção IF saiu em 25/08/2026 pra virar a aba própria "Objetivos" (junto
 // com as Metas financeiras, que moraram na Visão Geral até então), sobrando só Visão

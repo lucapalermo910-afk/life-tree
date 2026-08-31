@@ -23,6 +23,7 @@ const IC = {
   layers:  ["M12 2 2 7l10 5 10-5-10-5Z","M2 17l10 5 10-5","M2 12l10 5 10-5"],
   compass: ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z","M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"],
   layout:  ["M3 3h7v7H3z","M14 3h7v7h-7z","M14 14h7v7h-7z","M3 14h7v7H3z"],
+  treelife:["M12 2v20","M12 7l-4-4","M12 7l4-4","M12 13l-5-4","M12 13l5-4","M12 19l-4-3","M12 19l4-3","circle cx='12' cy='2' r='2'","circle cx='8' cy='11' r='2'","circle cx='16' cy='11' r='2'","circle cx='12' cy='8' r='2'","circle cx='8' cy='17' r='2'","circle cx='16' cy='17' r='2'","circle cx='12' cy='14' r='2'","circle cx='12' cy='20' r='2'"],
 };
 
 function Ico({ n, size=16, color="currentColor", sw=1.5 }) {
@@ -30,7 +31,7 @@ function Ico({ n, size=16, color="currentColor", sw=1.5 }) {
   const parts = Array.isArray(d) ? d : [d];
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
-      {parts.map((p,i) => <path key={i} d={p}/>)}
+      {parts.map((p,i) => { if(p.startsWith("circle")){const m=p.match(/cx='([\d.]+)' cy='([\d.]+)' r='([\d.]+)'/);if(m)return <circle key={i} cx={m[1]} cy={m[2]} r={m[3]} fill="none"/>;} return <path key={i} d={p}/>; })}
     </svg>
   );
 }
@@ -60,7 +61,7 @@ function ScoreRing({ value, size=90, color=ACCENT, label }) {
 }
 
 const TABS = [
-  {id:"binah",  icon:"compass", label:"Binah"},
+  {id:"binah",  icon:"treelife",label:"Binah"},
   {id:"trilhas",icon:"layers",  label:"Trilhas"},
   {id:"leitura",icon:"book",    label:"Leitura"},
   {id:"cfg",    icon:"gear",    label:"Config"},
@@ -76,13 +77,6 @@ const FOCUS_OPTS = [{v:"atual",l:"Foco Atual"},{v:"explorando",l:"Explorando"},{
 const LIVRO_STATUS = [{v:"quero_ler",l:"Quero Ler"},{v:"lendo",l:"Lendo"},{v:"lido",l:"Lido"},{v:"pausado",l:"Pausado"}];
 const READ_MINUTES = [10,20,30,45];
 
-const WIDGET_CATALOG = [
-  {id:"score",       label:"Score Binah",   desc:"Número principal + sub-scores + barra", defaultOn:true},
-  {id:"lendo_agora", label:"Lendo Agora",   desc:"Livros com status 'Lendo'",    defaultOn:true},
-  {id:"trilhas_hoje",label:"Trilhas em Foco",desc:"Trilhas marcadas como foco atual",defaultOn:true},
-];
-const DEFAULT_WIDGETS = WIDGET_CATALOG.filter(w=>w.defaultOn).map(w=>w.id);
-
 const D_READING_LOG = []; // [{id,date,livroId,minutos}]
 
 export default function BinahModule({ onBack, dark, setDark }) {
@@ -96,11 +90,11 @@ export default function BinahModule({ onBack, dark, setDark }) {
   const close  = () => { setSh(null); setF({}); };
   const openSh = (name,init) => { setF(init||{}); setSh(name); };
 
-  const [tracks,     setTracks]     = useState(D_TRACKS);
-  const [livros,     setLivros]     = useState(D_LIVROS);
+  // Seed de demo removido em 31/08/2026 (pedido do usuário — nova versão inicia em branco)
+  const [tracks,     setTracks]     = useState([]);
+  const [livros,     setLivros]     = useState([]);
   const [readingLog, setReadingLog] = useState(D_READING_LOG);
   const [xp, setXp] = useState(0);
-  const [activeWidgets, setActiveWidgets] = useState(DEFAULT_WIDGETS);
 
   // ── PERSISTÊNCIA ─────────────────────────────────────────────────────────
   const PFX = "lifetree_binah_";
@@ -113,7 +107,6 @@ export default function BinahModule({ onBack, dark, setDark }) {
     const lv_ = lsGet("livros");        if(lv_) setLivros(lv_);
     const rl_ = lsGet("readingLog");    if(rl_) setReadingLog(rl_);
     const xp_ = lsGet("xp");            if(xp_ !== null) setXp(xp_);
-    const w_  = lsGet("activeWidgets"); if(w_)  setActiveWidgets(w_);
     setStorageReady(true);
   }, []);
   const reloadFromStorage = () => {
@@ -128,7 +121,6 @@ export default function BinahModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageReady) return; lsSet("livros", livros); }, [livros, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("readingLog", readingLog); }, [readingLog, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("xp", xp); }, [xp, storageReady]);
-  useEffect(() => { if(!storageReady) return; lsSet("activeWidgets", activeWidgets); }, [activeWidgets, storageReady]);
 
   // ── Computed ────────────────────────────────────────────────────────────────
   const streakFromDates = (dates) => {
@@ -177,69 +169,25 @@ export default function BinahModule({ onBack, dark, setDark }) {
 
   const cycleFocus = f => f==="atual" ? "explorando" : f==="explorando" ? "arquivada" : "atual";
 
-  // ─── Widget customizer ────────────────────────────────────────────────────
-  const W = (id) => activeWidgets.includes(id);
-  const WidgetCustomizer = () => (
-    <Sheet title="Personalizar Dashboard" onClose={close}>
-      <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Ative ou desative os blocos do seu dashboard.</div>
-      {WIDGET_CATALOG.map(w=>{
-        const on = activeWidgets.includes(w.id);
-        return (
-          <div key={w.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 12px",background:C.bg,borderRadius:10,marginBottom:8,border:"1px solid "+(on?ACCENT+"44":C.b1)}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:700,color:on?C.text:C.muted}}>{w.label}</div>
-              <div style={{fontSize:9,color:C.muted}}>{w.desc}</div>
-            </div>
-            <button onClick={()=>setActiveWidgets(prev=>on?prev.filter(x=>x!==w.id):[...prev,w.id])}
-              style={{width:40,height:22,borderRadius:99,cursor:"pointer",border:"none",background:on?ACCENT:C.b2,position:"relative",transition:"background .2s",flexShrink:0}}>
-              <div style={{position:"absolute",top:3,left:on?20:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
-            </button>
-          </div>
-        );
-      })}
-      <div style={{marginTop:6}}>
-        <Btn color={C.muted} outline sm full={false} onClick={()=>setActiveWidgets(DEFAULT_WIDGETS)}>Restaurar padrão</Btn>
-      </div>
-    </Sheet>
-  );
-
   // ── Binah Tab (hub) ────────────────────────────────────────────────────────
+  // Sem "Personalizar" desde 30/08/2026 (pedido do usuário) — os 3 blocos abaixo (score,
+  // lendo agora, trilhas em foco) sempre aparecem agora, sem toggle de ativar/desativar.
   const BinahTab = () => (
     <div style={{animation:"slideUp .35s ease"}}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-        <button onClick={()=>openSh("widgets")}
-          style={{display:"flex",alignItems:"center",gap:5,background:C.card,border:"1px solid "+C.b1,borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:C.muted}}>
-          <Ico n="layout" size={11} color={C.muted}/> Personalizar
-        </button>
-      </div>
-
-      {W("score")&&<Card style={{background:`linear-gradient(135deg,${ACCENT}22,${ACCENT}06)`,border:`1px solid ${ACCENT}44`,marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-          <div>
-            <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>BINAH — ENTENDIMENTO</div>
-            <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1}}>{binahScore}<span style={{fontSize:18}}>%</span></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5,marginTop:4}}>
-            {[
-              {l:"Trilhas de Estudo", v:trilhaScore, c:ACCENT,    t:"trilhas"},
-              {l:"Leitura",           v:leituraScore,c:"#06b6d4", t:"leitura"},
-            ].map(m=>(
-              <div key={m.l} onClick={()=>setTab(m.t)} style={{background:C.card,borderRadius:8,padding:"5px 6px",textAlign:"center",cursor:"pointer",border:`1px solid ${m.c}22`}}>
-                <div style={{fontSize:7,color:C.muted}}>{m.l}</div>
-                <div style={{fontSize:14,fontWeight:900,color:m.c}}>{m.v}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Simplificado em 30/08/2026 — antes tinha 2 mini-cards (Trilhas de Estudo/Leitura)
+          espremidos ao lado do score grande; esse detalhamento já existe nas próprias abas. */}
+      <Card style={{background:`linear-gradient(135deg,${ACCENT}22,${ACCENT}06)`,border:`1px solid ${ACCENT}44`,marginBottom:14}}>
+        <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>BINAH — ENTENDIMENTO</div>
+        <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1,marginBottom:10}}>{binahScore}<span style={{fontSize:18}}>%</span></div>
         <Bar value={binahScore} color={`linear-gradient(90deg,${ACCENT},#06b6d4)`} height={6}/>
-      </Card>}
+      </Card>
 
       {readStreak>0&&<Card style={{marginBottom:14,textAlign:"center"}}>
         <div style={{fontSize:22}}>🔥 {readStreak}</div>
         <div style={{fontSize:9,color:C.muted,marginTop:2}}>dias seguidos lendo</div>
       </Card>}
 
-      {W("lendo_agora")&&lendoAgora.length>0&&(
+      {lendoAgora.length>0&&(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>LENDO AGORA</div>
           {lendoAgora.map(l=>(
@@ -254,7 +202,7 @@ export default function BinahModule({ onBack, dark, setDark }) {
         </Card>
       )}
 
-      {W("trilhas_hoje")&&trilhasFoco.length>0&&(
+      {trilhasFoco.length>0&&(
         <Card>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>TRILHAS EM FOCO</div>
           {trilhasFoco.map(t=>(
@@ -404,7 +352,7 @@ export default function BinahModule({ onBack, dark, setDark }) {
         </Sec>
         <Btn color="#ef4444" outline onClick={()=>{
           if(!confirm("Apagar todos os dados do Binah?")) return;
-          setTracks(D_TRACKS); setLivros(D_LIVROS); setReadingLog([]); setXp(0); setActiveWidgets(DEFAULT_WIDGETS);
+          setTracks([]); setLivros([]); setReadingLog([]); setXp(0);
           toast_("Dados reiniciados","#ef4444");
         }}>Reiniciar dados do módulo</Btn>
       </div>
@@ -529,9 +477,9 @@ export default function BinahModule({ onBack, dark, setDark }) {
           <div style={{fontSize:17,fontWeight:900,letterSpacing:-.3}}>Conhecimento</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",background:"#fbbf2415",padding:"4px 10px",borderRadius:99}}>
-            {xp} XP
-          </div>
+          {/* Badge de XP removido em 30/08/2026 (pedido do usuário — descartado por enquanto,
+              mecânica de XP/recompensa vai ser revista mais adiante). xp/setXp continuam
+              rastreando internamente (logReading ainda incrementa), só não exibe mais. */}
           <button onClick={()=>setDark(d=>!d)} style={{background:C.card,border:`1px solid ${C.b1}`,borderRadius:9,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
             <Ico n={dark?"sun":"moon"} size={14} color={C.dim}/>
           </button>
@@ -549,7 +497,7 @@ export default function BinahModule({ onBack, dark, setDark }) {
         {TABS.map(t=>{
           const a = currentTab===t.id;
           return (
-            <button key={t.id} onClick={()=>t.id===TABS[0].id?onBack():setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}>
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}>
               <div style={{width:36,height:30,borderRadius:9,background:a?ACCENT+"18":"transparent",border:a?`1px solid ${ACCENT}30`:"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
                 <Ico n={t.icon} size={14} color={a?ACCENT:C.muted}/>
               </div>
@@ -560,7 +508,6 @@ export default function BinahModule({ onBack, dark, setDark }) {
       </div>
 
       {renderSheet()}
-      {sh==="widgets"&&WidgetCustomizer()}
     </div>
     </ThemeCtx.Provider>
   );

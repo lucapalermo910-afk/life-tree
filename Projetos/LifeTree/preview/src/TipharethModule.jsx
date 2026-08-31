@@ -92,22 +92,6 @@ const D_MOOD_LOG=[]; // [{id,date,mood,influencia,gratidao}] — upsert por dia 
 const D_MEDICATIONS=[]; // [{id,name,dosage,times:[...],notes,active}]
 const D_MEDICATION_LOG=[]; // [{id,medId,date,time,taken}]
 
-// ─── WIDGET CATALOG ── todos os blocos disponíveis para o dashboard ────────────
-const WIDGET_CATALOG = [
-  {id:"score",    label:"Score Tiphareth", desc:"Número principal + sub-scores + barra", defaultOn:true,  size:"full"},
-  {id:"mood",     label:"Humor do dia",   desc:"Seletor de humor",                  defaultOn:true,  size:"full"},
-  {id:"mood_history",label:"Diário de Humor",desc:"Histórico dos últimos 14 dias + refletir",defaultOn:true, size:"full"},
-  {id:"streaks",  label:"Streaks",        desc:"Dias seguidos registrando humor/rotina", defaultOn:true, size:"full"},
-  {id:"mood_correlation",label:"Humor × Hábitos",desc:"Correlação entre humor e hábitos completos",defaultOn:true, size:"full"},
-  {id:"habitos_hoje",label:"Hábitos de hoje",desc:"Lista rápida de hábitos",        defaultOn:true,  size:"full"},
-  {id:"remedios_hoje",label:"Remédios de hoje",desc:"Checklist de doses do dia",    defaultOn:false, size:"full"},
-  {id:"rotinas_quick",label:"Rotinas rápidas",desc:"Progresso das rotinas hoje",    defaultOn:false, size:"full"},
-  {id:"metas_widget",label:"Metas",       desc:"Progresso das metas",              defaultOn:false, size:"full"},
-  {id:"xp_bar",   label:"XP & Nível",    desc:"Barra de experiência e nível",      defaultOn:false, size:"full"},
-  {id:"quote",    label:"Frase do dia",   desc:"Afirmação motivacional",            defaultOn:false, size:"full"},
-];
-const DEFAULT_WIDGETS = WIDGET_CATALOG.filter(w=>w.defaultOn).map(w=>w.id);
-
 // Leitura crua de localStorage fora do prefixo do Tiphareth — usada só pelo hub de
 // hábitos cross-módulo abaixo (sempre leitura, nunca escreve nada em outro módulo).
 function readOtherModule(key,fb){try{const v=localStorage.getItem(key);return v!==null?JSON.parse(v):fb;}catch{return fb;}}
@@ -223,8 +207,6 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
   const [produtos,       _setP] =useState(D_PRODUTOS);
   const [xp,             _setXP]=useState(0);
   const [mood,           _setM] =useState("calmo");
-  // widget config
-  const [activeWidgets,  _setW] =useState(DEFAULT_WIDGETS);
   const [moodLog,        _setML]=useState(D_MOOD_LOG);
   const [medications,    _setMeds]=useState(D_MEDICATIONS);
   const [medicationLog,  _setMedLog]=useState(D_MEDICATION_LOG);
@@ -240,7 +222,6 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
   const setP =mk(_setP, "produtos");
   const setXP=mk(_setXP,"xp");
   const setM =v=>{_setM(v);sSet("mood",v);};
-  const setW =mk(_setW, "activeWidgets");
   const setML=mk(_setML,"moodLog");
   const setMeds=mk(_setMeds,"medications");
   const setMedLog=mk(_setMedLog,"medicationLog");
@@ -274,14 +255,14 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
 
   useEffect(()=>{
     (async()=>{
-      const[ah,bh,rot,g,pr,xpv,mv,wv,ml,meds,medlog,hm,rcl]=await Promise.all([
+      const[ah,bh,rot,g,pr,xpv,mv,ml,meds,medlog,hm,rcl]=await Promise.all([
         sGet("aparenciaHabits",D_APARENCIA_HABITS),sGet("bemestarHabits",D_BEMESTAR_HABITS),
         sGet("rotinas",D_ROTINAS),sGet("goals",D_GOALS),sGet("produtos",D_PRODUTOS),
-        sGet("xp",0),sGet("mood","calmo"),sGet("activeWidgets",DEFAULT_WIDGETS),
+        sGet("xp",0),sGet("mood","calmo"),
         sGet("moodLog",D_MOOD_LOG),sGet("medications",D_MEDICATIONS),sGet("medicationLog",D_MEDICATION_LOG),
         sGet("hubModules",DEFAULT_HUB_MODULES),sGet("routineCompletionLog",[]),
       ]);
-      _setAH(ah);_setBH(bh);_setR(rot);_setG(g);_setP(pr);_setXP(xpv);_setM(mv);_setW(wv);
+      _setAH(ah);_setBH(bh);_setR(rot);_setG(g);_setP(pr);_setXP(xpv);_setM(mv);
       _setML(ml);_setMeds(meds);_setMedLog(medlog);_setHM({...DEFAULT_HUB_MODULES,...hm});_setRCL(rcl);
       setLoaded(true);
     })();
@@ -299,7 +280,6 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
     _setP(sGet("produtos",D_PRODUTOS));
     _setXP(sGet("xp",0));
     _setM(sGet("mood","calmo"));
-    _setW(sGet("activeWidgets",DEFAULT_WIDGETS));
     _setML(sGet("moodLog",D_MOOD_LOG));
     _setMeds(sGet("medications",D_MEDICATIONS));
     _setMedLog(sGet("medicationLog",D_MEDICATION_LOG));
@@ -312,8 +292,6 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
   const goalScore  =goals.length?Math.round(goals.filter(g=>g.done).length/goals.length*100):0;
   const rotinaScore=rotinas.length?Math.round(rotinas.reduce((s,r)=>s+r.steps.filter(st=>st.done).length/(r.steps.length||1),0)/rotinas.length*100):0;
   const tiphScore  =Math.round(habitScore*0.35+goalScore*0.3+rotinaScore*0.35);
-  const level = Math.floor(xp/200)+1;
-  const xpInLevel = xp%200;
 
   // Loga a conclusão de uma rotina (todas as etapas feitas) uma vez por dia — alimenta o
   // streak de rotinas abaixo. Chamado depois de qualquer toggle de passo; upsert por
@@ -373,78 +351,20 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
     });
   };
 
-  // ─── WIDGET CUSTOMIZER SHEET ─────────────────────────────────────────────────
-  const WidgetCustomizer=()=>(
-    <Sheet title="Personalizar Dashboard" onClose={close}>
-      <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Ative ou desative os blocos do seu dashboard. Arraste para reordenar em breve.</div>
-      {WIDGET_CATALOG.map(w=>{
-        const on=activeWidgets.includes(w.id);
-        return(
-          <div key={w.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 12px",background:C.bg,borderRadius:10,marginBottom:8,border:"1px solid "+(on?ACCENT+"44":C.b1)}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:700,color:on?C.text:C.muted}}>{w.label}</div>
-              <div style={{fontSize:9,color:C.muted}}>{w.desc}</div>
-            </div>
-            <button onClick={()=>setW(prev=>on?prev.filter(x=>x!==w.id):[...prev,w.id])}
-              style={{width:40,height:22,borderRadius:99,cursor:"pointer",border:"none",background:on?ACCENT:C.b2,position:"relative",transition:"background .2s",flexShrink:0}}>
-              <div style={{position:"absolute",top:3,left:on?20:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
-            </button>
-          </div>
-        );
-      })}
-      <div style={{marginTop:6}}>
-        <Btn color={C.muted} outline sm full={false} onClick={()=>setW(DEFAULT_WIDGETS)}>Restaurar padrão</Btn>
-      </div>
-    </Sheet>
-  );
-
   // ─── TIPHARETH TAB ────────────────────────────────────────────────────────────
-  const W=(id)=>activeWidgets.includes(id);
-
+  // Sem "Personalizar" desde 30/08/2026 (pedido do usuário) — os widgets abaixo sempre aparecem.
   const TiphTab=()=>(
     <div style={{animation:"slideUp .3s ease"}}>
-      {/* Botão customizar */}
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-        <button onClick={()=>openSh("widgets")}
-          style={{display:"flex",alignItems:"center",gap:5,background:C.card,border:"1px solid "+C.b1,borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:C.muted}}>
-          <Ico n="layout" size={11} color={C.muted}/> Personalizar
-        </button>
-      </div>
+      {/* Score principal — simplificado em 30/08/2026 (antes tinha 3 mini-cards de
+          Hábitos/Rotinas/Metas espremidos ao lado do score grande); XP & Nível removido junto */}
+      <Card style={{background:"linear-gradient(135deg,"+ACCENT+"22,"+ACCENT+"06)",border:"1px solid "+ACCENT+"44",marginBottom:14}}>
+        <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>TIPHARETH — AUTOCUIDADO</div>
+        <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1,marginBottom:10}}>{tiphScore}<span style={{fontSize:18}}>%</span></div>
+        <ProgressBar value={tiphScore} color={"linear-gradient(90deg,"+ACCENT+",#fbbf24)"} height={6}/>
+      </Card>
 
-      {/* WIDGET: Score principal */}
-      {W("score")&&(
-        <Card style={{background:"linear-gradient(135deg,"+ACCENT+"22,"+ACCENT+"06)",border:"1px solid "+ACCENT+"44",marginBottom:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-            <div>
-              <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>TIPHARETH — AUTOCUIDADO</div>
-              <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1}}>{tiphScore}<span style={{fontSize:18}}>%</span></div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginTop:4}}>
-              {[{l:"Hábitos",v:habitScore,c:ACCENT,tab:"aparencia"},{l:"Rotinas",v:rotinaScore,c:"#f97316",tab:"rotinas"},{l:"Metas",v:goalScore,c:"#10b981",tab:null}].map(m=>(
-                <div key={m.l} onClick={()=>m.tab&&setTab(m.tab)} style={{background:C.card,borderRadius:8,padding:"5px 6px",textAlign:"center",cursor:m.tab?"pointer":"default",border:"1px solid "+m.c+"22"}}>
-                  <div style={{fontSize:7,color:C.muted}}>{m.l}</div>
-                  <div style={{fontSize:14,fontWeight:900,color:m.c}}>{m.v}%</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <ProgressBar value={tiphScore} color={"linear-gradient(90deg,"+ACCENT+",#fbbf24)"} height={6}/>
-        </Card>
-      )}
-
-      {/* WIDGET: XP & Nível */}
-      {W("xp_bar")&&(
-        <Card style={{marginBottom:14}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>XP & NÍVEL</div>
-            <Badge label={"Nível "+level} color={"#fbbf24"}/>
-          </div>
-          <ProgressBar value={xpInLevel/2} color={"#fbbf24"} height={6}/>
-          <div style={{fontSize:9,color:C.muted,marginTop:4}}>{xpInLevel}/200 XP para o próximo nível · {xp} total</div>
-        </Card>
-      )}
       {/* WIDGET: Humor */}
-      {W("mood")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>COMO VOCÊ ESTÁ HOJE?</div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -459,7 +379,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Diário de Humor (histórico direcionado) */}
-      {W("mood_history")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>DIÁRIO DE HUMOR — 14 DIAS</div>
           <MoodHistoryStrip moodLog={moodLog} onReflect={()=>openSh("moodReflection",{...( moodLog.find(e=>e.date===todayS())||{influencia:"",gratidao:""})})}/>
@@ -467,7 +387,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Remédios de hoje */}
-      {W("remedios_hoje")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:4}}>REMÉDIOS DE HOJE</div>
           <MedicationTodayChecklist medications={medications} medicationLog={medicationLog} onToggle={toggleMedication}/>
@@ -475,7 +395,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Streaks */}
-      {W("streaks")&&(
+      {(
         <div style={{display:"flex",gap:8,marginBottom:14}}>
           <div style={{flex:1,background:C.card,border:"1px solid "+ACCENT+"22",borderRadius:12,padding:"10px 8px",textAlign:"center"}}>
             <div style={{fontSize:18,fontWeight:900,color:ACCENT}}>🔥 {moodStreak}</div>
@@ -489,7 +409,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Correlação Humor × Hábitos */}
-      {W("mood_correlation")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>HUMOR × HÁBITOS</div>
           {moodCorrelation.length===0
@@ -536,7 +456,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Rotinas rápidas */}
-      {W("rotinas_quick")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>ROTINAS DE HOJE</div>
           {rotinas.map(r=>{
@@ -556,7 +476,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Metas */}
-      {W("metas_widget")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>METAS</div>
           {goals.slice(0,3).map(g=>(
@@ -570,7 +490,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Frase do dia */}
-      {W("quote")&&(
+      {(
         <div style={{background:"linear-gradient(135deg,#8b5cf622,#6366f111)",border:"1px solid #8b5cf633",borderRadius:14,padding:16,marginBottom:14,textAlign:"center"}}>
           <div style={{fontSize:13,fontStyle:"italic",color:"#8b5cf6",lineHeight:1.6}}>
             "Cuidar de si mesma não é egoísmo — é a base de tudo."
@@ -580,7 +500,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       )}
 
       {/* WIDGET: Hábitos */}
-      {W("habitos_hoje")&&(
+      {(
         <Card style={{marginBottom:14}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>HÁBITOS DE HOJE</div>
@@ -786,24 +706,11 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       <div style={{background:ACCENT+"11",border:"2px solid "+ACCENT+"33",borderRadius:14,padding:14,textAlign:"center",marginBottom:14}}>
         <div style={{fontSize:9,color:ACCENT,fontWeight:700,letterSpacing:1,marginBottom:4}}>SCORE TIPHARETH</div>
         <div style={{fontSize:42,fontWeight:900,color:ACCENT,lineHeight:1}}>{tiphScore}<span style={{fontSize:16}}>%</span></div>
-        <div style={{fontSize:12,color:ACCENT,fontWeight:700,marginTop:4}}>Nível {level}</div>
       </div>
       <div style={{background:C.card,border:"1px solid #10b98133",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
         <Ico n="save" size={14} color="#10b981"/>
         <div><div style={{fontSize:11,fontWeight:600,color:"#10b981"}}>Dados salvos automaticamente</div><div style={{fontSize:9,color:C.muted}}>Persistência via Storage API</div></div>
       </div>
-      <Card style={{marginBottom:10}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <span style={{fontSize:12,fontWeight:700}}>Dashboard</span>
-          <Btn sm full={false} onClick={()=>openSh("widgets")}><Ico n="layout" size={11}/> Personalizar</Btn>
-        </div>
-        <div style={{fontSize:10,color:C.muted}}>{activeWidgets.length} de {WIDGET_CATALOG.length} widgets ativos</div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8}}>
-          {WIDGET_CATALOG.map(w=>(
-            <span key={w.id} style={{fontSize:9,padding:"2px 8px",borderRadius:99,background:activeWidgets.includes(w.id)?ACCENT+"22":C.b1,color:activeWidgets.includes(w.id)?ACCENT:C.muted,fontWeight:600}}>{w.label}</span>
-          ))}
-        </div>
-      </Card>
       <Card style={{marginBottom:10}}>
         <div style={{fontSize:12,fontWeight:700,marginBottom:4}}>Hub de Hábitos</div>
         <div style={{fontSize:9,color:C.muted,marginBottom:10}}>Mostra aqui, só leitura, os hábitos dos módulos que você ligar. Marcar como feito continua na tela de origem. Todos desligados por padrão — ligue um de cada vez pra testar se faz sentido.</div>
@@ -870,7 +777,7 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       </div>
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.nav,borderTop:"1px solid "+C.b1,zIndex:50,padding:"6px 0 12px",display:"flex"}}>
         {TABS.map(t=>{const a=tab===t.id;return(
-          <button key={t.id} onClick={()=>t.id===TABS[0].id?onBack():setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}>
             <div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
               <Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/>
             </div>
@@ -881,7 +788,6 @@ export default function TipharethModule({ onBack, dark, setDark, askCoach }){
       </div>
 
       {/* SHEETS */}
-      {sh==="widgets"&&WidgetCustomizer()}
       {sh==="addAparenciaHabit"&&<Sheet title="Novo Hábito de Aparência" onClose={close}><FI label="Título" value={f.title||""} onChange={v=>F({title:v})} placeholder="Ex: Aplicar protetor solar"/><FS label="Frequência" value={f.freq||"Diário"} onChange={v=>F({freq:v})} opts={FREQ_OPTS}/><FI label="XP" value={f.xp||15} onChange={v=>F({xp:v})} type="number"/><Btn color={ACCENT} onClick={()=>{if(!f.title)return;setAH(p=>[...p,{id:"ah"+uid(),title:f.title,freq:f.freq||"Diário",xp:Number(f.xp)||15,done:false,area:"aparencia"}]);toast_("Criado");close();}}>Criar</Btn></Sheet>}
       {sh==="addBemestarHabit"&&<Sheet title="Novo Hábito de Bem-estar" onClose={close}><FI label="Título" value={f.title||""} onChange={v=>F({title:v})} placeholder="Ex: 10 min só para mim"/><FS label="Frequência" value={f.freq||"Diário"} onChange={v=>F({freq:v})} opts={FREQ_OPTS}/><FI label="XP" value={f.xp||20} onChange={v=>F({xp:v})} type="number"/><Btn color={ACCENT} onClick={()=>{if(!f.title)return;setBH(p=>[...p,{id:"bh"+uid(),title:f.title,freq:f.freq||"Diário",xp:Number(f.xp)||20,done:false,area:"bemestar"}]);toast_("Criado");close();}}>Criar</Btn></Sheet>}
       {sh==="addGoal"&&<Sheet title="Nova Meta" onClose={close}><FI label="Título" value={f.title||""} onChange={v=>F({title:v})} placeholder="Ex: Manter skincare 30 dias"/><FS label="Área" value={f.area||"bemestar"} onChange={v=>F({area:v})} opts={[{v:"aparencia",l:"Aparência"},{v:"bemestar",l:"Bem-estar"}]}/><FI label="XP" value={f.xp||100} onChange={v=>F({xp:v})} type="number"/><Btn color={ACCENT} onClick={()=>{if(!f.title)return;setG(p=>[...p,{id:"g"+uid(),title:f.title,area:f.area||"bemestar",xp:Number(f.xp)||100,done:false}]);toast_("Meta criada");close();}}>Criar</Btn></Sheet>}

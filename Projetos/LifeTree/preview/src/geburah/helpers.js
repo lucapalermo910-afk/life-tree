@@ -2,12 +2,37 @@
 // (21/08/2026, item 5 do [[11 Plano de Decomposição — Arquivos Monolíticos]]) para
 // que os arquivos de aba (geburah/*Tab.jsx) possam importá-los sem depender do shell.
 import { useState, useEffect, useCallback } from "react";
+import { DIAS_SEMANA } from "./constants.js";
 
 export const uid    = () => Math.random().toString(36).slice(2,8);
 export const todayS = () => new Date().toISOString().slice(0,10);
 export const fmt1   = n  => Number(n).toFixed(1);
 export const fmtKg  = n  => fmt1(n)+"kg";
 export const clamp  = (v,a,b) => Math.min(b,Math.max(a,v));
+
+// ── NAVEGAÇÃO POR DIA ────────────────────────────────────────────────────────
+// Compartilhado entre Treino (rotina do dia) e Nutrição (refeições do dia), ambos com
+// setas ‹/› pra navegar dia a dia (30/08/2026, pedido do usuário).
+export function diaSemanaDe(date){
+  return DIAS_SEMANA[(date.getDay()+6)%7]; // js: 0=domingo..6=sábado → array começa em Segunda
+}
+export function fmtDDMMAA(date){
+  const dd=String(date.getDate()).padStart(2,"0");
+  const mm=String(date.getMonth()+1).padStart(2,"0");
+  const aa=String(date.getFullYear()).slice(-2);
+  return dd+"/"+mm+"/"+aa;
+}
+// String no mesmo formato de todayS() (YYYY-MM-DD), só que `offsetDays` a partir de hoje —
+// pra offsetDays=0 dá exatamente o mesmo valor de todayS(), garantindo que bata com `data`
+// já gravado em qualquer log (pesagens, logDieta, logTreino etc.) sem duplicar a lógica.
+export function dateStrOffset(offsetDays){
+  const d = new Date();
+  d.setDate(d.getDate()+offsetDays);
+  return d.toISOString().slice(0,10);
+}
+export function rotuloDia(offsetDays, diaSemana){
+  return offsetDays===0?"HOJE":offsetDays===1?"AMANHÃ":offsetDays===-1?"ONTEM":diaSemana.toUpperCase();
+}
 
 // Sugere o tipo de refeição pelo horário atual — usado como padrão em vez de fixar
 // sempre "Almoço", que ficava errado em quick-adds feitos à noite.

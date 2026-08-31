@@ -27,13 +27,15 @@ export default function HodModule({ onBack, dark, setDark }) {
   const [toast, setToast] = useState(null);
   const [projFilter, setProjFilter] = useState(null); // null | type id | "receita"
 
-  // state
-  const [tracks,    setTracks]    = useState(D_TRACKS);
-  const [carGoals,  setCarGoals]  = useState(D_CAR_GOALS);
-  const [carHabits, setCarHabits] = useState(D_CAR_HABITS);
-  const [achievements, setAchievements] = useState(D_ACHIEVEMENTS);
-  const [projects,  setProjects]  = useState(D_PROJECTS);
-  const [brand,     setBrand]     = useState(D_BRAND);
+  // state — seed de demo removido em 31/08/2026 (pedido do usuário — nova versão inicia em
+  // branco); D_TRACKS_GENERIC continua intacto e só entra por escolha explícita do usuário
+  // em Config → "Perfil de Trilhas" (nunca automático), fora do escopo desta limpeza.
+  const [tracks,    setTracks]    = useState([]);
+  const [carGoals,  setCarGoals]  = useState([]);
+  const [carHabits, setCarHabits] = useState([]);
+  const [achievements, setAchievements] = useState([]);
+  const [projects,  setProjects]  = useState([]);
+  const [brand,     setBrand]     = useState({pillars:[],channels:[],contentPlan:[],habits:[]});
   const [xp, setXp] = useState(0);
   const [pendingAch, setPendingAch] = useState(null); // goal that just got completed → offer as achievement
 
@@ -60,7 +62,7 @@ export default function HodModule({ onBack, dark, setDark }) {
           setTracks(Object.entries(byCat).map(([cat,skills],i)=>({
             id:"tr"+uid(), name:cat, color:TRACK_PALETTE[i%TRACK_PALETTE.length], focus:"atual", skills,
           })));
-        } else setTracks(D_TRACKS);
+        } // sem seed de demo em 31/08/2026 — sem "skills" antigo pra migrar, fica [] mesmo (já é o default)
       }
 
       // Projetos — migra "sources" (→ type:servico) e "businesses" (→ type:negocio), senão usa seed
@@ -88,7 +90,7 @@ export default function HodModule({ onBack, dark, setDark }) {
             nextStep:b.nextStep||"", habits:b.habits||[],
           }));
           setProjects([...fromSources, ...fromBusinesses]);
-        } else setProjects(D_PROJECTS);
+        } // sem seed de demo em 31/08/2026 — sem "sources"/"businesses" antigos pra migrar, fica [] mesmo (já é o default)
       }
 
       const cg_ = lsGet("carGoals");    if(cg_) setCarGoals(cg_);
@@ -286,7 +288,7 @@ export default function HodModule({ onBack, dark, setDark }) {
         {TABS.map(t=>{
           const a=tab===t.id&&!page;
           return (
-            <button key={t.id} onClick={()=>{if(t.id===TABS[0].id){onBack();return;}setTab(t.id);setPage(null);}}
+            <button key={t.id} onClick={()=>{setTab(t.id);setPage(null);}}
               style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}>
               <div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
                 <Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/>

@@ -33,12 +33,16 @@ export function useYesodState() {
   // história a partir de quando essa mudança entrou no ar.
   const [boxSnaps, setBoxSnaps] = useState([]);
   const [debts, setDebts] = useState(D_DEBTS);
-  const [budgets, setBudgets] = useState([{id:"bg1",cat:"Alimentação",limit:800},{id:"bg2",cat:"Moradia",limit:3000},{id:"bg3",cat:"Transporte",limit:400},{id:"bg4",cat:"Lazer",limit:300},{id:"bg5",cat:"Saude",limit:500}]);
+  const [budgets, setBudgets] = useState([]); // seed de demo removido 31/08/2026
   const overMonth = 0; // Taxa de Poupança sempre olha o mês atual (histórico de 6 meses); sem controle próprio desde 25/08/2026.
   const [fluxoView, setFluxoView] = useState(0);
   const [orcSection, setOrcSection] = useState("fluxo"); // fluxo | orc — ver ORC_SECTIONS
-  const [ifGoal, setIfGoal] = useState(300000);
-  const [ifMonthly, setIfMonthly] = useState(5000);
+  // 0 = "sem meta definida ainda" (achado 30/08/2026: usuário quis apagar a Meta de IF por
+  // completo pra testar o fluxo de criação do zero — antes sempre tinha um valor padrão
+  // pré-preenchido, 300000/5000, e não existia um estado "vazio" de verdade). ifConfigured
+  // (perto de ifNeeded abaixo) é quem decide se mostra o card de sempre ou o estado vazio.
+  const [ifGoal, setIfGoal] = useState(0);
+  const [ifMonthly, setIfMonthly] = useState(0);
   // ifBaseline: snapshot da projeção da meta IF no momento em que o plano (Kether) foi
   // criado/recalculado pela última vez — comparado contra a projeção atual pra detectar
   // quando algo (dívida nova, queda de renda) tirou a meta da rota (ver ifRisk). null até
@@ -50,8 +54,8 @@ export function useYesodState() {
   const [toast, setToast] = useState(null);
   const [sh, setSh] = useState(null);
   const [f, setF] = useState({});
-  const [yHabits, setYHabits] = useState([{id:"yh1",title:"Registrar todos os lançamentos",freq:"Diário",done:false,xp:15},{id:"yh2",title:"Revisar saldo das contas",freq:"Semanal",done:false,xp:20},{id:"yh3",title:"Verificar faturas abertas",freq:"Semanal",done:false,xp:20},{id:"yh4",title:"Checar progresso do orçamento",freq:"Mensal",done:false,xp:30},{id:"yh5",title:"Atualizar saldo dos investimentos",freq:"Mensal",done:false,xp:25}]);
-  const [yGoals, setYGoals] = useState([{id:"yg1",title:"Reserva de emergência (3 meses)",done:false,xp:200},{id:"yg2",title:"Orçamento respeitado 3 meses seguidos",done:false,xp:150},{id:"yg3",title:"Taxa de poupança acima de 20%",done:false,xp:100},{id:"yg4",title:"Quitar todas as dívidas",done:false,xp:300},{id:"yg5",title:"Atingir 25% da meta IF",done:false,xp:250},{id:"yg6",title:"Atingir 50% da meta IF",done:false,xp:400},{id:"yg7",title:"Liberdade Financeira 100%",done:false,xp:1000}]);
+  const [yHabits, setYHabits] = useState([]); // seed de demo removido 31/08/2026 (usuário vai revisar hábitos separadamente)
+  const [yGoals, setYGoals] = useState([]); // seed de demo removido 31/08/2026
   const [finXp, setFinXp] = useState(0);
   const [yesodCards, setYesodCards] = useState(["poupanca","if","dividas","orcamento","habitos","metas"]);
   const [catsOut, setCatsOut] = useState(D_CATS_OUT);
@@ -433,8 +437,12 @@ export function useYesodState() {
   // projMonthlyNet(0,...) já soma debtBurdenAtMonth desde o mês em que a dívida é criada —
   // trocar a fonte resolve o atraso sem duplicar a conta de dívida em outro lugar.
   const ifNeeded = ifGoal || ifMonthly*300;
+  // ifConfigured: false enquanto o usuário nunca definiu a meta (ifGoal/ifMonthly ainda em
+  // 0, o default de "nunca configurado") — controla se o card de sempre aparece ou se mostra
+  // o estado vazio (ver ObjetivosTab.jsx), e se isso é publicado pro Kether ler.
+  const ifConfigured = ifNeeded > 0;
   const ifCapacity = projMonthlyNet(0, projEvents);
-  const ifMonthsLeft = ifCapacity>0 ? Math.ceil((ifNeeded-net)/ifCapacity) : null;
+  const ifMonthsLeft = (ifConfigured && ifCapacity>0) ? Math.ceil((ifNeeded-net)/ifCapacity) : null;
   const ifProjection = { ifNeeded, net, capacity: ifCapacity, monthsLeft: ifMonthsLeft, yearsLeft: ifMonthsLeft!=null ? Number((ifMonthsLeft/12).toFixed(1)) : null };
 
   // ifBaseline: capturado automaticamente na 1ª vez que a projeção roda (lazy init, cobre
@@ -443,9 +451,9 @@ export function useYesodState() {
   // o plano ou pelo botão "Recalcular base" aqui — nunca sozinho a cada render. É uma função
   // pura fora do Context de propósito, pra ser chamável do Kether sem o Yesod estar montado.
   useEffect(() => {
-    if (!storageLoaded || ifBaseline) return;
+    if (!storageLoaded || ifBaseline || !ifConfigured) return;
     setIfBaseline({ capturedAt: today, monthsLeft: ifMonthsLeft, net });
-  }, [storageLoaded, ifBaseline, ifMonthsLeft, net, today]);
+  }, [storageLoaded, ifBaseline, ifConfigured, ifMonthsLeft, net, today]);
 
   // ifRisk: "fora da rota" = a meta atrasou 2 meses ou mais desde a base. A dívida específica
   // apontada como causa é achada comparando startDate das dívidas com a data da base — não é
@@ -467,8 +475,11 @@ export function useYesodState() {
   // Kether não tem acesso ao contexto do Yesod, só ao que foi persistido aqui.
   useEffect(() => {
     if (!storageLoaded) return;
+    // Sem meta configurada: remove a chave em vez de publicar zero — o Kether já tem o gate
+    // `{ifStatus && (...)}` pronto, então some o card de lá também sem precisar de lógica nova.
+    if (!ifConfigured) { try { localStorage.removeItem("lifetree_fin_ifstatus"); } catch(_) {} return; }
     try { localStorage.setItem("lifetree_fin_ifstatus", JSON.stringify({ projection: ifProjection, risk: ifRisk })); } catch(_) {}
-  }, [ifMonthsLeft, net, ifNeeded, ifRisk.atRisk, ifRisk.reason, storageLoaded]);
+  }, [ifMonthsLeft, net, ifNeeded, ifConfigured, ifRisk.atRisk, ifRisk.reason, storageLoaded]);
 
   // ── SCORE BRIDGE → publica score do Yesod para a Árvore ──────────────────
   useEffect(() => {
@@ -896,7 +907,7 @@ export function useYesodState() {
     delBank, delBox, delCard, delCardTx, delCatIn, delCatOut, delDebt, delInv,
     delOwed, delRecurring, delSplitPerson, despesasExpanded, editAcc, editAccTx, editBank, editBox,
     editCard, editDebt, editInv, eventsDeltaAtMonth, extCat, extType, f, F,
-    finXp, fluxoView, futureCategoryTotals, getMonthStr, guard, iCatOpts, ifBaseline, ifGoal, ifMonthly, ifProjection, ifRisk,
+    finXp, fluxoView, futureCategoryTotals, getMonthStr, guard, iCatOpts, ifBaseline, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk,
     invAportar, invResgatar, invs, isFutureYm, launch, loadFromStorage, monthDiff, monthLabel2,
     monthRange, monthTotals, mySplitShare, nav, net, netSettle, openSh, orcSection,
     overMonth, page, patrimSnaps, payDebt, payRecurringOccurrence, paySplit, pendingSplits, plannedItems,

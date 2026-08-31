@@ -431,6 +431,7 @@ export function buildGeburahContext() {
   const logTreino = readJSON("lifetree_geb_logTreino", []);
   const rotinasTreino = readJSON("lifetree_geb_rotinasTreino", []);
   const medidasCorp = readJSON("lifetree_geb_medidasCorp", []);
+  const receitas = readJSON("lifetree_geb_receitas", []);
 
   const today = new Date().toISOString().slice(0, 10);
   const sortedPes = [...pesagens].sort((a, b) => a.data.localeCompare(b.data));
@@ -479,6 +480,7 @@ export function buildGeburahContext() {
     rotinas_treino: rotinasTreino.map(r => r.name),
     treino_em_andamento_hoje: emAndamento ? { rotina: emAndamento.rotinaName, iniciado_as: emAndamento.horaInicio } : null,
     ultimas_medidas: ultimasMed,
+    receitas: receitas.map(r => ({ nome: r.name, ingredientes: r.ingredientes.length })),
   };
 }
 
@@ -698,9 +700,17 @@ HÁBITOS (checklist com XP, aba Yesod) E METAS FINANCEIRAS (checklist com XP, ab
 34. {"action":"create_yhabit","title":"...","freq":"Diário|Semanal|Mensal","xp":15}
 35. {"action":"toggle_yhabit","match":"..."} — marca feito/pendente
 36. {"action":"delete_yhabit","match":"..."}
-37. {"action":"create_ygoal","title":"...","xp":100}
+37. {"action":"create_ygoal","title":"...","xp":100} — meta simples, sem plano (uso legado; prefira create_objective abaixo pra qualquer objetivo novo)
 38. {"action":"toggle_ygoal","match":"..."}
 39. {"action":"delete_ygoal","match":"..."}
+62. {"action":"create_objective","titulo":"...","xp":100,"metrica":{"id":"patrimonio_liquido","valor":50000}|null,"plano":{"steps":["passo 1 bem específico","passo 2","passo 3"],"impactoPositivo":["...","...","..."],"impactoNegativo":["...","...","..."],"habitoSugerido":"..."|null}} — ver protocolo "OBJETIVO COM PLANO AUTOMÁTICO" abaixo, é o fluxo padrão pra qualquer objetivo novo (não só financeiro)
+
+OBJETIVO COM PLANO AUTOMÁTICO (toda vez que o usuário disser algo como "quero criar o objetivo: X" — inclusive quando isso vem automaticamente do botão "+ Objetivo" da aba Objetivos — siga este protocolo em vez de propor create_objective de cara):
+1. Comece MOSTRANDO o status atual relevante que já está no resumo pro tipo desse objetivo (ex: patrimônio líquido, dívidas ativas, capacidade de poupança) — nunca pergunte de novo o que já está nos dados acima.
+2. Em texto normal, SEM incluir <ACTION> ainda, pergunte só o que realmente falta saber pra montar um plano viável pra ESSE objetivo específico — pode ser nenhuma pergunta, uma, ou várias ao longo da conversa; nunca pergunte o óbvio nem o que já dá pra inferir dos dados do resumo.
+3. Só feche com <ACTION>create_objective</ACTION> depois de ter o necessário — o plano precisa ter pelo menos 3 passos concretos e específicos pro objetivo dito (nunca genéricos tipo "economize mais"), 2-3 itens de impacto positivo e 2-3 de impacto negativo honestos (riscos/desafios reais, não clichês de autoajuda).
+4. "metrica":{"id":"patrimonio_liquido","valor":N} quando o objetivo for sobre acumular patrimônio/juntar um valor específico (extraia o valor do que o usuário disse, ou pergunte se não ficou claro) — nesse caso o progresso do objetivo é calculado automaticamente (patrimônio atual ÷ valor), não pelos passos. Pra qualquer outro tipo de objetivo, "metrica":null (progresso vem dos passos do plano marcados como concluídos).
+5. Só depois que o usuário confirmar o objetivo (você vai ver a mensagem de sucesso na conversa), e SÓ numa resposta seguinte (nunca junto do create_objective), ofereça sugerir 1 hábito de apoio ligado ao plano via create_yhabit — proposta separada, com a mesma confirmação de sempre; não insista se o usuário recusar.
 
 DASHBOARD (indicadores da tela principal do Yesod — dashboard_indicadores_ativos/disponiveis no resumo)
 40. {"action":"add_dashboard_card","cardId":"..."} — um dos ids em dashboard_indicadores_disponiveis
@@ -923,22 +933,45 @@ PESO
 REFEIÇÃO (registra no diário de dieta — "refeicao" busca o alimento por nome, não precisa ser exato)
 2. {"action":"register_meal","alimentoNome":"...","qtd":150 (gramas, opcional),"porcoes":1 (opcional, só se o alimento tiver porção definida),"refeicao":"Café da manhã|Lanche|Almoço|Lanche tarde|Jantar|Ceia (opcional, default pelo horário atual)","data":"YYYY-MM-DD (opcional)"}
    - Se nem "qtd" nem "porcoes" vier, assume a porção padrão do alimento ou 100g.
-   - Se o alimento não for encontrado no banco, a ação falha — avise o usuário e pergunte se ele quer tentar outro nome.
+   - Se o alimento não for encontrado no banco, a ação falha — avise o usuário e pergunte se ele quer tentar outro nome (ou proponha create_food).
+3. {"action":"delete_meal_item","alimentoNome":"...","refeicao":"... (opcional, desambigua se o mesmo alimento estiver em mais de uma refeição no dia)","data":"YYYY-MM-DD (opcional)"} — remove o lançamento mais recente daquele alimento no dia
 
 ÁGUA
-3. {"action":"register_water","ml":250,"data":"YYYY-MM-DD (opcional)"}
-4. {"action":"adjust_water_goal","meta":3000}
+4. {"action":"register_water","ml":250,"data":"YYYY-MM-DD (opcional)"}
+5. {"action":"adjust_water_goal","meta":3000}
 
 MEDIDAS CORPORAIS (mescla com o que já existir na mesma data, não apaga o resto)
-5. {"action":"register_measurement","medidas":{"Cintura":90,"Peso":88},"data":"YYYY-MM-DD (opcional)"}
+6. {"action":"register_measurement","medidas":{"Cintura":90,"Peso":88},"data":"YYYY-MM-DD (opcional)"}
 
 TREINO ("rotina" busca por nome, ver rotinas_treino no resumo)
-6. {"action":"start_workout","rotina":"Treino A"} — só se não houver treino_em_andamento_hoje; cria o log com relógio de sessão ao vivo, igual ao botão "Iniciar" da tela
-7. {"action":"finish_workout","rotina":"nome (opcional, só se houver ambiguidade)"} — finaliza o treino_em_andamento_hoje, calcula duração e calorias automaticamente
+7. {"action":"start_workout","rotina":"Treino A"} — só se não houver treino_em_andamento_hoje; cria o log com relógio de sessão ao vivo, igual ao botão "Iniciar" da tela
+8. {"action":"finish_workout","rotina":"nome (opcional, só se houver ambiguidade)"} — finaliza o treino_em_andamento_hoje, calcula duração e calorias automaticamente
    - Registro de série por série (carga/reps feitas) só é feito pela tela — o Coach só inicia/finaliza a sessão.
 
 METAS NUTRICIONAIS
-8. {"action":"adjust_nutrition_goal","cal":2000,"prot":160,"carb":220,"gord":70} — inclua só os campos que o usuário quer mudar
+9. {"action":"adjust_nutrition_goal","cal":2000,"prot":160,"carb":220,"gord":70} — inclua só os campos que o usuário quer mudar
+
+BIBLIOTECA DE ALIMENTOS (categorias válidas: Frutas, Verduras & Legumes, Carnes Bovinas, Frango, Porco, Peixes & Frutos do Mar, Hambúrgueres, Grãos & Leguminosas, Massas & Cereais, Cereais Matinais, Pães, Laticínios, Ovos, Embutidos & Frios, Oleaginosas, Óleos & Gorduras, Molhos & Temperos, Doces & Sobremesas, Chocolates, Suplementos, Bebidas, Regional BR)
+10. {"action":"create_food","nome":"...","categoria":"...","cal100":150,"prot":10,"carb":20,"gord":5,"fibra":0 (opcional),"sodio":0 (opcional),"calcio":0 (opcional),"ferro":0 (opcional),"vitC":0 (opcional),"porcaoLabel":"unidade (opcional)","porcaoGramas":100 (opcional)} — macros sempre por 100g
+11. {"action":"edit_food","alimentoNome":"...", ...só os campos que mudam, mesmo formato do create_food}
+12. {"action":"delete_food","alimentoNome":"..."}
+13. {"action":"set_favorite_food","alimentoNome":"...","favorito":true|false (opcional — sem isso, inverte o estado atual)}
+
+RECEITAS (ver "receitas" no resumo pra nomes já cadastrados)
+14. {"action":"create_recipe","nome":"...","desc":"... (opcional)"} — cria vazia, depois use add_recipe_ingredient pra montar
+15. {"action":"edit_recipe","receitaNome":"...","nome":"... (opcional)","desc":"... (opcional)"}
+16. {"action":"delete_recipe","receitaNome":"..."}
+17. {"action":"add_recipe_ingredient","receitaNome":"...","alimentoNome":"...","qtd":100 (gramas, opcional),"porcoes":1 (opcional)}
+18. {"action":"remove_recipe_ingredient","receitaNome":"...","alimentoNome":"..."}
+19. {"action":"register_recipe","receitaNome":"...","refeicao":"... (opcional)","data":"YYYY-MM-DD (opcional)"} — registra TODOS os ingredientes da receita de uma vez na refeição
+
+ROTINA DE TREINO E EXERCÍCIO (grupos musculares válidos: Peito, Costas, Ombros, Bíceps, Tríceps, Antebraço, Pernas, Glúteos, Core, Lombar / Posterior, Pescoço, Artes Marciais, Cardio, Flexibilidade)
+20. {"action":"create_routine","nome":"...","dia":"Segunda (opcional, default Segunda)","dias":["Segunda","Quinta"] (opcional, prevalece sobre "dia" se vier),"grupos":["Peito","Tríceps"] (opcional),"meta":8 (opcional, default 8)} — cria vazia, depois use add_routine_exercise
+21. {"action":"edit_routine","rotinaNome":"...","nome":"... (opcional)","meta":8 (opcional)"} — não mexe em dias/grupos
+22. {"action":"delete_routine","rotinaNome":"..."}
+23. {"action":"add_routine_exercise","rotinaNome":"...","exercicioNome":"...","series":3 (opcional),"reps":"10-12 (opcional)","carga":0 (opcional, kg ou segundos conforme o tipo do exercício)","descanso":60 (opcional, segundos)}
+24. {"action":"remove_routine_exercise","rotinaNome":"...","exercicioNome":"..."}
+25. {"action":"create_exercise","nome":"...","grupo":"...","equip":"... (opcional)","inst":"... (opcional, instruções)"}
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar/ajustar algo, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação

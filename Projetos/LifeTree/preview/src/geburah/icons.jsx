@@ -29,6 +29,7 @@ const IC = {
   move:"M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20",
   close2:"M18 6 6 18M6 6l12 12",
   star:"M12 2l2.9 6.9L22 9.3l-5.5 4.8L18.2 22 12 17.8 5.8 22l1.7-7.9L2 9.3l7.1-.4z",
+  search:["circle cx='11' cy='11' r='8'","M21 21l-4.35-4.35"],
 };
 export function Ico({n,size=16,color="currentColor",sw=1.5,filled=false}){
   const d=IC[n]; if(!d)return null;

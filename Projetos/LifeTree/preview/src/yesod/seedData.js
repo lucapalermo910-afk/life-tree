@@ -1,16 +1,14 @@
 ﻿// Dado de seed (bancos/contas/cartoes/caixinhas/dividas/categorias de investimento) do Yesod - dado puro, sem logica. CASH_ACC_ID e ACCENT substituidos pelos literais ("cash-wallet"/"#10b981") pra nao criar import circular com YesodModule.jsx, que define os dois pra uso proprio em logica (nao so seed). Extraido em 21/08/2026 (item 1 do Plano de Decomposicao).
 
-export const D_BANKS = [{id:"b1",name:"Nubank",color:"#8b5cf6"},{id:"b2",name:"Itau",color:"#f59e0b"},{id:"b3",name:"XP Invest",color:"#06b6d4"}];
-export const D_ACCS = [
-  {id:"a1",bankId:"b1",name:"Conta Corrente",txs:[{id:"t1",desc:"Salario",amount:12000,type:"in",date:"2026-05-05",cat:"Salario",method:"pix"},{id:"t2",desc:"Aluguel",amount:2800,type:"out",date:"2026-05-10",cat:"Moradia",method:"pix"},{id:"t3",desc:"Supermercado",amount:450,type:"out",date:"2026-05-15",cat:"Alimentação",method:"debito"},{id:"t4",desc:"Aulas",amount:1500,type:"in",date:"2026-05-20",cat:"Freelance",method:"pix"}]},
-  {id:"a2",bankId:"b2",name:"Conta Corrente",txs:[{id:"t5",desc:"Transferência recebida",amount:2000,type:"in",date:"2026-05-06",cat:"Transferência",method:"ted"}]},
-  {id:"cash-wallet",bankId:null,name:"Carteira",isCash:true,txs:[]},
-];
-export const D_CARDS = [
-  {id:"c1",bankId:"b1",name:"Nubank Roxinho",limit:8000,closeDay:10,dueDay:25,color:"#8b5cf6",txs:[{id:"ct1",desc:"Spotify",amount:35,date:"2026-05-03",cat:"Serviços",installments:1,type:"out"},{id:"ct2",desc:"Jantar",amount:280,date:"2026-05-18",cat:"Alimentação",installments:1,type:"out"},{id:"ct3",desc:"Notebook",amount:4800,date:"2026-05-07",cat:"Tecnologia",installments:12,type:"out"}]},
-  {id:"c2",bankId:"b2",name:"Itau Visa Gold",limit:15000,closeDay:5,dueDay:20,color:"#f59e0b",txs:[{id:"ct4",desc:"Academia",amount:130,date:"2026-05-02",cat:"Saude",installments:1,type:"out"},{id:"ct5",desc:"Tenis",amount:900,date:"2026-05-08",cat:"Vestuário",installments:3,type:"out"}]},
-];
-export const D_BOXES = [{id:"bx1",name:"Reserva de Emergencia",goal:20000,color:"#10b981",balance:8000},{id:"bx2",name:"Viagem Buenos Aires",goal:5000,color:"#06b6d4",balance:1200},{id:"bx3",name:"Fundo Anual",goal:10000,color:"#f59e0b",balance:3500}];
-export const D_DEBTS = [{id:"d1",name:"Financiamento Carro",credor:"Banco Itau",totalParcelas:48,parcelasPagas:12,valorParcela:1250,dueDay:10,startDate:"2024-01-10",color:"#ef4444"},{id:"d2",name:"Empréstimo Pessoal",credor:"Nubank",totalParcelas:10,parcelasPagas:4,valorParcela:800,dueDay:15,startDate:"2024-06-15",color:"#f97316"}];
+// Seed de demonstração removido em 31/08/2026 (pedido do usuário — nova versão precisa
+// iniciar 100% em branco, sem dado mockado, pra onboarding real desde o primeiro uso).
+// Carteira virtual continua nascendo sozinha mesmo com D_ACCS=[] (useEffect de segurança em
+// context.js já garante isso). ICAT é taxonomia de categoria de investimento — catálogo, não
+// dado de usuário — continua populado.
+export const D_BANKS = [];
+export const D_ACCS = [];
+export const D_CARDS = [];
+export const D_BOXES = [];
+export const D_DEBTS = [];
 export const ICAT = [{id:"rf",label:"Renda Fixa",color:"#10b981",sub:[{id:"rf_pub",label:"Títulos Públicos"},{id:"rf_priv",label:"Títulos Privados"},{id:"rf_fund",label:"Fundos RF"}]},{id:"rv",label:"Renda Variável",color:"#ef4444",sub:[{id:"rv_ac",label:"Ações"},{id:"rv_fii",label:"FIIs"},{id:"rv_etf",label:"ETFs"}]},{id:"mm",label:"Multimercado",color:"#8b5cf6",sub:[{id:"mm_f",label:"Fundos MM"}]},{id:"int",label:"Internacional",color:"#f97316",sub:[{id:"int_b",label:"BDRs"},{id:"int_e",label:"ETFs Globais"}]}];
-export const D_INVS = [{id:"i1",bankId:"b3",subCat:"rf_pub",name:"Tesouro IPCA+ 2029",invested:10000,balance:10420,rate:"IPCA+5.5%",maturity:"2029-08-15"},{id:"i2",bankId:"b3",subCat:"rf_priv",name:"CDB 120% CDI",invested:5000,balance:5180,rate:"120% CDI",maturity:"2027-03-10"},{id:"i3",bankId:"b3",subCat:"rv_ac",name:"PETR4",invested:3000,balance:3240,rate:"",maturity:""},{id:"i4",bankId:"b3",subCat:"rv_fii",name:"MXRF11",invested:2000,balance:2150,rate:"",maturity:""},{id:"i5",bankId:"b3",subCat:"mm_f",name:"Verde AM",invested:8000,balance:8340,rate:"",maturity:""}];
+export const D_INVS = [];

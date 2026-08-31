@@ -7,6 +7,7 @@
 // storage (ver GeburahModule.jsx, usePersisted com reloadSignal=coachSyncTick).
 
 import { notifyCoachDataUpdated } from "./coachSync.js";
+import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -185,13 +186,247 @@ export function adjustGeburahGoals(a) {
   return { ok: true, message: "Meta(s) nutricional(is) atualizada(s)." };
 }
 
+// Remove um item já lançado numa refeição (31/08/2026, pedido do usuário — Coach cobria
+// registrar mas não desfazer). Sem "refeicao" pega o item mais recente daquele alimento no
+// dia; com "refeicao" restringe antes, pra não remover o item errado se o mesmo alimento
+// foi lançado em duas refeições no mesmo dia.
+export function deleteGeburahMealItem(a) {
+  const alimentos = readJSON("alimentos", []);
+  const al = findByField(alimentos, "name", a.alimentoNome);
+  if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
+  const logDieta = readJSON("logDieta", []);
+  const data = a.data || todayS();
+  let candidates = logDieta.filter(l => l.alimentoId === al.id && l.data === data);
+  if (a.refeicao) {
+    const filtered = candidates.filter(l => normalize(l.refeicao) === normalize(a.refeicao));
+    if (filtered.length) candidates = filtered;
+  }
+  if (!candidates.length) return { ok: false, message: "Não encontrei '" + al.name + "' registrado em " + data + "." };
+  const alvo = candidates[candidates.length - 1];
+  writeJSON("logDieta", logDieta.filter(l => l.id !== alvo.id));
+  notifyGeburahUpdated();
+  return { ok: true, message: al.name + " removido de " + alvo.refeicao + "." };
+}
+
+// ── ALIMENTOS (biblioteca) ───────────────────────────────────────────────────
+export function createGeburahFood(a) {
+  if (!a.nome) return { ok: false, message: "Nome do alimento não informado." };
+  const alimentos = readJSON("alimentos", []);
+  const cat = CATS_AL.includes(a.categoria) ? a.categoria : CATS_AL[0];
+  const porcao = (a.porcaoLabel && Number(a.porcaoGramas) > 0) ? { label: a.porcaoLabel, gramas: Number(a.porcaoGramas) } : null;
+  const novo = {
+    id: "al" + uid(), name: a.nome, cat,
+    cal100: Number(a.cal100) || 0, prot: Number(a.prot) || 0, carb: Number(a.carb) || 0, gord: Number(a.gord) || 0,
+    fibra: Number(a.fibra) || 0, sodio: Number(a.sodio) || 0, calcio: Number(a.calcio) || 0, ferro: Number(a.ferro) || 0, vitC: Number(a.vitC) || 0,
+    ...(porcao ? { porcao } : {}), favorito: false,
+  };
+  writeJSON("alimentos", [...alimentos, novo]);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Alimento '" + novo.name + "' criado em " + cat + "." };
+}
+export function editGeburahFood(a) {
+  const alimentos = readJSON("alimentos", []);
+  const al = findByField(alimentos, "name", a.alimentoNome);
+  if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
+  const patch = {};
+  if (a.nome) patch.name = a.nome;
+  if (a.categoria && CATS_AL.includes(a.categoria)) patch.cat = a.categoria;
+  ["cal100", "prot", "carb", "gord", "fibra", "sodio", "calcio", "ferro", "vitC"].forEach(k => { if (a[k] != null) patch[k] = Number(a[k]); });
+  if (a.porcaoLabel && Number(a.porcaoGramas) > 0) patch.porcao = { label: a.porcaoLabel, gramas: Number(a.porcaoGramas) };
+  if (!Object.keys(patch).length) return { ok: false, message: "Nenhum campo pra atualizar." };
+  writeJSON("alimentos", alimentos.map(x => x.id === al.id ? { ...x, ...patch } : x));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Alimento '" + al.name + "' atualizado." };
+}
+export function deleteGeburahFood(a) {
+  const alimentos = readJSON("alimentos", []);
+  const al = findByField(alimentos, "name", a.alimentoNome);
+  if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
+  writeJSON("alimentos", alimentos.filter(x => x.id !== al.id));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Alimento '" + al.name + "' excluído." };
+}
+export function setGeburahFoodFavorite(a) {
+  const alimentos = readJSON("alimentos", []);
+  const al = findByField(alimentos, "name", a.alimentoNome);
+  if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
+  const favorito = a.favorito != null ? !!a.favorito : !al.favorito;
+  writeJSON("alimentos", alimentos.map(x => x.id === al.id ? { ...x, favorito } : x));
+  notifyGeburahUpdated();
+  return { ok: true, message: al.name + (favorito ? " favoritado." : " removido dos favoritos.") };
+}
+
+// ── RECEITAS ─────────────────────────────────────────────────────────────────
+export function createGeburahRecipe(a) {
+  if (!a.nome) return { ok: false, message: "Nome da receita não informado." };
+  const receitas = readJSON("receitas", []);
+  const novo = { id: "rec" + uid(), name: a.nome, desc: a.desc || "", ingredientes: [], steps: [] };
+  writeJSON("receitas", [...receitas, novo]);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Receita '" + novo.name + "' criada — use add_recipe_ingredient pra montar os ingredientes." };
+}
+export function editGeburahRecipe(a) {
+  const receitas = readJSON("receitas", []);
+  const rec = findByField(receitas, "name", a.receitaNome);
+  if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
+  const patch = {};
+  if (a.nome) patch.name = a.nome;
+  if (a.desc != null) patch.desc = a.desc;
+  if (!Object.keys(patch).length) return { ok: false, message: "Nenhum campo pra atualizar." };
+  writeJSON("receitas", receitas.map(r => r.id === rec.id ? { ...r, ...patch } : r));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Receita '" + rec.name + "' atualizada." };
+}
+export function deleteGeburahRecipe(a) {
+  const receitas = readJSON("receitas", []);
+  const rec = findByField(receitas, "name", a.receitaNome);
+  if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
+  writeJSON("receitas", receitas.filter(r => r.id !== rec.id));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Receita '" + rec.name + "' excluída." };
+}
+export function addGeburahRecipeIngredient(a) {
+  const receitas = readJSON("receitas", []);
+  const rec = findByField(receitas, "name", a.receitaNome);
+  if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
+  const alimentos = readJSON("alimentos", []);
+  const al = findByField(alimentos, "name", a.alimentoNome);
+  if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
+  let qtd = Number(a.qtd);
+  if (!qtd && a.porcoes && al.porcao?.gramas) qtd = Number(a.porcoes) * al.porcao.gramas;
+  if (!qtd || qtd <= 0) qtd = al.porcao?.gramas || 100;
+  const ing = { alimentoId: al.id, qtd };
+  writeJSON("receitas", receitas.map(r => r.id === rec.id ? { ...r, ingredientes: [...r.ingredientes, ing] } : r));
+  notifyGeburahUpdated();
+  return { ok: true, message: al.name + " (" + qtd + "g) adicionado à receita '" + rec.name + "'." };
+}
+export function removeGeburahRecipeIngredient(a) {
+  const receitas = readJSON("receitas", []);
+  const rec = findByField(receitas, "name", a.receitaNome);
+  if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
+  const alimentos = readJSON("alimentos", []);
+  const al = findByField(alimentos, "name", a.alimentoNome);
+  if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
+  const idx = rec.ingredientes.findIndex(ing => ing.alimentoId === al.id);
+  if (idx === -1) return { ok: false, message: al.name + " não está na receita '" + rec.name + "'." };
+  const novosIngredientes = rec.ingredientes.filter((_, i) => i !== idx);
+  writeJSON("receitas", receitas.map(r => r.id === rec.id ? { ...r, ingredientes: novosIngredientes } : r));
+  notifyGeburahUpdated();
+  return { ok: true, message: al.name + " removido da receita '" + rec.name + "'." };
+}
+// Registra TODOS os ingredientes da receita como itens separados no diário — mesmo
+// resultado do botão "Adicionar à refeição" na tela de detalhe da receita.
+export function registerGeburahRecipe(a) {
+  const receitas = readJSON("receitas", []);
+  const rec = findByField(receitas, "name", a.receitaNome);
+  if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
+  if (!rec.ingredientes.length) return { ok: false, message: "A receita '" + rec.name + "' ainda não tem ingredientes." };
+  const logDieta = readJSON("logDieta", []);
+  const data = a.data || todayS();
+  const refeicao = a.refeicao || refeicaoPorHorarioNow();
+  const novos = rec.ingredientes.map(ing => ({
+    id: "ld" + uid(), data, refeicao, alimentoId: ing.alimentoId, qtd: ing.qtd,
+    ...(ing.qtdDisplay != null ? { qtdDisplay: ing.qtdDisplay, unidadeDisplay: ing.unidadeDisplay } : {}),
+  }));
+  writeJSON("logDieta", [...logDieta, ...novos]);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Receita '" + rec.name + "' (" + novos.length + " ingredientes) registrada em " + refeicao + "." };
+}
+
+// ── ROTINA DE TREINO / EXERCÍCIO ─────────────────────────────────────────────
+export function createGeburahRoutine(a) {
+  if (!a.nome) return { ok: false, message: "Nome da rotina não informado." };
+  const rotinasTreino = readJSON("rotinasTreino", []);
+  const dias = Array.isArray(a.dias) && a.dias.length ? a.dias : (a.dia ? [a.dia] : ["Segunda"]);
+  const grupos = Array.isArray(a.grupos) ? a.grupos : [];
+  const novo = { id: "rt" + uid(), name: a.nome, dias, grupos, meta: Number(a.meta) || 8, exercicios: [] };
+  writeJSON("rotinasTreino", [...rotinasTreino, novo]);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Rotina '" + novo.name + "' criada — use add_routine_exercise pra montar os exercícios." };
+}
+export function editGeburahRoutine(a) {
+  const rotinasTreino = readJSON("rotinasTreino", []);
+  const rot = findByField(rotinasTreino, "name", a.rotinaNome);
+  if (!rot) return { ok: false, message: "Não encontrei a rotina '" + a.rotinaNome + "'." };
+  const patch = {};
+  if (a.nome) patch.name = a.nome;
+  if (a.meta != null) patch.meta = Number(a.meta);
+  if (!Object.keys(patch).length) return { ok: false, message: "Nenhum campo pra atualizar." };
+  writeJSON("rotinasTreino", rotinasTreino.map(r => r.id === rot.id ? { ...r, ...patch } : r));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Rotina '" + rot.name + "' atualizada." };
+}
+export function deleteGeburahRoutine(a) {
+  const rotinasTreino = readJSON("rotinasTreino", []);
+  const rot = findByField(rotinasTreino, "name", a.rotinaNome);
+  if (!rot) return { ok: false, message: "Não encontrei a rotina '" + a.rotinaNome + "'." };
+  writeJSON("rotinasTreino", rotinasTreino.filter(r => r.id !== rot.id));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Rotina '" + rot.name + "' excluída." };
+}
+export function addGeburahRoutineExercise(a) {
+  const rotinasTreino = readJSON("rotinasTreino", []);
+  const rot = findByField(rotinasTreino, "name", a.rotinaNome);
+  if (!rot) return { ok: false, message: "Não encontrei a rotina '" + a.rotinaNome + "'." };
+  const exercicios = readJSON("exercicios", []);
+  const ex = findByField(exercicios, "name", a.exercicioNome);
+  if (!ex) return { ok: false, message: "Não encontrei o exercício '" + a.exercicioNome + "'." };
+  const novo = {
+    id: "re" + uid(), exercicioId: ex.id,
+    series: Number(a.series) || 3, reps: a.reps || "10-12",
+    carga: Number(a.carga) || 0, descanso: Number(a.descanso) || 60,
+  };
+  writeJSON("rotinasTreino", rotinasTreino.map(r => r.id === rot.id ? { ...r, exercicios: [...r.exercicios, novo] } : r));
+  notifyGeburahUpdated();
+  return { ok: true, message: ex.name + " adicionado à rotina '" + rot.name + "'." };
+}
+export function removeGeburahRoutineExercise(a) {
+  const rotinasTreino = readJSON("rotinasTreino", []);
+  const rot = findByField(rotinasTreino, "name", a.rotinaNome);
+  if (!rot) return { ok: false, message: "Não encontrei a rotina '" + a.rotinaNome + "'." };
+  const exercicios = readJSON("exercicios", []);
+  const ex = findByField(exercicios, "name", a.exercicioNome);
+  if (!ex) return { ok: false, message: "Não encontrei o exercício '" + a.exercicioNome + "'." };
+  const novosExercicios = rot.exercicios.filter(re => re.exercicioId !== ex.id);
+  if (novosExercicios.length === rot.exercicios.length) return { ok: false, message: ex.name + " não está na rotina '" + rot.name + "'." };
+  writeJSON("rotinasTreino", rotinasTreino.map(r => r.id === rot.id ? { ...r, exercicios: novosExercicios } : r));
+  notifyGeburahUpdated();
+  return { ok: true, message: ex.name + " removido da rotina '" + rot.name + "'." };
+}
+export function createGeburahExercise(a) {
+  if (!a.nome) return { ok: false, message: "Nome do exercício não informado." };
+  const exercicios = readJSON("exercicios", []);
+  const grupo = GRUPOS.includes(a.grupo) ? a.grupo : GRUPOS[0];
+  const novo = { id: "e" + uid(), name: a.nome, grupo, equip: a.equip || "", inst: a.inst || "" };
+  writeJSON("exercicios", [...exercicios, novo]);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Exercício '" + novo.name + "' criado em " + grupo + "." };
+}
+
 export const GEBURAH_ACTION_HANDLERS = {
   register_weight: registerGeburahWeight,
   register_meal: registerGeburahMeal,
+  delete_meal_item: deleteGeburahMealItem,
   register_water: registerGeburahWater,
   adjust_water_goal: adjustGeburahWaterGoal,
   register_measurement: registerGeburahMeasurement,
   start_workout: startGeburahWorkout,
   finish_workout: finishGeburahWorkout,
   adjust_nutrition_goal: adjustGeburahGoals,
+  create_food: createGeburahFood,
+  edit_food: editGeburahFood,
+  delete_food: deleteGeburahFood,
+  set_favorite_food: setGeburahFoodFavorite,
+  create_recipe: createGeburahRecipe,
+  edit_recipe: editGeburahRecipe,
+  delete_recipe: deleteGeburahRecipe,
+  add_recipe_ingredient: addGeburahRecipeIngredient,
+  remove_recipe_ingredient: removeGeburahRecipeIngredient,
+  register_recipe: registerGeburahRecipe,
+  create_routine: createGeburahRoutine,
+  edit_routine: editGeburahRoutine,
+  delete_routine: deleteGeburahRoutine,
+  add_routine_exercise: addGeburahRoutineExercise,
+  remove_routine_exercise: removeGeburahRoutineExercise,
+  create_exercise: createGeburahExercise,
 };

@@ -32,7 +32,7 @@ const IC = {
   sparkle: ["M12 3v4","M12 17v4","M3 12h4","M17 12h4","M5.64 5.64l2.83 2.83","M15.54 15.54l2.83 2.83","M5.64 18.36l2.83-2.83","M15.54 8.46l2.83-2.83"],
   chev:    "M9 18l6-6-6-6",
   back:    "M19 12H5m7 7-7-7 7-7",
-  treelife:["M12 2v20","M12 7l-4-4","M12 7l4-4","M12 13l-5-4","M12 13l5-4","M12 19l-4-3","M12 19l4-3"],
+  treelife:["M12 2v20","M12 7l-4-4","M12 7l4-4","M12 13l-5-4","M12 13l5-4","M12 19l-4-3","M12 19l4-3","circle cx='12' cy='2' r='2'","circle cx='8' cy='11' r='2'","circle cx='16' cy='11' r='2'","circle cx='12' cy='8' r='2'","circle cx='8' cy='17' r='2'","circle cx='16' cy='17' r='2'","circle cx='12' cy='14' r='2'","circle cx='12' cy='20' r='2'"],
   zap:     "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
   map:     ["M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3V6z","M9 3v15","M15 6v15"],
   star:    "M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z",
@@ -45,7 +45,7 @@ function Ico({ n, size=16, color="currentColor", sw=1.5 }) {
   const parts = Array.isArray(d) ? d : [d];
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
-      {parts.map((p,i) => <path key={i} d={p}/>)}
+      {parts.map((p,i) => { if(p.startsWith("circle")){const m=p.match(/cx='([\d.]+)' cy='([\d.]+)' r='([\d.]+)'/);if(m)return <circle key={i} cx={m[1]} cy={m[2]} r={m[3]} fill="none"/>;} return <path key={i} d={p}/>; })}
     </svg>
   );
 }
@@ -90,14 +90,6 @@ const TABS        = [
 const PESSOA_PALETTE = ["#f97316","#8b5cf6",ACCENT,"#06b6d4","#10b981","#f59e0b","#ef4444","#3b82f6","#14b8a6","#6366f1","#84cc16","#f472b6"];
 const EMOJI_OPTS = ["😊","👩","👨","🤝","❤️","👵","👴","👧","👦","🧑","👶","🐶","🐱","🎓","💼","⭐","🙏","😎","🤗","🧡"];
 
-const WIDGET_CATALOG = [
-  {id:"score",         label:"Score Chesed",       desc:"Número principal + sub-scores + barra", defaultOn:true},
-  {id:"datas_proximas",label:"Datas Próximas",     desc:"Aniversários e datas em 30 dias",defaultOn:true},
-  {id:"atencao",       label:"Precisam de Atenção",desc:"Pessoas com contato atrasado",   defaultOn:true},
-  {id:"habitos_hoje",  label:"Hábitos de Hoje",    desc:"Lista rápida de hábitos",        defaultOn:true},
-];
-const DEFAULT_WIDGETS = WIDGET_CATALOG.filter(w=>w.defaultOn).map(w=>w.id);
-
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 export default function ChesedModule({ onBack, dark, setDark }) {
@@ -107,12 +99,13 @@ export default function ChesedModule({ onBack, dark, setDark }) {
   const [f,    setF]            = useState({});
   const F = v => setF(x => ({...x,...v}));
   const [toast, setToast]       = useState(null);
-  const [pessoas,   setPessoas]   = useState(SEED_PESSOAS);
-  const [datas,     setDatas]     = useState(SEED_DATAS);
-  const [registros, setRegistros] = useState(SEED_REGISTROS);
-  const [habits,    setHabits]    = useState(SEED_HABITS);
-  const [xp,        setXp]        = useState(120);
-  const [activeWidgets, setActiveWidgets] = useState(DEFAULT_WIDGETS);
+  // Seed de demo removido em 31/08/2026 (pedido do usuário — nova versão inicia em branco);
+  // xp era o único módulo com XP inicial diferente de 0 nos 10, corrigido junto.
+  const [pessoas,   setPessoas]   = useState([]);
+  const [datas,     setDatas]     = useState([]);
+  const [registros, setRegistros] = useState([]);
+  const [habits,    setHabits]    = useState([]);
+  const [xp,        setXp]        = useState(0);
 
   const C = dark ? DARK : LIGHT;
 
@@ -128,7 +121,6 @@ export default function ChesedModule({ onBack, dark, setDark }) {
     const r_  = lsGet("registros");     if(r_)  setRegistros(r_);
     const h_  = lsGet("habits");        if(h_)  setHabits(h_);
     const xp_ = lsGet("xp");            if(xp_ !== null) setXp(xp_);
-    const w_  = lsGet("activeWidgets"); if(w_)  setActiveWidgets(w_);
     setStorageReady(true);
   }, []);
   // Recarrega do storage quando uma ação do Coach escreve direto (chesedActions.js) —
@@ -140,7 +132,6 @@ export default function ChesedModule({ onBack, dark, setDark }) {
     const r_  = lsGet("registros");     if(r_)  setRegistros(r_);
     const h_  = lsGet("habits");        if(h_)  setHabits(h_);
     const xp_ = lsGet("xp");            if(xp_ !== null) setXp(xp_);
-    const w_  = lsGet("activeWidgets"); if(w_)  setActiveWidgets(w_);
   };
   useCoachDataSync("chesed", reloadFromStorage);
 
@@ -149,7 +140,6 @@ export default function ChesedModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageReady) return; lsSet("registros", registros); }, [registros, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("habits", habits); }, [habits, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("xp", xp); }, [xp, storageReady]);
-  useEffect(() => { if(!storageReady) return; lsSet("activeWidgets", activeWidgets); }, [activeWidgets, storageReady]);
 
   const toast_ = (msg, color) => { setToast({msg, color:color||ACCENT}); setTimeout(()=>setToast(null), 2600); };
   const close   = () => { setSh(null); setF({}); };
@@ -208,74 +198,24 @@ export default function ChesedModule({ onBack, dark, setDark }) {
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   const energiaColor = (e) => e==="positiva"?"#10b981":e==="drenante"?"#ef4444":"#f59e0b";
-  const xpLevel = Math.floor(xp/100)+1;
-  const xpBar   = (xp%100);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // TABS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Chesed Tab ──────────────────────────────────────────────────────────────
-  const W = (id) => activeWidgets.includes(id);
-
-  const WidgetCustomizer = () => (
-    <Sheet title="Personalizar Dashboard" onClose={close}>
-      <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Ative ou desative os blocos do seu dashboard.</div>
-      {WIDGET_CATALOG.map(w=>{
-        const on = activeWidgets.includes(w.id);
-        return (
-          <div key={w.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 12px",background:C.bg,borderRadius:10,marginBottom:8,border:"1px solid "+(on?ACCENT+"44":C.b1)}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:700,color:on?C.text:C.muted}}>{w.label}</div>
-              <div style={{fontSize:9,color:C.muted}}>{w.desc}</div>
-            </div>
-            <button onClick={()=>setActiveWidgets(prev=>on?prev.filter(x=>x!==w.id):[...prev,w.id])}
-              style={{width:40,height:22,borderRadius:99,cursor:"pointer",border:"none",background:on?ACCENT:C.b2,position:"relative",transition:"background .2s",flexShrink:0}}>
-              <div style={{position:"absolute",top:3,left:on?20:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
-            </button>
-          </div>
-        );
-      })}
-      <div style={{marginTop:6}}>
-        <Btn color={C.muted} outline sm full={false} onClick={()=>setActiveWidgets(DEFAULT_WIDGETS)}>Restaurar padrão</Btn>
-      </div>
-    </Sheet>
-  );
-
+  // Sem "Personalizar" desde 30/08/2026 (pedido do usuário) — os blocos abaixo sempre aparecem.
   const ChedsedTab = () => (
     <div style={{animation:"slideUp .35s ease"}}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-        <button onClick={()=>openSh("widgets")}
-          style={{display:"flex",alignItems:"center",gap:5,background:C.card,border:"1px solid "+C.b1,borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:C.muted}}>
-          <Ico n="layout" size={11} color={C.muted}/> Personalizar
-        </button>
-      </div>
-
-      {/* Score Hero */}
-      {W("score")&&<Card style={{background:`linear-gradient(135deg,${ACCENT}22,${ACCENT}06)`,border:`1px solid ${ACCENT}44`,marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-          <div>
-            <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>CHESED — MISERICÓRDIA</div>
-            <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1}}>{chesedScore}<span style={{fontSize:18}}>%</span></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginTop:4}}>
-            {[
-              {l:"Frequência", v:freqScore,  c:ACCENT,     t:"pessoas"},
-              {l:"Qualidade",  v:qualScore,  c:"#f97316",  t:"registros"},
-              {l:"Hábitos",    v:habScore,   c:"#8b5cf6",  t:null},
-            ].map(m=>(
-              <div key={m.l} onClick={()=>m.t&&setTab(m.t)} style={{background:C.card,borderRadius:8,padding:"5px 6px",textAlign:"center",cursor:m.t?"pointer":"default",border:`1px solid ${m.c}22`}}>
-                <div style={{fontSize:7,color:C.muted}}>{m.l}</div>
-                <div style={{fontSize:14,fontWeight:900,color:m.c}}>{m.v}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Score Hero — simplificado em 30/08/2026 (antes tinha 3 mini-cards de
+          Frequência/Qualidade/Hábitos espremidos ao lado do score grande) */}
+      <Card style={{background:`linear-gradient(135deg,${ACCENT}22,${ACCENT}06)`,border:`1px solid ${ACCENT}44`,marginBottom:14}}>
+        <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>CHESED — MISERICÓRDIA</div>
+        <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1,marginBottom:10}}>{chesedScore}<span style={{fontSize:18}}>%</span></div>
         <Bar value={chesedScore} color={`linear-gradient(90deg,${ACCENT},#f97316)`} height={6}/>
-      </Card>}
+      </Card>
 
       {/* Upcoming dates */}
-      {W("datas_proximas")&&datasProx.length>0&&(
+      {datasProx.length>0&&(
         <div style={{background:"#fbbf2411",border:"1px solid #fbbf2433",borderRadius:14,padding:13,marginBottom:14}}>
           <div style={{fontSize:10,color:"#f59e0b",fontWeight:700,letterSpacing:1,marginBottom:10}}>📅 DATAS PRÓXIMAS</div>
           {datasProx.slice(0,3).map(d=>{
@@ -296,7 +236,7 @@ export default function ChesedModule({ onBack, dark, setDark }) {
       )}
 
       {/* People needing attention */}
-      {W("atencao")&&pessoasAtrasadas.length>0&&(
+      {pessoasAtrasadas.length>0&&(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:"#ef4444",fontWeight:700,letterSpacing:1,marginBottom:10}}>🔴 PRECISAM DE ATENÇÃO</div>
           {pessoasAtrasadas.slice(0,3).map(p=>(
@@ -313,7 +253,7 @@ export default function ChesedModule({ onBack, dark, setDark }) {
       )}
 
       {/* Habits */}
-      {W("habitos_hoje")&&<Card>
+      <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:800}}>Hábitos de Hoje</div>
           <span style={{fontSize:10,color:ACCENT,fontWeight:700,background:ACCENT+"15",padding:"2px 10px",borderRadius:99}}>{habits.filter(h=>h.done).length}/{habits.length}</span>
@@ -331,7 +271,7 @@ export default function ChesedModule({ onBack, dark, setDark }) {
             <span style={{fontSize:10,fontWeight:700,color:"#fbbf24"}}>+{h.xp}</span>
           </div>
         ))}
-      </Card>}
+      </Card>
     </div>
   );
 
@@ -806,9 +746,7 @@ export default function ChesedModule({ onBack, dark, setDark }) {
           </div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",background:"#fbbf2415",padding:"4px 10px",borderRadius:99}}>
-            Nível {xpLevel} · {xp} XP
-          </div>
+          {/* Badge de XP/Nível removido em 30/08/2026 (pedido do usuário) — xp continua rastreado internamente */}
           <button onClick={()=>setDark(d=>!d)} style={{background:C.card,border:`1px solid ${C.b1}`,borderRadius:9,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
             <Ico n={dark?"sun":"moon"} size={14} color={C.dim}/>
           </button>
@@ -835,7 +773,7 @@ export default function ChesedModule({ onBack, dark, setDark }) {
           {TABS.map(t=>{
             const a = currentTab===t.id;
             return (
-              <button key={t.id} onClick={()=>{if(t.id===TABS[0].id){onBack();return;}setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}
+              <button key={t.id} onClick={()=>{setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
                 onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
                 <div style={{width:36,height:30,borderRadius:9,background:a?ACCENT+"18":"transparent",border:a?`1px solid ${ACCENT}30`:"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
@@ -850,7 +788,6 @@ export default function ChesedModule({ onBack, dark, setDark }) {
 
       {/* Sheets */}
       {renderSheet()}
-      {sh==="widgets"&&WidgetCustomizer()}
     </div>
     </ThemeCtx.Provider>
   );

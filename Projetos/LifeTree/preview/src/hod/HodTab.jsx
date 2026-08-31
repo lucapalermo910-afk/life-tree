@@ -11,13 +11,8 @@ export function HodTab(){
   const C = useContext(ThemeCtx);
   const g = useHod();
   const { carHabits, setCarHabits, projects, setProjects, brand, setBrand, setXp, setTab, carGoals, setCarGoals, setPendingAch,
-    carScore, projetosScore, marcaScore, hodScore } = g;
+    hodScore } = g;
   const hs = hodScore();
-  const modules = [
-    {l:"Carreira",     v:carScore(),      c:ACCENT,    icon:"monitor", w:35, tab:"carreira"},
-    {l:"Projetos",     v:projetosScore(), c:"#8b5cf6", icon:"rocket",  w:45, tab:"projetos"},
-    {l:"Marca Pessoal",v:marcaScore(),    c:"#ec4899", icon:"globe",   w:20, tab:"marca"},
-  ];
   const allHabits = [
     ...carHabits.map(h=>({...h,mod:"Carreira",c:ACCENT,src:"car"})),
     ...projects.flatMap(p=>(p.habits||[]).map(h=>({...h,mod:p.name,c:typeColor(p.type),src:"proj",projId:p.id}))),
@@ -25,21 +20,12 @@ export function HodTab(){
   ];
   return (
     <div style={{animation:"slideUp .3s ease"}}>
+      {/* Simplificado em 30/08/2026 (pedido do usuário) — antes tinha os 3 mini-cards de
+          Carreira/Projetos/Marca Pessoal espremidos ao lado do score grande; esse
+          detalhamento já existe nas próprias abas, não precisa duplicar aqui. */}
       <Card style={{background:"linear-gradient(135deg,"+ACCENT+"22,"+ACCENT+"06)",border:"1px solid "+ACCENT+"44",marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-          <div>
-            <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>HOD — DESENVOLVIMENTO PROFISSIONAL</div>
-            <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1}}>{hs}<span style={{fontSize:18}}>%</span></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginTop:4}}>
-            {modules.map(m=>(
-              <div key={m.l} onClick={()=>setTab(m.tab)} style={{background:C.card,borderRadius:8,padding:"5px 6px",textAlign:"center",cursor:"pointer",border:"1px solid "+m.c+"22"}}>
-                <div style={{fontSize:7,color:C.muted}}>{m.l}</div>
-                <div style={{fontSize:14,fontWeight:900,color:m.c}}>{m.v}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>HOD — DESENVOLVIMENTO PROFISSIONAL</div>
+        <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1,marginBottom:10}}>{hs}<span style={{fontSize:18}}>%</span></div>
         <ProgressBar value={hs} color={"linear-gradient(90deg,"+ACCENT+",#fbbf24)"} height={6}/>
       </Card>
 

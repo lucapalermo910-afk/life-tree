@@ -21,6 +21,7 @@ import { CHESED_ACTION_HANDLERS } from "./shared/chesedActions.js";
 import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { BINAH_ACTION_HANDLERS } from "./shared/binahActions.js";
+import { PlanoCard } from "./shared/ui.jsx";
 
 // ── THEME ─────────────────────────────────────────────────────────────────────
 const DARK = {
@@ -687,6 +688,17 @@ export default function App() {
       if(actionMatch && skill.actions){
         try{
           const action=JSON.parse(actionMatch[1].trim());
+          // create_objective vem do Coach com steps como string simples ("passo 1", não
+          // {title:"passo 1"}) — normaliza aqui, antes de qualquer render, pra já ter
+          // {id,title,done} de verdade: o PlanoCard da pré-visualização (antes de confirmar)
+          // precisa de um id por passo pra editar/apagar linha, mesma exigência do handler
+          // que persiste depois de confirmado (achado ao testar com Coach simulado, 30/08/2026).
+          if(action.plano){
+            action.plano={
+              ...action.plano,
+              steps:(action.plano.steps||[]).map(s=>({id:"st"+Math.random().toString(36).slice(2,8),title:typeof s==="string"?s:s.title,done:false})),
+            };
+          }
           setPendingCoachAction({action,skillId});
         }catch(e){}
       } else {
@@ -695,11 +707,28 @@ export default function App() {
 
       setCoachMessages(p=>[...p,{role:"assistant",content:cleanText}]);
     }catch(e){
-      setCoachMessages(p=>[...p,{role:"assistant",content:"Erro de conexão: "+e.message}]);
+      // O texto cru de erro (billing da Anthropic em inglês, "Payload grande demais", etc.)
+      // não deve chegar ao usuário final — ver achado do Raio-X de 29/08/2026. Fica só no
+      // console pra debug; a bolha mostra sempre uma mensagem amigável, marcada com
+      // `isError` pra também acionar o auto-dismiss abaixo (ver useEffect de coachBubbleClosed).
+      console.error("Coach API error:", e);
+      setCoachMessages(p=>[...p,{role:"assistant",content:"O Coach está indisponível agora. Tente de novo em instantes.",isError:true}]);
     }
     setCoachBubbleClosed(false);
     setCoachLoading(false);
   };
+
+  // Bolha de erro do Coach some sozinha depois de alguns segundos — diferente de uma
+  // resposta normal (que fica até o usuário fechar ou mandar outra pergunta, porque pode
+  // ter uma ação pendente pra confirmar), um erro não tem nada esperando ação do usuário,
+  // então não faz sentido ficar preso na tela nem sobreviver a uma troca de módulo (achado
+  // do Raio-X de 29/08/2026 — confirmado sobrevivendo até depois de navegar pra outro módulo).
+  useEffect(() => {
+    const last = coachMessages[coachMessages.length-1];
+    if (!last || last.role!=="assistant" || !last.isError || coachBubbleClosed) return;
+    const t = setTimeout(() => setCoachBubbleClosed(true), 6000);
+    return () => clearTimeout(t);
+  }, [coachMessages, coachBubbleClosed]);
 
   // Executa de fato uma ação já proposta e confirmada. Separado de sendToCoach porque só
   // roda depois do clique em "Confirmar" — nunca no mesmo turno em que a IA propõe.
@@ -869,7 +898,7 @@ export default function App() {
           YesodModule.jsx — então ficam acima de tudo sem depender do zIndex deste wrapper. ── */}
       {activeModule==="yesod"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark}/>
+          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach}/>
         </div>
       )}
       {activeModule==="hod"&&(
@@ -1113,6 +1142,17 @@ export default function App() {
               </button>
             )}
             <div style={{paddingRight:pendingCoachAction?0:22}}>{coachMessages[coachMessages.length-1].content}</div>
+            {/* Plano do objetivo, quando a ação pendente é create_objective — editável antes
+                de confirmar (mesmo componente/mecanismo já validado ao vivo no mockup de
+                Geburah, promovido pra shared/ui.jsx em 29/08/2026, ver o plano salvo). */}
+            {pendingCoachAction?.action?.plano&&(
+              <div style={{marginTop:10,maxHeight:220,overflowY:"auto"}}>
+                <PlanoCard C={C} plano={pendingCoachAction.action.plano}
+                  onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(s=>s.id===stepId?{...s,done:!s.done}:s)}}}))}
+                  onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
+                  accent={coachAccent}/>
+              </div>
+            )}
             {pendingCoachAction&&(
               <div style={{display:"flex",gap:8,marginTop:10}}>
                 <button onClick={confirmPendingCoachAction} style={{flex:1,padding:"7px",borderRadius:8,

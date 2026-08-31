@@ -779,6 +779,27 @@ export function createYesodGoal(a) {
   notifyYesodUpdated();
   return { ok: true, message: "Meta financeira '" + title + "' criada." };
 }
+// Objetivo com plano automático do Coach (29/08/2026, arquitetura genérica — ver
+// C:\Users\mcrel\.claude\plans\majestic-roaming-umbrella.md). Persiste na mesma lista
+// `ygoals` de sempre (mesmo formato de sempre + 2 campos novos, aditivos: `metrica` e
+// `plano`) — nenhum código existente que lê `ygoals` precisa mudar. `plano` vem pronto do
+// Coach (steps/impactoPositivo/impactoNegativo/habitoSugerido); só normaliza os ids dos
+// passos aqui, o resto o Coach já monta certo.
+export function createYesodObjective(a) {
+  const ygoals = readJSON("ygoals", []);
+  const titulo = (a.titulo || a.title || "").trim();
+  if (!titulo) return { ok: false, message: "Título vazio." };
+  const plano = a.plano ? {
+    steps: (a.plano.steps || []).map(s => ({ id: "st" + uid(), title: typeof s === "string" ? s : s.title, done: false })),
+    impactoPositivo: a.plano.impactoPositivo || [],
+    impactoNegativo: a.plano.impactoNegativo || [],
+    habitoSugerido: a.plano.habitoSugerido || null,
+  } : null;
+  const metrica = a.metrica && a.metrica.id ? { id: a.metrica.id, valor: Number(a.metrica.valor) || 0 } : null;
+  writeJSON("ygoals", [...ygoals, { id: "yg"+uid(), title: titulo, xp: Number(a.xp) || 100, done: false, metrica, plano }]);
+  notifyYesodUpdated();
+  return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + "." };
+}
 export function toggleYesodGoal(a) {
   const ygoals = readJSON("ygoals", []);
   const found = findByField(ygoals, "title", a.match);
@@ -1034,6 +1055,7 @@ export const YESOD_ACTION_HANDLERS = {
   toggle_yhabit: toggleYesodHabit,
   delete_yhabit: deleteYesodHabit,
   create_ygoal: createYesodGoal,
+  create_objective: createYesodObjective,
   toggle_ygoal: toggleYesodGoal,
   delete_ygoal: deleteYesodGoal,
   add_dashboard_card: addYesodDashboardCard,

@@ -8,6 +8,16 @@ import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { BINAH_ACTION_HANDLERS } from "./shared/binahActions.js";
 import { typeColor, typeLabel, phaseLabel } from "./hod/helpers.js";
 import { fmt } from "./yesod/constants.js";
+import { GoalCard, PlanoCard } from "./shared/ui.jsx";
+import {
+  readIfPlan,
+  criarIfPlan as criarIfPlanShared,
+  addIfMeta as addIfMetaShared,
+  removeIfMeta as removeIfMetaShared,
+  addIfAcao as addIfAcaoShared,
+  removeIfAcao as removeIfAcaoShared,
+  apagarIfPlano as apagarIfPlanoShared,
+} from "./shared/ifPlanActions.js";
 
 // Protótipo do Desejo (Kether) — mesmo padrão do Controle/Malkuth (19/08/2026), mas pro
 // lado das metas em vez dos hábitos: "assim como o Controle cuida dos hábitos, o Desejo
@@ -56,7 +66,10 @@ function Ico({ n, size = 16, color = "currentColor", sw = 1.5 }) {
 const GOAL_ADAPTERS = {
   yesod: {
     label: "Finanças", color: "#10b981",
-    read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, title: g.title, xp: g.xp, done: g.done })),
+    // plano/metrica (29/08/2026, motor genérico de objetivo+plano — ver plano salvo)
+    // incluídos além de {id,title,xp,done} de sempre — Kether só espelha (read-only, sem
+    // onUpdate), edição continua só no módulo de origem.
+    read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: g.metrica || null })),
     toggle: item => YESOD_ACTION_HANDLERS.toggle_ygoal({ match: item.title }),
   },
   hod: {
@@ -93,11 +106,6 @@ const STATUS_LOOKUP = {
 };
 
 const DESEJOS_KEY = "lifetree_keth_desejos";
-// IF_PLAN_KEY: objetivo principal "métrico" — diferente de um Desejo (que é uma lista livre
-// de secundários), a Independência Financeira já existe no Yesod com seu próprio % (patrimônio
-// ÷ meta pela regra dos 4%, ver lifetree_fin_ifstatus). Este card só guarda os secundários/
-// ações vinculados a ela; o progresso em si nunca é duplicado aqui, sempre lido do Yesod.
-const IF_PLAN_KEY = "lifetree_keth_if_plan";
 const uid = () => Math.random().toString(36).slice(2, 8);
 
 export default function KetherModule({ onBack, dark, setDark }) {
@@ -113,6 +121,9 @@ export default function KetherModule({ onBack, dark, setDark }) {
   useCoachDataSync("binah", refresh);
 
   const [desejos, setDesejos] = useState(() => readOtherModule(DESEJOS_KEY, []));
+  // Expande o plano (read-only) de uma meta com plano — mesmo padrão de toggle-só-uma-por-vez
+  // já usado no resto do app (Yesod/Geburah). 29/08/2026, motor genérico de objetivo+plano.
+  const [expandedMetaId, setExpandedMetaId] = useState(null);
   const [novo, setNovo] = useState(false);
   const [wishTitle, setWishTitle] = useState("");
   const [draftMetas, setDraftMetas] = useState([]);
@@ -120,29 +131,20 @@ export default function KetherModule({ onBack, dark, setDark }) {
   const [draftMetaTitle, setDraftMetaTitle] = useState("");
 
   // ── Objetivo Principal métrico: Independência Financeira (piloto financeiro, 29/08/2026) ──
-  const [ifPlan, setIfPlan] = useState(() => readOtherModule(IF_PLAN_KEY, null));
+  // Lógica movida pra shared/ifPlanActions.js em 30/08/2026 — a mesma tela de plano passou a
+  // existir também dentro do Yesod (usuário pediu pra editar/apagar de lá, não só daqui), e as
+  // duas precisam ler/escrever o mesmo plano sem duplicar a correção do bug de meta/hábito
+  // órfão. Aqui só o wiring de estado local + inputs do formulário.
+  const [ifPlan, setIfPlan] = useState(() => readIfPlan());
   const [ifMetaInput, setIfMetaInput] = useState("");
   const [ifAcaoInput, setIfAcaoInput] = useState("");
   const [ifAcaoFreq, setIfAcaoFreq] = useState("Diário");
-  const saveIfPlan = next => { setIfPlan(next); try { localStorage.setItem(IF_PLAN_KEY, JSON.stringify(next)); } catch {} };
-  const criarIfPlan = () => {
-    YESOD_ACTION_HANDLERS.reset_if_baseline();
-    saveIfPlan({ metas: [], acoes: [] });
-  };
-  const addIfMeta = () => {
-    if (!ifMetaInput.trim()) return;
-    YESOD_ACTION_HANDLERS.create_ygoal({ title: ifMetaInput.trim(), xp: 150 });
-    saveIfPlan({ ...ifPlan, metas: [...ifPlan.metas, { id: "ifm" + uid(), title: ifMetaInput.trim() }] });
-    setIfMetaInput("");
-  };
-  const removeIfMeta = id => saveIfPlan({ ...ifPlan, metas: ifPlan.metas.filter(m => m.id !== id) });
-  const addIfAcao = () => {
-    if (!ifAcaoInput.trim()) return;
-    YESOD_ACTION_HANDLERS.create_yhabit({ title: ifAcaoInput.trim(), freq: ifAcaoFreq, xp: 20 });
-    saveIfPlan({ ...ifPlan, acoes: [...ifPlan.acoes, { id: "ifa" + uid(), title: ifAcaoInput.trim(), freq: ifAcaoFreq }] });
-    setIfAcaoInput("");
-  };
-  const removeIfAcao = id => saveIfPlan({ ...ifPlan, acoes: ifPlan.acoes.filter(a => a.id !== id) });
+  const criarIfPlan = () => setIfPlan(criarIfPlanShared());
+  const addIfMeta = () => { setIfPlan(addIfMetaShared(ifPlan, ifMetaInput)); setIfMetaInput(""); };
+  const removeIfMeta = id => setIfPlan(removeIfMetaShared(ifPlan, id));
+  const addIfAcao = () => { setIfPlan(addIfAcaoShared(ifPlan, ifAcaoInput, ifAcaoFreq)); setIfAcaoInput(""); };
+  const removeIfAcao = id => setIfPlan(removeIfAcaoShared(ifPlan, id));
+  const apagarIfPlano = () => setIfPlan(apagarIfPlanoShared(ifPlan));
 
   const saveDesejos = next => {
     setDesejos(next);
@@ -300,6 +302,10 @@ export default function KetherModule({ onBack, dark, setDark }) {
                       <Ico n="plus" size={12} color={C.dim}/>
                     </button>
                   </div>
+
+                  <button onClick={apagarIfPlano} style={{ marginTop: 14, background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
+                    <Ico n="x" size={11}/> Apagar plano
+                  </button>
                 </>
               )}
             </div>
@@ -312,7 +318,24 @@ export default function KetherModule({ onBack, dark, setDark }) {
             Nenhuma meta nos módulos conectados ainda.
           </div>
         )}
-        {metas.map(item => (
+        {metas.map(item => item.plano ? (
+          // Meta com plano (motor genérico) — mesmo GoalCard usado no módulo de origem, só
+          // que read-only (sem onUpdate/onToggleStep de verdade): Kether nunca edita nem
+          // recalcula, só espelha o que já foi salvo lá.
+          <div key={item.id} style={{ marginBottom: 10 }}>
+            <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
+            <GoalCard C={C} accent={item.color} label={item.title}
+              pct={item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
+              statLine={item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
+              onClick={() => setExpandedMetaId(p => p === item.id ? null : item.id)}/>
+            {expandedMetaId === item.id && (
+              <div style={{ marginTop: 8 }}>
+                <PlanoCard C={C} plano={item.plano} accent={item.color} onToggleStep={() => {}} onUpdate={() => {}}/>
+                <div style={{ fontSize: 9, color: C.muted, textAlign: "center", marginTop: 6 }}>Só leitura aqui — editar no módulo de origem ({item.moduleLabel}).</div>
+              </div>
+            )}
+          </div>
+        ) : (
           <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: C.card, border: "1px solid " + item.color + "22", borderRadius: 12, marginBottom: 7 }}>
             <button
               onClick={() => GOAL_ADAPTERS[item.moduleId].toggle(item)}

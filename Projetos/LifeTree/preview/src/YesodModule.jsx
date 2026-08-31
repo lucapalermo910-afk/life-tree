@@ -20,9 +20,14 @@ import { OrcamentoFluxoTab } from "./yesod/OrcamentoFluxoTab.jsx";
 import { ObjetivosTab } from "./yesod/ObjetivosTab.jsx";
 import { ConfigTab } from "./yesod/ConfigTab.jsx";
 
-export default function YesodModule({ onBack, dark, setDark }) {
+export default function YesodModule({ onBack, dark, setDark, askCoach }) {
   const C = dark ? DARK : LIGHT;
-  const ctx = useYesodState();
+  const ctx0 = useYesodState();
+  // askCoach (29/08/2026, motor genérico de objetivo+plano) — dispara sendToCoach do App.jsx
+  // com uma mensagem programática, reaproveitando 100% do chat/skill/ação que já existe.
+  // Só ObjetivosTab.jsx usa hoje (consumido via useContext(YesodCtx), não passado por prop
+  // direta — mesmo padrão do resto do ctx).
+  const ctx = { ...ctx0, askCoach };
   // Destructuring parcial de propósito (26/08/2026, encolhido de novo no passo 4 — ver 11
   // Plano de Decomposição — Arquivos Monolíticos.md) — ctx tem 177 chaves (tudo que
   // useYesodState expõe), mas o shell só puxa pro escopo local o que ele mesmo usa direto
@@ -30,9 +35,10 @@ export default function YesodModule({ onBack, dark, setDark }) {
   // (BolsosTab/OrcamentoFluxoTab/ObjetivosTab/ConfigTab) lê o resto via useContext(YesodCtx)
   // próprio, sem passar por aqui.
   const {
-    accs, bkOf, budgetSpend, budgets, calcYesodScore, cashflowMonth, catsOut, debts, delAcc,
-    delBox, delCard, delDebt, delOwed, despesasExpanded, guard, ifGoal, ifMonthly, invs, nav, net,
-    openSh, orcSection, page, pendingSplits, recurringOverrides, recurrings, setDespesasExpanded,
+    accs, bkOf, budgetSpend, budgets, calcYesodScore, cards, cashflowMonth, catsOut, debtLateInfo,
+    debts, delAcc, delBox, delCard, delDebt, delOwed, despesasExpanded, getMonthStr,
+    guard, ifGoal, ifMonthly, invs, nav, net, openSh, orcSection, page, pendingSplits,
+    recurringAmountFor, recurringOverrides, recurringPendingDates, recurrings, setDespesasExpanded,
     setFinXp, setOrcSection, setPage, setSh, setTab, setYHabits, sharedOwed, splitPeople, tab,
     toast, today, totAcc, totInv, vencimentoAlerts, yGoals, yHabits, yesodCards,
   } = ctx;
@@ -84,27 +90,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
         {/* ══ YESOD — VISÃO GERAL ══ */}
         {!page&&tab==="yesod"&&(function YesodTab(){
           const ys=calcYesodScore();
-          const cf0=cashflowMonth(-1);
-          const savRate=cf0.ins>0?Math.max(0,(cf0.ins-cf0.outs)/cf0.ins):0;
-          const ifN=ifGoal||ifMonthly*300||1;
-
-          // ── Catálogo de cards disponíveis ──────────────────────────────────
-          const CARD_DEFS=[
-            {id:"poupanca",  l:"Poupança",      v:Math.min(100,Math.round(savRate/0.2*100)), unit:"%", c:"#16a34a", tab:"fluxo",  icon:"up",       desc:"Taxa de poupança"},
-            {id:"if",        l:"Prog. IF",       v:Math.min(100,Math.round(net/ifN*100)),     unit:"%", c:"#06b6d4", tab:"goals",     icon:"alvo",     desc:"Independência financeira"},
-            {id:"dividas",   l:"Dívidas",        v:debts.length>0?Math.round(debts.reduce((s,d)=>s+(d.parcelasPagas/d.totalParcelas),0)/debts.length*100):100, unit:"%", c:"#f97316", tab:"bolsos", icon:"debt", desc:"Progresso quitação"},
-            {id:"orcamento", l:"Orçamento",      v:budgets.length>0?Math.round(budgets.filter(b=>budgetSpend(b.cat)<=b.limit).length/budgets.length*100):50, unit:"%", c:"#8b5cf6", tab:"orc", icon:"alvo", desc:"Categorias no limite"},
-            {id:"habitos",  l:"Hábitos",   v:Math.round(yHabits.filter(h=>h.done).length/(yHabits.length||1)*100), unit:"%", c:ACCENT,    tab:"habitos_section", icon:"check",    desc:"Hábitos concluídos"},
-            {id:"metas",    l:"Metas",     v:Math.round(yGoals.filter(g=>g.done).length/(yGoals.length||1)*100),   unit:"%", c:"#f59e0b", tab:"goals",   icon:"alvo",     desc:"Metas atingidas"},
-            {id:"patrimonio",l:"Patrimônio",     v:fmt(net),   unit:"", c:net>=0?ACCENT:"#ef4444", tab:"fluxo", icon:"wallet",   desc:"Patrimônio líquido"},
-            {id:"receita",   l:"Receita",        v:fmt(cf0.ins), unit:"", c:"#16a34a", tab:"fluxo", icon:"up",    desc:"Receita do mês"},
-            {id:"despesa",   l:"Despesas",       v:fmt(cf0.outs),unit:"", c:"#ef4444", tab:"fluxo", icon:"down",  desc:"Despesas do mês"},
-            {id:"saldo_mes", l:"Saldo Mensal",   v:fmt(cf0.balance), unit:"", c:cf0.balance>=0?ACCENT:"#ef4444", tab:"fluxo", icon:"activity", desc:"Resultado do mês"},
-            {id:"investido", l:"Investido",      v:fmt(totInv), unit:"", c:"#f59e0b", tab:"bolsos",  icon:"barchart", desc:"Total investido"},
-            {id:"contas",    l:"Contas",         v:fmt(totAcc), unit:"", c:ACCENT,    tab:"bolsos",icon:"bank",    desc:"Saldo em contas"},
-          ];
-
-          const activeCards=yesodCards.map(id=>CARD_DEFS.find(d=>d.id===id)).filter(Boolean);
           const {overdue:overdueAlerts,upcoming:alerts}=vencimentoAlerts();
           const openAlert=al=>{
             if(al.kind==="card"){ nav("card",al.ref); return; }
@@ -136,6 +121,72 @@ export default function YesodModule({ onBack, dark, setDark }) {
               <div style={{height:6,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:ys+"%",background:"linear-gradient(90deg,#10b981,#06b6d4)",borderRadius:99,transition:"width .6s"}}/></div>
             </div>
 
+            {/* Visão geral de Receitas/Despesas do mês (31/08/2026, pedido do usuário,
+                substituiu os INDICADORES customizáveis) — Efetivada = já virou transação de
+                verdade (cashflowMonth do mês atual); Esperada = próxima ocorrência de
+                recorrência ativa cujo nextDate cai neste mês e ainda não foi paga (nextDate só
+                avança depois que o usuário confirma o pagamento — ver payRecurringOccorrence
+                em context.js, por isso nextDate<mês atual nunca acontece aqui). Vencida/Próxima
+                do vencimento em despesas reaproveitam exatamente a mesma regra de
+                debtLateInfo/recurringPendingDates/getStmts que já alimenta os cards "EM
+                ATRASO"/"VENCE NOS PRÓXIMOS 7 DIAS" logo abaixo — os totais batem com esses
+                cards por construção, não é um cálculo paralelo. */}
+            {(()=>{
+              const curYm=getMonthStr(0);
+              const cfNow=cashflowMonth(0);
+
+              const receitasEfetivadas=cfNow.ins;
+              const receitasEsperadas=recurrings
+                .filter(r=>r.active&&r.type==="in"&&r.nextDate.slice(0,7)===curYm)
+                .reduce((s,r)=>s+recurringAmountFor(r,curYm),0);
+              const receitasTotais=receitasEfetivadas+receitasEsperadas;
+
+              const despesasEfetivadas=cfNow.outs;
+              const despesasVencidas=
+                recurrings.reduce((s,r)=>s+recurringPendingDates(r).length*recurringAmountFor(r,curYm),0)
+                +debts.reduce((s,d)=>{ if(d.parcelasPagas>=d.totalParcelas) return s; const li=debtLateInfo(d); return li.atraso>0?s+d.valorParcela*li.atraso:s; },0);
+              const despesasProximas=
+                cards.reduce((s,cd)=>{ const stmts=getStmts(cd); const next=stmts.find(st=>st.due>=today); if(!next) return s; const days=Math.round((new Date(next.due)-new Date(today))/864e5); return days<=7?s+next.total:s; },0)
+                +debts.reduce((s,d)=>{ if(d.parcelasPagas>=d.totalParcelas) return s; const li=debtLateInfo(d); if(li.atraso>0||!li.nextDue) return s; const days=Math.round((new Date(li.nextDue)-new Date(today))/864e5); return days<=7?s+d.valorParcela:s; },0);
+              const despesasEsperadas=
+                recurrings.filter(r=>r.active&&r.type==="out"&&r.nextDate.slice(0,7)===curYm&&r.nextDate>=today).reduce((s,r)=>{ const days=Math.round((new Date(r.nextDate)-new Date(today))/864e5); return days>7?s+recurringAmountFor(r,curYm):s; },0)
+                +debts.reduce((s,d)=>{ if(d.parcelasPagas>=d.totalParcelas) return s; const li=debtLateInfo(d); if(li.atraso>0||!li.nextDue||li.nextDue.slice(0,7)!==curYm) return s; const days=Math.round((new Date(li.nextDue)-new Date(today))/864e5); return days>7?s+d.valorParcela:s; },0);
+              const despesasTotais=despesasEfetivadas+despesasVencidas+despesasProximas+despesasEsperadas;
+
+              const MiniBox=({l,v,c})=>(
+                <div style={{background:C.surface,borderRadius:8,padding:"7px",textAlign:"center"}}>
+                  <div style={{fontSize:8,color:C.muted,marginBottom:2}}>{l}</div>
+                  <div style={{fontSize:12,fontWeight:900,color:c}}>{fmt(v)}</div>
+                </div>
+              );
+              return(<>
+                <div style={{background:C.card,border:"1px solid #16a34a33",borderRadius:14,padding:14,marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>RECEITAS DO MÊS</div>
+                    <div style={{fontSize:18,fontWeight:900,color:"#16a34a"}}>{fmt(receitasTotais)}</div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <MiniBox l="EFETIVADAS" v={receitasEfetivadas} c="#16a34a"/>
+                    <MiniBox l="ESPERADAS" v={receitasEsperadas} c={C.muted}/>
+                  </div>
+                </div>
+                <div style={{background:C.card,border:"1px solid #ef444433",borderRadius:14,padding:14,marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>DESPESAS DO MÊS</div>
+                    <div style={{fontSize:18,fontWeight:900,color:"#ef4444"}}>{fmt(despesasTotais)}</div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                    <MiniBox l="EFETIVADAS" v={despesasEfetivadas} c="#ef4444"/>
+                    <MiniBox l="ESPERADAS" v={despesasEsperadas} c={C.muted}/>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <MiniBox l="VENCIDAS" v={despesasVencidas} c="#dc2626"/>
+                    <MiniBox l="PRÓX. VENCIMENTO" v={despesasProximas} c="#f97316"/>
+                  </div>
+                </div>
+              </>);
+            })()}
+
             {/* Alertas de vencimento — EM ATRASO (parcela de dívida vencida, recorrência de
                 saída pendente) primeiro, depois PRÓXIMOS 7 DIAS; ambos clicáveis pra pagar
                 direto dali (26/08/2026) */}
@@ -157,6 +208,29 @@ export default function YesodModule({ onBack, dark, setDark }) {
                 </div>);})}
               </div>
             )}
+            {/* PRÓXIMAS RECEITAS (31/08/2026, pedido do usuário — "mesma forma" do card de
+                despesas acima, agora pro lado das entradas). Só informativo, sem onClick: ao
+                contrário de despesa (que exige confirmar "Pagar Conta" manualmente, ver
+                payRecurringOccurrence), recorrência de ENTRADA já lança sozinha assim que
+                nextDate chega (ver useEffect de recorrências em context.js) — não existe ação
+                de "confirmar recebimento" pra abrir aqui, é só um aviso do que está a caminho. */}
+            {(()=>{
+              const proximasReceitas=recurrings
+                .filter(r=>r.active&&r.type==="in")
+                .map(r=>({...r,days:Math.round((new Date(r.nextDate)-new Date(today))/864e5)}))
+                .filter(r=>r.days>=0&&r.days<=7)
+                .sort((a,b)=>a.days-b.days);
+              if(!proximasReceitas.length) return null;
+              return(
+                <div style={{background:C.card,border:"1px solid #16a34a44",borderRadius:14,padding:12,marginBottom:14}}>
+                  <div style={{fontSize:9,color:"#16a34a",fontWeight:700,letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:5}}><Ico n="up" size={11} color="#16a34a"/> PRÓXIMAS RECEITAS</div>
+                  {proximasReceitas.map(r=>(<div key={r.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderTop:"1px solid "+C.b1}}>
+                    <div><div style={{fontSize:11,fontWeight:600}}>{r.desc}</div><div style={{fontSize:9,color:C.muted}}>{r.days===0?"Hoje":r.days===1?"Amanhã":"Em "+r.days+" dias"}</div></div>
+                    <span style={{fontSize:12,fontWeight:800,color:"#16a34a"}}>{fmt(recurringAmountFor(r,getMonthStr(0)))}</span>
+                  </div>))}
+                </div>
+              );
+            })()}
             {/* Despesas divididas pendentes — nos DOIS sentidos (26/08/2026): receivables
                 (accs[].txs[].split — EU paguei, o outro me deve) e sharedOwed (o OUTRO pagou,
                 eu devo — criado dentro do próprio Registrar, ver launch()). Só mostra o que
@@ -240,47 +314,6 @@ export default function YesodModule({ onBack, dark, setDark }) {
               );
             })()}
 
-            {/* Cards customizáveis */}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-              <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>INDICADORES</div>
-              <button onClick={()=>setSh("editCards")} style={{background:C.b1,border:"none",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:C.muted,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
-                <Ico n="gear" size={10} color={C.muted}/> Editar
-              </button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-              {activeCards.map(r=>{
-                const isNum=typeof r.v==="number";
-                const color=isNum?(r.v>=80?r.c:r.v>=50?"#f59e0b":"#ef4444"):r.c;
-                return(
-                  <div key={r.id} onClick={()=>{
-                    if(r.tab==="habitos_section") document.getElementById("yesod-habitos")?.scrollIntoView({behavior:"smooth"});
-                    else if(r.tab==="fluxo") { setTab("orc"); setOrcSection("fluxo"); }
-                    else if(r.tab&&r.tab!=="yesod") setTab(r.tab);
-                  }}
-                    style={{background:C.card,border:"1px solid "+color+"22",borderRadius:12,
-                      padding:"10px 8px",textAlign:"center",cursor:r.tab!=="yesod"?"pointer":"default"}}>
-                    <div style={{fontSize:9,color:C.muted,fontWeight:600,marginBottom:3}}>{r.l}</div>
-                    <div style={{fontSize:isNum?18:12,fontWeight:900,color,marginBottom:isNum?4:0,lineHeight:1.2}}>{r.v}{r.unit}</div>
-                    {isNum&&<div style={{height:3,background:C.b1,borderRadius:99,overflow:"hidden"}}><div style={{height:"100%",width:r.v+"%",background:color,borderRadius:99}}/></div>}
-                    <div style={{fontSize:8,color:C.muted,marginTop:3}}>{r.desc}</div>
-                  </div>
-                );
-              })}
-              {activeCards.length===0&&(
-                <div style={{gridColumn:"1/-1",textAlign:"center",padding:16,color:C.muted,fontSize:11}}>
-                  Nenhum indicador — toque em Editar para adicionar
-                </div>
-              )}
-            </div>
-
-            {/* Hábitos */}
-            <div id="yesod-habitos" style={{background:C.card,border:"1px solid "+C.b1,borderRadius:14,padding:14,marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-                <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>HÁBITOS</div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:9,color:ACCENT,fontWeight:700}}>{yHabits.filter(h=>h.done).length}/{yHabits.length}</span><button onClick={()=>openSh("addYHabit",{title:"",freq:"Diário",xp:15})} style={{background:ACCENT+"22",border:"1px solid "+ACCENT+"44",borderRadius:7,padding:"3px 9px",cursor:"pointer",color:ACCENT,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}><Ico n="plus" size={10} color={ACCENT}/> Hábito</button></div>
-              </div>
-              {yHabits.map(h=>(<div key={h.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderTop:"1px solid "+C.b1}}><button onClick={()=>{if(!h.done){setFinXp(x=>x+h.xp);}setYHabits(p=>p.map(x=>x.id===h.id?{...x,done:!x.done}:x));}} style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:"pointer",border:"1.5px solid "+(h.done?ACCENT:C.b2),background:h.done?ACCENT:"transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>{h.done&&<Ico n="check" size={11} color="#fff" sw={2.5}/>}</button><div style={{flex:1}}><div style={{fontSize:12,color:h.done?C.muted:C.text,textDecoration:h.done?"line-through":"none"}}>{h.title}</div><div style={{fontSize:9,color:C.muted,marginTop:1}}>{h.freq}</div></div><span style={{fontSize:9,fontWeight:700,color:"#fbbf24"}}>+{h.xp}</span><button onClick={()=>setYHabits(p=>p.filter(x=>x.id!==h.id))} style={{background:"none",border:"none",cursor:"pointer",padding:2,opacity:.5}}><Ico n="x" size={11} color={C.muted}/></button></div>))}
-            </div>
           </div>);
         })()}
 

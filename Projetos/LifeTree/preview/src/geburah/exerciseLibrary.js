@@ -293,4 +293,28 @@ export const D_EX_ARTES=[
   {id:"ela275",name:"Daoshu (forma de sabre)",grupo:"Artes Marciais",equip:"Kung Fu · 7º-9º Duan (Elite/Mestre)",inst:"Forma com sabre de lâmina única, movimentos de corte amplos e potentes.",met:5.5,nivel:"7º-9º Duan (Elite/Mestre)"},
   {id:"ela276",name:"Sanda Avançado (competição)",grupo:"Artes Marciais",equip:"Kung Fu · 7º-9º Duan (Elite/Mestre)",inst:"Combate completo com estratégia de pontuação e controle de ringue.",met:10.5,nivel:"7º-9º Duan (Elite/Mestre)"},
 ];
-export const D_EX=[...D_EX_BASE,...D_EX_MUSC,...D_EX_ARTES];
+// Cardio/resistência — biblioteca original só tinha "Corrida" (e10, MET genérico) fora daqui.
+// Adicionado em 29/08/2026 pra sustentar o piloto de planejamento (peso + composição corporal)
+// do Geburah — consistência de treino como hábito de apoio inclui sessão de cardio de verdade,
+// precisa de variedade de atividade/intensidade pro Coach poder propor progressão gradual e
+// segura (ver Roadmap → gap de cardio) em vez de só "corra mais". MET pelo Compendium of
+// Physical Activities (mesma fonte de referência já usada nos outros dois blocos).
+export const D_EX_CARDIO=[
+  {id:"elc1",name:"Caminhada leve",grupo:"Cardio",equip:"Nenhum",inst:"Ritmo confortável (~5km/h), consegue conversar sem ofegar",met:3,nivel:"Iniciante"},
+  {id:"elc2",name:"Caminhada rápida",grupo:"Cardio",equip:"Nenhum",inst:"Ritmo acelerado (~7km/h), respiração mais forte mas ainda dá pra falar frases",met:4.3,nivel:"Iniciante"},
+  {id:"elc3",name:"Corrida leve",grupo:"Cardio",equip:"Nenhum",inst:"~8km/h, pace confortável, primeira etapa de qualquer progressão de corrida",met:6,nivel:"Iniciante"},
+  {id:"elc4",name:"Corrida moderada",grupo:"Cardio",equip:"Nenhum",inst:"~10km/h, só avance pra esse ritmo depois de sustentar a corrida leve com folga",met:9.8,nivel:"Intermediário"},
+  {id:"elc5",name:"Corrida forte",grupo:"Cardio",equip:"Nenhum",inst:"~12km/h+, exige base aeróbica já construída — não é ponto de partida",met:11.5,nivel:"Avançado"},
+  {id:"elc6",name:"Ciclismo leve",grupo:"Cardio",equip:"Bicicleta",inst:"<16km/h, terreno plano, ritmo de passeio",met:4,nivel:"Iniciante"},
+  {id:"elc7",name:"Ciclismo moderado",grupo:"Cardio",equip:"Bicicleta",inst:"16-19km/h, esforço constante mas sustentável",met:8,nivel:"Intermediário"},
+  {id:"elc8",name:"Ciclismo forte",grupo:"Cardio",equip:"Bicicleta",inst:"20km/h+ ou trilha com subida, exige condicionamento prévio",met:10,nivel:"Avançado"},
+  {id:"elc9",name:"Natação leve",grupo:"Cardio",equip:"Piscina",inst:"Nado tranquilo, qualquer estilo, sem forçar o ritmo",met:6,nivel:"Iniciante"},
+  {id:"elc10",name:"Natação intensa",grupo:"Cardio",equip:"Piscina",inst:"Nado livre vigoroso, voltas contínuas em ritmo forte",met:9.8,nivel:"Avançado"},
+  {id:"elc11",name:"Elíptico",grupo:"Cardio",equip:"Máquina",inst:"Esforço moderado e constante, baixo impacto nas articulações",met:5,nivel:"Iniciante"},
+  {id:"elc12",name:"Remo (ergômetro)",grupo:"Cardio",equip:"Máquina",inst:"Puxada completa (pernas→tronco→braços), ritmo moderado",met:7,nivel:"Intermediário"},
+  {id:"elc13",name:"Subida de escada",grupo:"Cardio",equip:"Nenhum",inst:"Ritmo constante, apoie o pé inteiro em cada degrau",met:8,nivel:"Intermediário"},
+  {id:"elc14",name:"Pular corda",grupo:"Cardio",equip:"Corda",inst:"Ritmo moderado e constante, aterrissagem leve na ponta dos pés",met:11,nivel:"Intermediário"},
+  {id:"elc15",name:"HIIT (circuito intervalado)",grupo:"Cardio",equip:"Nenhum",inst:"Blocos curtos de esforço máximo alternados com descanso — exige base aeróbica antes de começar",met:8,nivel:"Avançado"},
+  {id:"elc16",name:"Caminhada em trilha (hiking)",grupo:"Cardio",equip:"Nenhum",inst:"Terreno irregular/subida, ritmo adaptado ao relevo",met:6,nivel:"Intermediário"},
+];
+export const D_EX=[...D_EX_BASE,...D_EX_MUSC,...D_EX_ARTES,...D_EX_CARDIO];

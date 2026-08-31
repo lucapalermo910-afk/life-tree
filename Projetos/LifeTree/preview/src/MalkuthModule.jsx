@@ -6,6 +6,8 @@ import { HOD_ACTION_HANDLERS } from "./shared/hodActions.js";
 import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
+import { GoalCard } from "./shared/ui.jsx";
+import { fmt } from "./yesod/constants.js";
 
 // Protótipo do Reino (Malkuth) — proposta de "módulo integrador geral" de 18/08/2026,
 // ver [[10 Malkuth]]. Validado primeiro com 3 módulos (Yesod/Chesed/Geburah), estendido
@@ -107,10 +109,23 @@ const ACTIVITY_ADAPTERS = {
   },
 };
 
+// Objetivos com plano automático (29/08/2026, motor genérico — ver plano salvo em
+// C:\Users\mcrel\.claude\plans\majestic-roaming-umbrella.md) — família nova, paralela ao
+// ACTIVITY_ADAPTERS de hábitos acima, mesmo padrão (read-only aqui, edição só no módulo de
+// origem). Yesod é o único módulo com o mecanismo implementado até agora (rollout começa
+// por ele) — os outros 3 (Hod/Geburah/Binah) entram aqui quando ganharem o mesmo motor.
+const GOAL_ACTIVITY_ADAPTERS = {
+  yesod: {
+    label: "Finanças", color: "#10b981",
+    read: () => readOtherModule("lifetree_fin_ygoals", []).filter(g => g.plano).map(g => ({ id: "yesod_" + g.id, title: g.title, plano: g.plano, metrica: g.metrica || null })),
+  },
+};
+
 export default function MalkuthModule({ onBack, dark, setDark }) {
   const C = dark ? DARK : LIGHT;
   const [, bump] = useState(0);
   const refresh = () => bump(n => n + 1);
+  const [expandedGoalId, setExpandedGoalId] = useState(null);
 
   // Recarrega quando qualquer módulo conectado avisar atualização — inclusive quando o
   // próprio Reino chama a ação de outro módulo (o handler já dispara esse mesmo evento),
@@ -127,6 +142,10 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
   const activities = Object.entries(ACTIVITY_ADAPTERS).flatMap(([moduleId, ad]) =>
     ad.read().map(item => ({ ...item, moduleId, moduleLabel: ad.label, color: ad.color, canToggle: !!ad.toggle }))
   );
+  const goals = Object.entries(GOAL_ACTIVITY_ADAPTERS).flatMap(([moduleId, ad]) =>
+    ad.read().map(item => ({ ...item, moduleId, moduleLabel: ad.label, color: ad.color }))
+  );
+  const ifStatus = readOtherModule("lifetree_fin_ifstatus", null);
 
   return (
     <div style={{ fontFamily: "system-ui,sans-serif", background: C.bg, minHeight: "100vh", maxWidth: 430, margin: "0 auto", color: C.text }}>
@@ -156,6 +175,25 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
             Só a aba Atividades, mas já com os 8 módulos conectados — pra validar a sincronização nos dois sentidos antes de construir o módulo completo.
           </div>
         </div>
+
+        {goals.length > 0 && (
+          <>
+            <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>OBJETIVOS</div>
+            {goals.map(item => {
+              const pct = item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100);
+              const statLine = item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos";
+              return (
+                <div key={item.id} style={{ marginBottom: 10 }}>
+                  <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
+                  <GoalCard C={C} accent={item.color} label={item.title} pct={pct} statLine={statLine} onClick={() => setExpandedGoalId(p => p === item.id ? null : item.id)}/>
+                  {expandedGoalId === item.id && (
+                    <div style={{ fontSize: 9, color: C.muted, textAlign: "center", marginTop: 6 }}>Abra {item.moduleLabel} pra ver/editar o plano completo.</div>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
 
         <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>ATIVIDADES</div>
         {activities.length === 0 && (

@@ -212,7 +212,7 @@ Depois do fix de 31/07 que fez o líquido subir com o score (`<rect>` clipado, v
 
 > Levantado numa auditoria dedicada, separada da auditoria de módulos do dia anterior — ver artefato web linkado em [[01 Estado Atual]] e detalhe completo em [[10 Segurança, Mobile e Performance]]. Achados verificados direto no código (`preview/`, `app/native/`, configs de build e do proxy), não suposição.
 
-### 🟡 Proxy do Coach (`/api/coach`) é um endpoint aberto — rate limit adicionado em 15/08/2026, autenticação de chamador ainda não
+### 🟡 Proxy do Coach (`/api/coach`) é um endpoint aberto — rate limit adicionado em 15/08/2026, limite de payload corrigido em 29/08/2026, autenticação de chamador ainda não
 **Onde:** `preview/api/coach.js` (produção, Vercel) e o middleware equivalente em `preview/vite.config.js` (dev), agora com `preview/api/_lib/rateLimit.js` compartilhado entre os dois.
 
 **Problema original:** nenhum dos dois exigia autenticação de quem chama, não havia rate limit, não havia restrição de CORS/origem, e não havia limite de tamanho de payload — só validava que `messages` é um array não vazio. A `ANTHROPIC_API_KEY` continua segura (nunca vai pro bundle do client), mas quem descobrisse a URL publicada podia gerar chamadas por conta da chave do dono — risco de abuso de custo/cota, não de vazamento dos dados já salvos localmente.
@@ -220,6 +220,8 @@ Depois do fix de 31/07 que fez o líquido subir com o score (`<rect>` clipado, v
 **Correção parcial aplicada:** limitador em memória por IP (20 requisições/10min, `429` + header `Retry-After` quando estoura), limite de payload (32KB, `413` se exceder) e clamp server-side de `maxTokens` (máx. 1500, independente do que o client pedir) — os três em `rateLimit.js`, aplicados tanto no `coach.js` de produção quanto no middleware de dev. Testado: 22 chamadas seguidas via `fetch` no console → as ~20 primeiras passam (respondidas pela Anthropic de verdade), as últimas voltam `429` sem chegar na API.
 
 **Limitação conhecida da correção:** o limitador é em memória — numa Vercel serverless function real, cada invocação pode cair num container novo sem estado compartilhado entre elas, então não é uma garantia dura contra abuso distribuído/multi-container. Reduz o cenário mais comum (mesmo IP batendo repetido na URL), mas autenticação de chamador de verdade (ex: token por sessão) e/ou um rate limit com store externo (Redis/Upstash) continuam como possível próximo passo se o tráfego real justificar.
+
+**🟢 Regressão do limite de payload — corrigida em 29/08/2026:** o Raio-X de 29/08 achou, testando ao vivo, que o Coach retornava `413 "Payload grande demais"` em **100% dos requests dentro do Yesod**, mesmo com uma mensagem mínima ("oi") — o `MAX_BODY_BYTES` de 32KB (calibrado em 15/08 assumindo "uma mensagem de chat normal") nunca foi revisto depois que o `system` prompt do Yesod cresceu (skills de planejamento + contexto financeiro rico). Medido ao vivo antes da correção: `system`+`messages` do Yesod com dado de seed normal e a msg "oi" = ~35KB, já estourando o limite sozinho. Corrigido subindo `MAX_BODY_BYTES` pra 256KB (`rateLimit.js`) — dá margem pro maior módulo hoje + crescimento futuro + histórico de conversa acumulado (o proxy recebe a conversa inteira de novo a cada turno, não só a mensagem nova). Retestado ao vivo: mesmo request que antes voltava `413` agora chega até a Anthropic (`400`, erro de billing real da conta — condição externa, não mais um bug do proxy).
 
 ### 🟡 Dados sensíveis sem criptografia em repouso e sem trava de acesso ao app
 **Onde:** todo o app — `localStorage` sob os prefixos `lifetree_*`.
@@ -257,9 +259,9 @@ Nenhum arquivo `*.test.*` fora de `node_modules` (confirmado por glob). Toda a l
 ### 🟢 Lint existe mas não roda em CI
 `npm run lint` (ESLint 10 + `eslint-plugin-react-hooks`) só é acionado manualmente — não bloqueia nada automaticamente, mas também não é um bug ativo, é uma lacuna de processo.
 
-## Usabilidade — teste ao vivo (14/08/2026)
+## Usabilidade — teste ao vivo (14/08/2026, 2ª rodada 29/08/2026, 3ª rodada 31/08/2026)
 
-> Primeira auditoria feita testando ao vivo no navegador (`claude-in-chrome`, dados de teste populados nos 8 módulos, Coach acionado de verdade), não por leitura de código — por isso achou coisas que as auditorias de 09/08 e 10/08 não pegaram. Parecer completo, com SWOT, benchmarks de mercado e nota por módulo, publicado como [artefato web](https://claude.ai/code/artifact/1e53f8fe-faea-4241-8b7f-6abbe822f85a). Resumo em [[01 Estado Atual]].
+> Primeira auditoria feita testando ao vivo no navegador (`claude-in-chrome`, dados de teste populados nos 8 módulos, Coach acionado de verdade), não por leitura de código — por isso achou coisas que as auditorias de 09/08 e 10/08 não pegaram. Parecer completo, com SWOT, benchmarks de mercado e nota por módulo, em [[12 Raio-X — Parecer de Usabilidade]] (também publicado como [artefato web](https://claude.ai/code/artifact/1e53f8fe-faea-4241-8b7f-6abbe822f85a), mesmo conteúdo). Resumo em [[01 Estado Atual]].
 
 ### 🟢 Bug de input decimal — corrigido em 15/08/2026, nos 9 arquivos
 **Onde:** componente `FI` (input de formulário numérico), duplicado idêntico em `YesodModule.jsx`, `GeburahModule.jsx`, `HodModule.jsx`, `TipharethModule.jsx`, `ChesedModule.jsx`, `NetzachModule.jsx`, `ChokmahModule.jsx`, `BinahModule.jsx` e `App.jsx` — confirmado por busca no código, mesmo trecho nos 9:
@@ -271,19 +273,19 @@ onChange={e=>onChange(type==="number"?Number(e.target.value):e.target.value)}
 
 **Correção aplicada nos 9 arquivos:** cada `FI`/`FInp` ganhou estado local de texto (`useState`) que só ressincroniza do valor externo quando o campo não está focado (`onBlur`) — o `<input>` virou `type="text" inputMode="decimal"` (nunca mais reporta `""` no estado intermediário, já que não é mais `type="number"`), mas `onChange` continua sempre emitindo um `Number` pro componente pai, então nenhum call site precisou mudar. Testado ao vivo: `245.90` no Yesod salvou `245.9` (confirmado em `localStorage`); `83` + vírgula no Geburah salvou `83` corretamente (peso registrado). Zero erros de console após a mudança.
 
-### 🟡 Erro cru da API do Coach vaza pro usuário final
-**Onde:** tratamento de erro da chamada ao Coach (hub e módulos).
+### 🟢 Erro cru da API do Coach vazava pro usuário final — corrigido em 29/08/2026
+**Onde:** `sendToCoach` em `App.jsx` (catch da chamada `callCoachAPI`).
 
-**Problema:** quando o billing do proxy falha (já documentado, ver "Proxy do Coach" acima), a mensagem mostrada na tela é o texto cru da API da Anthropic, em inglês: `"Erro de conexão: Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."` — cita "Anthropic API" e "Plans & Billing" direto pro usuário final. A causa (billing) já era conhecida; o vazamento do texto técnico pra UI é achado novo.
+**Problema:** quando o billing do proxy falha (já documentado, ver "Proxy do Coach" acima), a mensagem mostrada na tela era o texto cru da API da Anthropic, em inglês: `"Erro de conexão: Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits."` — cita "Anthropic API" e "Plans & Billing" direto pro usuário final. Reproduzido de novo, verbatim, no re-teste de 29/08 (achado do Raio-X dessa data).
 
-**Ação recomendada:** capturar o erro antes de exibir e trocar por mensagem amigável/localizada (ex: "O Coach está indisponível agora, tente de novo mais tarde").
+**Correção aplicada:** o `catch` agora loga o erro cru só no console (`console.error`) e mostra sempre uma mensagem amigável fixa — "O Coach está indisponível agora. Tente de novo em instantes." — independente da causa (billing, payload, rede). A mensagem ganhou também a flag `isError:true`, usada pelo fix do toast abaixo. Testado ao vivo: a bolha agora mostra só a mensagem amigável, mesmo com o erro real de billing intacto no `network` (confirmado `400` da Anthropic).
 
-### 🟡 Toast de erro do Coach não some sozinho
-**Onde:** sistema de toast do hub.
+### 🟢 Toast/bolha de erro do Coach não sumia sozinho — corrigido em 29/08/2026
+**Onde:** bolha de resposta do Coach em `App.jsx` (`coachBubbleClosed`) — não é um toast separado, é a própria bolha da última resposta do Coach (`position:fixed`, a mesma que mostra ação pendente pra confirmar).
 
-**Problema:** toasts de sucesso ("Saída registrada", "Pesagem registrada") somem em ~2s como esperado. O toast de erro do Coach ficou preso na tela por mais de dez navegações seguidas no teste ao vivo, cobrindo parte do rodapé/nav em telas menores.
+**Problema:** toasts de sucesso ("Saída registrada", "Pesagem registrada") somem em ~2s como esperado — mas esses são um componente diferente. A bolha de resposta do Coach só tinha fechamento manual (X, adicionado 22/08/2026) — reproduzido de novo em 29/08, e pior do que o registro anterior sugeria: como `coachMessages`/`coachBubbleClosed` vivem em `App.jsx` (acima de todos os módulos), a bolha de erro sobrevivia até depois de trocar de módulo inteiro, não só entre telas do mesmo módulo.
 
-**Ação recomendada:** aplicar o mesmo timeout de auto-dismiss dos toasts de sucesso ao toast de erro.
+**Correção aplicada:** novo `useEffect` que arma um `setTimeout` de 6s fechando a bolha (`setCoachBubbleClosed(true)`) sempre que a última mensagem tem `isError:true` — só afeta erros; uma resposta normal do Coach (inclusive com ação pendente pra confirmar) continua exigindo fechamento manual, como antes. Testado ao vivo: bolha de erro sumiu sozinha ~6s depois de aparecer, sem precisar clicar no X.
 
 ### 🟢 Páginas genéricas de Kether/Malkuth mostravam 50% de progresso sem nenhum dado — corrigido em 15/08/2026
 **Onde:** `saScore`/`arScore` (funções puras de score, usadas pela página genérica de área — Kether/"Desejos" e Malkuth/"Pessoal" — e por `aScoresBase`, que alimenta o líquido da árvore pros mesmos 2 sefirot).
@@ -298,6 +300,15 @@ onChange={e=>onChange(type==="number"?Number(e.target.value):e.target.value)}
 **Problema:** todo módulo (App.jsx + os 6 `*Module.jsx`) usa `catch{}`/`catch(_){}` vazio intencionalmente em leitura/escrita de `localStorage` (dado corrompido ou quota excedida não deve derrubar a tela) — um padrão consistente, não descuido. Sem a opção `allowEmptyCatch`, cada uma dessas dezenas de ocorrências era reportada como erro de `no-empty`, empatando com ruído real de lint.
 
 **Correção:** `rules: { 'no-empty': ['error', { allowEmptyCatch: true }] }` adicionado à config raiz — resolve globalmente (não só no Hod, onde foi achado). Achado e corrigido enquanto se limpava o lint noise do Hod (ver [[08 Hod]]); catches com parâmetro `_` não usado (`catch(_)`) também foram trocados por `catch` sem parâmetro (`no-unused-vars`) no Hod especificamente — os outros módulos ainda têm o padrão antigo (`catch(_)`), que agora só dispara `no-unused-vars`, não mais `no-empty`.
+
+### 🟢 App inteiro nascia com dado de demonstração — removido em 31/08/2026 (nova versão sem mock, onboarding em branco)
+**Onde:** ~15 arquivos nos 10 módulos — `yesod/seedData.js` (contas/cartões/dívidas/investimentos), `yesod/context.js` (orçamentos, hábitos/metas), `geburah/defaultRoutines.js` (rotinas e receitas), `HodModule.jsx` (trilhas/metas/hábitos/conquistas/projetos + `brand`), `ChesedModule.jsx` (pessoas/datas/registros/hábitos + XP inicial), `NetzachModule.jsx` (hobbies/hábitos/tarefas/experiências), `ChokmahModule.jsx` (práticas/tradições), `BinahModule.jsx` (trilhas/livros), `tiphareth/seedData.js` (hábitos/rotinas/metas/produtos).
+
+**Problema:** pedido explícito do usuário ("é importante q essa versão não tenha nenhum dado mockado - estando em branco pra fazer o onboard e os registros desde o início") expôs que os 10 módulos nunca tinham sido testados com `localStorage` vazio — todo teste anterior (incluindo as 2 rodadas do Raio-X) sempre carregou com dado de seed já populado. Dois pontos de reintrodução de mock não óbvios, que um "zerar só o `useState`" teria deixado passar: (1) `HodModule.jsx` tinha um fallback `else setTracks(D_TRACKS)`/`else setProjects(D_PROJECTS)` escondido dentro do `useEffect` de montagem — reaplicava o seed antigo em todo load mesmo com o `useState` já zerado; (2) três botões "Reiniciar dados do módulo" (Chokmah, Binah, Tiphareth) resetavam de volta pro array de seed original em vez de `[]`.
+
+**Correção:** todo array/objeto de seed zerado na fonte (`[]`/`{}`/`0`, conforme o tipo do campo) — catálogos de referência (373 alimentos, biblioteca de exercícios, taxonomias de categoria) mantidos de propósito, por não serem dado de demonstração. Os dois pontos de reintrodução corrigidos junto (fallback do Hod e os 3 botões de reset). Único risco identificado antes de editar — e evitado: `pesosMeta.taxaSemanal` do Geburah é usado como **divisor** (`faltaPerder/taxaSemanal*7`) em cálculo de meta de peso; zerá-lo junto com `pesoAtual`/`pesoMeta` produziria `NaN`. Mantido em `0.5` (o mínimo já validado pelo próprio formulário) como piso seguro.
+
+**Testado ao vivo:** `localStorage.clear()` + reload nos 10 módulos + hub — zero crash, zero `NaN`, todo empty-state correto. `npm run build` limpo (bundle encolheu ~1143KB→~1126KB, confirma remoção de literal morto sem quebrar nada). Único ponto cosmético, não crítico: o card "Meta do Dia" do Geburah mostra um pequeno negativo (ex: `-0.1kg`) antes do 1º cadastro de peso/meta, porque o cálculo usa o piso `0.5` da taxa semanal mesmo sem meta configurada — item de polimento registrado em [[12 Raio-X — Parecer de Usabilidade]], não bloqueia uso.
 
 ---
 

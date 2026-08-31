@@ -26,6 +26,7 @@ const IC = {
   layout:  ["M3 3h7v7H3z","M14 3h7v7h-7z","M14 14h7v7h-7z","M3 14h7v7H3z"],
   lotus:   ["M12 21c-4-2.6-4-6.7-4-8.5a4 4 0 0 1 8 0c0 1.8 0 5.9-4 8.5Z","M12 12.5c-2.6-1.6-4.3-4.2-4.6-7","M12 12.5c2.6-1.6 4.3-4.2 4.6-7","M12 12.5c-.8-2.6-.8-5.3 0-8","M12 12.5c.8-2.6.8-5.3 0-8"],
   flame:   ["M8.5 14.5A2.5 2.5 0 0 0 11 17a2.5 2.5 0 0 0 2.5-2.5c0-1.5-1.5-2-1-4 .3-1.3-.5-3-1.5-3 .5 1.5-1 2-1 4a2 2 0 0 1-2-2c-1 1-2 2-2 4.5A5.5 5.5 0 0 0 11.5 22a5.5 5.5 0 0 0 5.5-5.5c0-3-2-4.5-2.5-9-1.5 1-3 3-3 6.5"],
+  treelife:["M12 2v20","M12 7l-4-4","M12 7l4-4","M12 13l-5-4","M12 13l5-4","M12 19l-4-3","M12 19l4-3","circle cx='12' cy='2' r='2'","circle cx='8' cy='11' r='2'","circle cx='16' cy='11' r='2'","circle cx='12' cy='8' r='2'","circle cx='8' cy='17' r='2'","circle cx='16' cy='17' r='2'","circle cx='12' cy='14' r='2'","circle cx='12' cy='20' r='2'"],
 };
 
 function Ico({ n, size=16, color="currentColor", sw=1.5 }) {
@@ -33,7 +34,7 @@ function Ico({ n, size=16, color="currentColor", sw=1.5 }) {
   const parts = Array.isArray(d) ? d : [d];
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
-      {parts.map((p,i) => <path key={i} d={p}/>)}
+      {parts.map((p,i) => { if(p.startsWith("circle")){const m=p.match(/cx='([\d.]+)' cy='([\d.]+)' r='([\d.]+)'/);if(m)return <circle key={i} cx={m[1]} cy={m[2]} r={m[3]} fill="none"/>;} return <path key={i} d={p}/>; })}
     </svg>
   );
 }
@@ -61,7 +62,7 @@ function ScoreRing({ value, size=90, color=ACCENT, label }) {
 }
 
 const TABS = [
-  {id:"chok",     icon:"lotus",   label:"Chokmah"},
+  {id:"chok",     icon:"treelife",label:"Chokmah"},
   {id:"praticas", icon:"sparkle", label:"Práticas"},
   {id:"tradicoes",icon:"compass", label:"Tradições"},
   {id:"diario",   icon:"pen",     label:"Diário"},
@@ -79,13 +80,6 @@ const DIARY_PROMPTS = [
   {k:"aprendizado",q:"O que percebi sobre mim hoje?"},
 ];
 
-const WIDGET_CATALOG = [
-  {id:"score",       label:"Score Chokmah",         desc:"Número principal + sub-scores + barra", defaultOn:true},
-  {id:"tradicoes_hub",label:"Tradições em Exploração",desc:"Tradições marcadas como explorando ou praticando",defaultOn:true},
-  {id:"habitos_hoje",label:"Hábitos de Hoje",       desc:"Lista rápida de hábitos",           defaultOn:true},
-];
-const DEFAULT_WIDGETS = WIDGET_CATALOG.filter(w=>w.defaultOn).map(w=>w.id);
-
 const D_MEDITATION_LOG = []; // [{id,date,minutes}]
 const D_DIARY = []; // [{id,date,prompt,texto}]
 
@@ -100,12 +94,12 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
   const close  = () => { setSh(null); setF({}); };
   const openSh = (name,init) => { setF(init||{}); setSh(name); };
 
-  const [praticaHabits, setPraticaHabits] = useState(D_PRATICA_HABITS);
-  const [tradicoes,     setTradicoes]     = useState(D_TRADICOES);
+  // Seed de demo removido em 31/08/2026 (pedido do usuário — nova versão inicia em branco)
+  const [praticaHabits, setPraticaHabits] = useState([]);
+  const [tradicoes,     setTradicoes]     = useState([]);
   const [meditationLog, setMeditationLog] = useState(D_MEDITATION_LOG);
   const [diary,         setDiary]         = useState(D_DIARY);
   const [xp, setXp] = useState(0);
-  const [activeWidgets, setActiveWidgets] = useState(DEFAULT_WIDGETS);
 
   // ── PERSISTÊNCIA ─────────────────────────────────────────────────────────
   const PFX = "lifetree_chok_";
@@ -119,7 +113,6 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
     const ml_ = lsGet("meditationLog"); if(ml_) setMeditationLog(ml_);
     const di_ = lsGet("diary");         if(di_) setDiary(di_);
     const xp_ = lsGet("xp");            if(xp_ !== null) setXp(xp_);
-    const w_  = lsGet("activeWidgets"); if(w_)  setActiveWidgets(w_);
     setStorageReady(true);
   }, []);
   const reloadFromStorage = () => {
@@ -136,7 +129,6 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageReady) return; lsSet("meditationLog", meditationLog); }, [meditationLog, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("diary", diary); }, [diary, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("xp", xp); }, [xp, storageReady]);
-  useEffect(() => { if(!storageReady) return; lsSet("activeWidgets", activeWidgets); }, [activeWidgets, storageReady]);
 
   // ── Computed ────────────────────────────────────────────────────────────────
   const streakFromDates = (dates) => {
@@ -183,70 +175,24 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
     toast_(`Meditação registrada (+${minutes} min) 🧘`);
   };
 
-  // ─── Widget customizer ────────────────────────────────────────────────────
-  const W = (id) => activeWidgets.includes(id);
-  const WidgetCustomizer = () => (
-    <Sheet title="Personalizar Dashboard" onClose={close}>
-      <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Ative ou desative os blocos do seu dashboard.</div>
-      {WIDGET_CATALOG.map(w=>{
-        const on = activeWidgets.includes(w.id);
-        return (
-          <div key={w.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 12px",background:C.bg,borderRadius:10,marginBottom:8,border:"1px solid "+(on?ACCENT+"44":C.b1)}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:700,color:on?C.text:C.muted}}>{w.label}</div>
-              <div style={{fontSize:9,color:C.muted}}>{w.desc}</div>
-            </div>
-            <button onClick={()=>setActiveWidgets(prev=>on?prev.filter(x=>x!==w.id):[...prev,w.id])}
-              style={{width:40,height:22,borderRadius:99,cursor:"pointer",border:"none",background:on?ACCENT:C.b2,position:"relative",transition:"background .2s",flexShrink:0}}>
-              <div style={{position:"absolute",top:3,left:on?20:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
-            </button>
-          </div>
-        );
-      })}
-      <div style={{marginTop:6}}>
-        <Btn color={C.muted} outline sm full={false} onClick={()=>setActiveWidgets(DEFAULT_WIDGETS)}>Restaurar padrão</Btn>
-      </div>
-    </Sheet>
-  );
-
   // ── Chokmah Tab (hub) ────────────────────────────────────────────────────────
+  // Sem "Personalizar" desde 30/08/2026 (pedido do usuário) — os blocos abaixo sempre aparecem.
   const ChokTab = () => (
     <div style={{animation:"slideUp .35s ease"}}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-        <button onClick={()=>openSh("widgets")}
-          style={{display:"flex",alignItems:"center",gap:5,background:C.card,border:"1px solid "+C.b1,borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:C.muted}}>
-          <Ico n="layout" size={11} color={C.muted}/> Personalizar
-        </button>
-      </div>
-
-      {W("score")&&<Card style={{background:`linear-gradient(135deg,${ACCENT}22,${ACCENT}06)`,border:`1px solid ${ACCENT}44`,marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-          <div>
-            <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>CHOKMAH — SABEDORIA</div>
-            <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1}}>{chokScore}<span style={{fontSize:18}}>%</span></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginTop:4}}>
-            {[
-              {l:"Práticas",  v:habScore,   c:ACCENT,     t:"praticas"},
-              {l:"Meditação", v:medScore,   c:"#06b6d4",  t:"praticas"},
-              {l:"Diário",    v:diarioScore,c:"#f59e0b",  t:"diario"},
-            ].map(m=>(
-              <div key={m.l} onClick={()=>setTab(m.t)} style={{background:C.card,borderRadius:8,padding:"5px 6px",textAlign:"center",cursor:"pointer",border:`1px solid ${m.c}22`}}>
-                <div style={{fontSize:7,color:C.muted}}>{m.l}</div>
-                <div style={{fontSize:14,fontWeight:900,color:m.c}}>{m.v}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Simplificado em 30/08/2026 — antes tinha 3 mini-cards (Práticas/Meditação/Diário)
+          espremidos ao lado do score grande; esse detalhamento já existe nas próprias abas. */}
+      <Card style={{background:`linear-gradient(135deg,${ACCENT}22,${ACCENT}06)`,border:`1px solid ${ACCENT}44`,marginBottom:14}}>
+        <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>CHOKMAH — SABEDORIA</div>
+        <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1,marginBottom:10}}>{chokScore}<span style={{fontSize:18}}>%</span></div>
         <Bar value={chokScore} color={`linear-gradient(90deg,${ACCENT},#f472b6)`} height={6}/>
-      </Card>}
+      </Card>
 
       {medStreak>0&&<Card style={{marginBottom:14,textAlign:"center"}}>
         <div style={{fontSize:22}}>🔥 {medStreak}</div>
         <div style={{fontSize:9,color:C.muted,marginTop:2}}>dias seguidos meditando</div>
       </Card>}
 
-      {W("tradicoes_hub")&&tradicoesAtivas.length>0&&(
+      {tradicoesAtivas.length>0&&(
         <Card style={{marginBottom:14}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:10}}>TRADIÇÕES EM EXPLORAÇÃO</div>
           {tradicoesAtivas.map(t=>(
@@ -262,7 +208,7 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
         </Card>
       )}
 
-      {W("habitos_hoje")&&<Card>
+      <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontSize:12,fontWeight:800}}>Práticas de Hoje</div>
           <span style={{fontSize:10,color:ACCENT,fontWeight:700,background:ACCENT+"15",padding:"2px 10px",borderRadius:99}}>{praticaHabits.filter(h=>h.done).length}/{praticaHabits.length}</span>
@@ -280,7 +226,7 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
             <span style={{fontSize:10,fontWeight:700,color:"#fbbf24"}}>+{h.xp}</span>
           </div>
         ))}
-      </Card>}
+      </Card>
     </div>
   );
 
@@ -419,7 +365,7 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
         </Sec>
         <Btn color="#ef4444" outline onClick={()=>{
           if(!confirm("Apagar todos os dados do Chokmah?")) return;
-          setPraticaHabits(D_PRATICA_HABITS); setTradicoes(D_TRADICOES); setMeditationLog([]); setDiary([]); setXp(0); setActiveWidgets(DEFAULT_WIDGETS);
+          setPraticaHabits([]); setTradicoes([]); setMeditationLog([]); setDiary([]); setXp(0);
           toast_("Dados reiniciados","#ef4444");
         }}>Reiniciar dados do módulo</Btn>
       </div>
@@ -534,9 +480,7 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
           <div style={{fontSize:17,fontWeight:900,letterSpacing:-.3}}>Espiritualidade</div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#fbbf24",background:"#fbbf2415",padding:"4px 10px",borderRadius:99}}>
-            {xp} XP
-          </div>
+          {/* Badge de XP removido em 30/08/2026 (pedido do usuário) — xp continua rastreado internamente */}
           <button onClick={()=>setDark(d=>!d)} style={{background:C.card,border:`1px solid ${C.b1}`,borderRadius:9,width:34,height:34,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
             <Ico n={dark?"sun":"moon"} size={14} color={C.dim}/>
           </button>
@@ -555,7 +499,7 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
         {TABS.map(t=>{
           const a = currentTab===t.id;
           return (
-            <button key={t.id} onClick={()=>t.id===TABS[0].id?onBack():setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}>
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 0",transition:"transform .1s"}}>
               <div style={{width:36,height:30,borderRadius:9,background:a?ACCENT+"18":"transparent",border:a?`1px solid ${ACCENT}30`:"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .2s"}}>
                 <Ico n={t.icon} size={14} color={a?ACCENT:C.muted}/>
               </div>
@@ -566,7 +510,6 @@ export default function ChokmahModule({ onBack, dark, setDark }) {
       </div>
 
       {renderSheet()}
-      {sh==="widgets"&&WidgetCustomizer()}
     </div>
     </ThemeCtx.Provider>
   );

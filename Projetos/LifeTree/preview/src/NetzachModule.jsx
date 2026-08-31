@@ -78,12 +78,6 @@ const HOBBY_CATS = ["Esporte","Arte","Música","Leitura","Gastronomia","Tecnolog
 const TAREFA_CATS = ["Limpeza","Organização","Manutenção","Decoração","Compras","Outro"];
 const HOBBY_PALETTE = ["#84cc16","#8b5cf6","#f97316","#06b6d4","#10b981","#f59e0b","#ef4444","#3b82f6","#14b8a6","#6366f1","#ec4899","#f472b6"];
 
-const WIDGET_CATALOG = [
-  {id:"score",       label:"Score Netzach",  desc:"Número principal + sub-scores + barra", defaultOn:true},
-  {id:"habitos_hoje",label:"Hábitos de Hoje",desc:"Lista rápida de hábitos",      defaultOn:true},
-];
-const DEFAULT_WIDGETS = WIDGET_CATALOG.filter(w=>w.defaultOn).map(w=>w.id);
-
 // Dado de seed movido pra ./netzach/seedData.js em 21/08/2026 (item 1 do Plano de
 // Decomposição) — ver import no topo do arquivo.
 
@@ -98,13 +92,13 @@ export default function NetzachModule({ onBack, dark, setDark }) {
   const close  = () => { setSh(null); setF({}); };
   const openSh = (name,init) => { setF(init||{}); setSh(name); };
 
-  const [hobbies,     setHobbies]     = useState(D_HOBBIES);
-  const [lazerHabits, setLazerHabits] = useState(D_LAZER_HABITS);
-  const [tarefas,     setTarefas]     = useState(D_TAREFAS);
-  const [larHabits,   setLarHabits]   = useState(D_LAR_HABITS);
-  const [experiencias,setExperiencias]= useState(D_EXPERIENCIAS);
+  // Seed de demo removido em 31/08/2026 (pedido do usuário — nova versão inicia em branco)
+  const [hobbies,     setHobbies]     = useState([]);
+  const [lazerHabits, setLazerHabits] = useState([]);
+  const [tarefas,     setTarefas]     = useState([]);
+  const [larHabits,   setLarHabits]   = useState([]);
+  const [experiencias,setExperiencias]= useState([]);
   const [xp, setXp] = useState(0);
-  const [activeWidgets, setActiveWidgets] = useState(DEFAULT_WIDGETS);
 
   // ── PERSISTÊNCIA ─────────────────────────────────────────────────────────
   const NETZ_PFX = "lifetree_netz_";
@@ -119,7 +113,6 @@ export default function NetzachModule({ onBack, dark, setDark }) {
     const lrh_= lsGet("larHabits");    if(lrh_)setLarHabits(lrh_);
     const e_  = lsGet("experiencias"); if(e_)  setExperiencias(e_);
     const xp_ = lsGet("xp");           if(xp_ !== null) setXp(xp_);
-    const w_  = lsGet("activeWidgets");if(w_)  setActiveWidgets(w_);
     setStorageReady(true);
   }, []);
   // Recarrega do storage quando uma ação do Coach escreve direto (netzachActions.js).
@@ -139,7 +132,6 @@ export default function NetzachModule({ onBack, dark, setDark }) {
   useEffect(() => { if(!storageReady) return; lsSet("larHabits", larHabits); }, [larHabits, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("experiencias", experiencias); }, [experiencias, storageReady]);
   useEffect(() => { if(!storageReady) return; lsSet("xp", xp); }, [xp, storageReady]);
-  useEffect(() => { if(!storageReady) return; lsSet("activeWidgets", activeWidgets); }, [activeWidgets, storageReady]);
 
   const allHabits = [...lazerHabits,...larHabits];
   const habScore  = allHabits.length ? Math.round(allHabits.filter(h=>h.done).length/allHabits.length*100) : 0;
@@ -158,59 +150,18 @@ export default function NetzachModule({ onBack, dark, setDark }) {
     } catch {}
   }, [netzScore, storageReady]);
 
-  const W = (id) => activeWidgets.includes(id);
-
-  const WidgetCustomizer = () => (
-    <Sheet title="Personalizar Dashboard" onClose={close}>
-      <div style={{fontSize:11,color:C.muted,marginBottom:14}}>Ative ou desative os blocos do seu dashboard.</div>
-      {WIDGET_CATALOG.map(w=>{
-        const on = activeWidgets.includes(w.id);
-        return (
-          <div key={w.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 12px",background:C.bg,borderRadius:10,marginBottom:8,border:"1px solid "+(on?ACCENT+"44":C.b1)}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:700,color:on?C.text:C.muted}}>{w.label}</div>
-              <div style={{fontSize:9,color:C.muted}}>{w.desc}</div>
-            </div>
-            <button onClick={()=>setActiveWidgets(prev=>on?prev.filter(x=>x!==w.id):[...prev,w.id])}
-              style={{width:40,height:22,borderRadius:99,cursor:"pointer",border:"none",background:on?ACCENT:C.b2,position:"relative",transition:"background .2s",flexShrink:0}}>
-              <div style={{position:"absolute",top:3,left:on?20:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
-            </button>
-          </div>
-        );
-      })}
-      <div style={{marginTop:6}}>
-        <Btn color={C.muted} outline sm full={false} onClick={()=>setActiveWidgets(DEFAULT_WIDGETS)}>Restaurar padrão</Btn>
-      </div>
-    </Sheet>
-  );
-
+  // Sem "Personalizar" desde 30/08/2026 (pedido do usuário) — os blocos abaixo sempre aparecem.
   const NetzTab = () => (
     <div style={{animation:"slideUp .3s ease"}}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-        <button onClick={()=>openSh("widgets")}
-          style={{display:"flex",alignItems:"center",gap:5,background:C.card,border:"1px solid "+C.b1,borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:C.muted}}>
-          <Ico n="layout" size={11} color={C.muted}/> Personalizar
-        </button>
-      </div>
-      {W("score")&&<Card style={{background:"linear-gradient(135deg,"+ACCENT+"22,"+ACCENT+"06)",border:"1px solid "+ACCENT+"44",marginBottom:14}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-          <div>
-            <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>NETZACH — QUALIDADE DE VIDA</div>
-            <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1}}>{netzScore}<span style={{fontSize:18}}>%</span></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:5,marginTop:4}}>
-            {[{l:"Hábitos",v:habScore,c:ACCENT,t:"lazer"},{l:"Hobbies",v:hobScore,c:"#22d3ee",t:"lazer"},{l:"Experiências",v:expScore,c:"#f59e0b",t:"exp"}].map(m=>(
-              <div key={m.l} onClick={()=>setTab(m.t)} style={{background:C.card,borderRadius:8,padding:"5px 6px",textAlign:"center",cursor:"pointer",border:"1px solid "+m.c+"22"}}>
-                <div style={{fontSize:7,color:C.muted}}>{m.l}</div>
-                <div style={{fontSize:14,fontWeight:900,color:m.c}}>{m.v}%</div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Simplificado em 30/08/2026 — antes tinha 3 mini-cards (Hábitos/Hobbies/Experiências)
+          espremidos ao lado do score grande; esse detalhamento já existe nas próprias abas. */}
+      <Card style={{background:"linear-gradient(135deg,"+ACCENT+"22,"+ACCENT+"06)",border:"1px solid "+ACCENT+"44",marginBottom:14}}>
+        <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:2}}>NETZACH — QUALIDADE DE VIDA</div>
+        <div style={{fontSize:46,fontWeight:900,color:ACCENT,lineHeight:1,marginBottom:10}}>{netzScore}<span style={{fontSize:18}}>%</span></div>
         <Bar value={netzScore} color={"linear-gradient(90deg,"+ACCENT+",#22d3ee)"} height={6}/>
-      </Card>}
+      </Card>
 
-      {W("habitos_hoje")&&<Card>
+      <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>HÁBITOS DE HOJE</div>
           <span style={{fontSize:9,color:ACCENT,fontWeight:700}}>{allHabits.filter(h=>h.done).length}/{allHabits.length}</span>
@@ -231,7 +182,7 @@ export default function NetzachModule({ onBack, dark, setDark }) {
             </div>
           );
         })}
-      </Card>}
+      </Card>
     </div>
   );
 
@@ -474,7 +425,7 @@ export default function NetzachModule({ onBack, dark, setDark }) {
         {tab==="cfg"   &&ConfigTab()}
       </div>
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.nav,borderTop:"1px solid "+C.b1,zIndex:50,padding:"6px 0 12px",display:"flex"}}>
-        {TABS.map(t=>{const a=tab===t.id;return(<button key={t.id} onClick={()=>t.id===TABS[0].id?onBack():setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}><div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/></div>{a&&<span style={{fontSize:7,fontWeight:700,color:ACCENT,letterSpacing:.2,whiteSpace:"nowrap"}}>{t.label.toUpperCase()}</span>}{!a&&<span style={{fontSize:1,color:"transparent"}}>.</span>}</button>);} )}
+        {TABS.map(t=>{const a=tab===t.id;return(<button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}><div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center"}}><Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/></div>{a&&<span style={{fontSize:7,fontWeight:700,color:ACCENT,letterSpacing:.2,whiteSpace:"nowrap"}}>{t.label.toUpperCase()}</span>}{!a&&<span style={{fontSize:1,color:"transparent"}}>.</span>}</button>);} )}
       </div>
 
       {sh==="addHobby"&&<Sheet title="Novo Hobby" onClose={close}><FI label="Nome" value={f.name||""} onChange={v=>F({name:v})} placeholder="Ex: Jogar violão"/><FS label="Categoria" value={f.cat||HOBBY_CATS[0]} onChange={v=>F({cat:v})} opts={HOBBY_CATS.map(c=>({v:c,l:c}))}/><FS label="Frequência ideal" value={f.freq||"Semanal"} onChange={v=>F({freq:v})} opts={FREQ_OPTS}/><ColorSwatches value={f.color} onChange={v=>F({color:v})}/><FTA label="Notas" value={f.note||""} onChange={v=>F({note:v})} rows={2} placeholder="O que você gosta nessa atividade?"/><Btn color={ACCENT} onClick={()=>{if(!f.name)return;setHobbies(p=>[...p,{id:"h"+uid(),name:f.name,cat:f.cat||HOBBY_CATS[0],freq:f.freq||"Semanal",color:f.color||HOBBY_PALETTE[0],note:f.note||"",lastDone:""}]);toast_("Adicionado");close();}}>Adicionar</Btn></Sheet>}
@@ -487,7 +438,6 @@ export default function NetzachModule({ onBack, dark, setDark }) {
       {sh==="editLarHabit"&&<Sheet title="Editar Hábito do Lar" onClose={close}><FI label="Título" value={f.title||""} onChange={v=>F({title:v})}/><FS label="Frequência" value={f.freq||"Diário"} onChange={v=>F({freq:v})} opts={FREQ_OPTS}/><FI label="XP" value={f.xp||10} onChange={v=>F({xp:v})} type="number"/><Btn color={ACCENT} onClick={()=>{setLarHabits(p=>p.map(x=>x.id===f.id?{...x,title:f.title,freq:f.freq,xp:Number(f.xp)}:x));toast_("Atualizado");close();}}>Salvar</Btn></Sheet>}
       {sh==="addExp"&&<Sheet title="Nova Experiência" onClose={close}><FI label="Título" value={f.titulo||""} onChange={v=>F({titulo:v})} placeholder="Ex: Ver aurora boreal"/><FI label="Emoji" value={f.emoji||"✨"} onChange={v=>F({emoji:v})}/><FS label="Categoria" value={f.cat||"Viagem"} onChange={v=>F({cat:v})} opts={["Viagem","Gastronomia","Esporte","Arte","Natureza","Social","Aventura","Outro"].map(c=>({v:c,l:c}))}/><FS label="Status" value={f.status||"sonho"} onChange={v=>F({status:v})} opts={EXP_STATUS}/><FI label="Prazo (opcional)" value={f.prazo||""} onChange={v=>F({prazo:v})} type="date"/><FTA label="Notas" value={f.nota||""} onChange={v=>F({nota:v})} rows={2}/><Btn color="#f59e0b" onClick={()=>{if(!f.titulo)return;setExperiencias(p=>[...p,{id:"ex"+uid(),titulo:f.titulo,cat:f.cat||"Viagem",status:f.status||"sonho",prazo:f.prazo||"",nota:f.nota||"",emoji:f.emoji||"✨"}]);toast_("Adicionado","#f59e0b");close();}}>Adicionar</Btn></Sheet>}
       {sh==="editExp"&&<Sheet title="Editar Experiência" onClose={close}><FI label="Título" value={f.titulo||""} onChange={v=>F({titulo:v})}/><FI label="Emoji" value={f.emoji||"✨"} onChange={v=>F({emoji:v})}/><FS label="Status" value={f.status||"sonho"} onChange={v=>F({status:v})} opts={EXP_STATUS}/><FI label="Prazo (opcional)" value={f.prazo||""} onChange={v=>F({prazo:v})} type="date"/><FTA label="Notas" value={f.nota||""} onChange={v=>F({nota:v})} rows={2}/><Btn color="#f59e0b" onClick={()=>{setExperiencias(p=>p.map(x=>x.id===f.id?{...x,titulo:f.titulo,emoji:f.emoji,status:f.status,prazo:f.prazo,nota:f.nota}:x));toast_("Atualizado");close();}}>Salvar</Btn></Sheet>}
-      {sh==="widgets"&&WidgetCustomizer()}
     </div>
     </ThemeCtx.Provider>
   );
