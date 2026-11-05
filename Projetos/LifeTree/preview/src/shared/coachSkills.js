@@ -432,6 +432,8 @@ export function buildGeburahContext() {
   const rotinasTreino = readJSON("lifetree_geb_rotinasTreino", []);
   const medidasCorp = readJSON("lifetree_geb_medidasCorp", []);
   const receitas = readJSON("lifetree_geb_receitas", []);
+  const objetivos = readJSON("lifetree_geb_objetivos", []);
+  const perfil = readJSON("lifetree_geb_perfil", {});
 
   const today = new Date().toISOString().slice(0, 10);
   const sortedPes = [...pesagens].sort((a, b) => a.data.localeCompare(b.data));
@@ -481,6 +483,11 @@ export function buildGeburahContext() {
     treino_em_andamento_hoje: emAndamento ? { rotina: emAndamento.rotinaName, iniciado_as: emAndamento.horaInicio } : null,
     ultimas_medidas: ultimasMed,
     receitas: receitas.map(r => ({ nome: r.name, ingredientes: r.ingredientes.length })),
+    // Usados pelo protocolo de objetivo com plano: o Coach mostra o status que já existe em vez
+    // de perguntar de novo, e só pergunta o que falta.
+    perfil: { altura_cm: perfil.altura || null, idade: perfil.idade || null, sexo: perfil.sexo || null, nivel_atividade: perfil.atividade || null },
+    treinos_ultimos_30_dias: logTreino.filter(l => (new Date() - new Date(l.data)) / 86400000 <= 30).length,
+    objetivos: objetivos.map(o => ({ titulo: o.title, prazo: o.prazo || null, passos_feitos: o.plano ? o.plano.steps.filter(s => s.done).length : 0, passos_total: o.plano ? o.plano.steps.length : 0 })),
   };
 }
 
@@ -972,6 +979,19 @@ ROTINA DE TREINO E EXERCÍCIO (grupos musculares válidos: Peito, Costas, Ombros
 23. {"action":"add_routine_exercise","rotinaNome":"...","exercicioNome":"...","series":3 (opcional),"reps":"10-12 (opcional)","carga":0 (opcional, kg ou segundos conforme o tipo do exercício)","descanso":60 (opcional, segundos)}
 24. {"action":"remove_routine_exercise","rotinaNome":"...","exercicioNome":"..."}
 25. {"action":"create_exercise","nome":"...","grupo":"...","equip":"... (opcional)","inst":"... (opcional, instruções)"}
+
+OBJETIVO COM PLANO
+26. {"action":"create_objective","titulo":"objetivo SMART","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":["marco 1","marco 2","marco 3"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."],"habitoSugerido":"..."|null}}
+
+PROTOCOLO "OBJETIVO COM PLANO" (toda vez que o usuário disser "quero criar o objetivo..." — inclusive quando vier do botão "+ Objetivo" da aba Objetivos — siga este protocolo em vez de propor create_objective de cara):
+1. Mostre em 1-2 frases o status que JÁ existe no resumo (peso_hoje, peso_meta, ultimas_medidas, treinos_ultimos_30_dias, perfil) — não pergunte o que já está lá.
+2. Pergunte só o que falta, em UMA mensagem curta e numerada: rotina (quais dias e horários livres, quantos minutos por sessão), onde treina (casa, academia, rua), nível atual de condicionamento, lesões ou restrições de saúde, e o prazo desejado. Se peso ou altura não estiverem no resumo e forem relevantes, pergunte também.
+3. Com as respostas, transforme o objetivo em SMART: específico, mensurável (número), alcançável para a rotina informada, relevante e com prazo (data). Use esse texto como "titulo" e a data como "prazo".
+4. "steps": 3 a 6 marcos intermediários com data ou semana (ex: "Semanas 1-4: treinar 3x/semana, 30 min, sem faltar mais de 1 sessão"), em progressão (criar o hábito → aumentar carga/volume → consolidar). Nunca genéricos tipo "treinar mais".
+5. Seja conservador: frequência e duração que caibam na rotina informada (melhor 3 sessões que se cumprem do que 5 que quebram), perda de peso de no máximo ~0,5-1% do peso por semana, sem dietas extremas, jejuns longos ou suplementos.
+6. Se o usuário relatar lesão, dor, doença, gravidez ou uso de medicação relevante, não monte treino para isso: recomende avaliação com médico ou educador físico antes e ofereça um plano só de hábitos leves (ex: caminhada) ou aguardar.
+7. 2-3 itens de impacto positivo e 2-3 de impacto negativo honestos (riscos e custos reais, não clichês).
+8. Só depois que o usuário confirmar o objetivo, e numa resposta seguinte, ofereça transformar o primeiro marco em rotina de treino (create_routine) — proposta separada, sem insistir.
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar/ajustar algo, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação

@@ -913,7 +913,7 @@ export default function App() {
       )}
       {activeModule==="geburah"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark}/>
+          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach}/>
         </div>
       )}
       {activeModule==="chesed"&&(

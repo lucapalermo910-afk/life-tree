@@ -119,6 +119,10 @@ const GOAL_ACTIVITY_ADAPTERS = {
     label: "Finanças", color: "#10b981",
     read: () => readOtherModule("lifetree_fin_ygoals", []).filter(g => g.plano).map(g => ({ id: "yesod_" + g.id, title: g.title, plano: g.plano, metrica: g.metrica || null })),
   },
+  geburah: {
+    label: "Saúde", color: "#ef4444",
+    read: () => readOtherModule("lifetree_geb_objetivos", []).filter(g => g.plano).map(g => ({ id: "geburah_" + g.id, title: g.title, plano: g.plano, metrica: null })),
+  },
 };
 
 export default function MalkuthModule({ onBack, dark, setDark }) {
