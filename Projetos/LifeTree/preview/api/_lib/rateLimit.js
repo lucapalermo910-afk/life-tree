@@ -28,7 +28,9 @@ export function checkRateLimit(ip) {
   return { allowed: true };
 }
 
-export const MAX_BODY_BYTES = 32 * 1024; // 32KB — sobra pra uma mensagem de chat normal
+// 64KB (era 32KB até 05/11/2026): só o prompt da skill Yesod já passa de 31KB com a base vazia,
+// então qualquer conversa de Finanças estourava o limite (413). Continua um teto contra abuso.
+export const MAX_BODY_BYTES = 64 * 1024;
 const MAX_TOKENS_CAP = 1500;
 
 // Clamp server-side independente do que o client pedir — quem descobrir a URL não
