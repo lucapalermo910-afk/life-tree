@@ -473,7 +473,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
             <input value={wishTitle} onChange={e => setWishTitle(e.target.value)} placeholder="Ex: Morar na Itália"
               style={{ width: "100%", background: C.bg, border: "1px solid " + C.b2, borderRadius: 9, padding: "9px 12px", color: C.text, fontSize: 13, outline: "none", marginBottom: 10 }}/>
 
-            <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: .8, marginBottom: 6 }}>OBJETIVOS DERIVADOS (OPCIONAL)</div>
+            <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: .8, marginBottom: 6 }}>METAS DERIVADAS (OPCIONAL)</div>
             {draftMetas.map((m, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: DERIVE_TARGETS[m.moduleId].color, background: DERIVE_TARGETS[m.moduleId].color + "18", borderRadius: 6, padding: "3px 7px" }}>{DERIVE_TARGETS[m.moduleId].label}</span>
