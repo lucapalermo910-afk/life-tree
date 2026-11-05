@@ -415,6 +415,13 @@ function WidgetBar({C,finScore,diary,widgetConfig,onEditWidgets}) {
 }
 
 // ── APP ───────────────────────────────────────────────────────────────────────
+// O Coach responde em Markdown leve ("**Rotina:**"). Sem renderizar, os asteriscos aparecem
+// crus (05/11/2026). Só negrito — títulos e listas já ficam legíveis com white-space: pre-line.
+function textoCoach(t){
+  return String(t||"").split(/(\*\*[^*\n]+\*\*)/g).map((parte,i)=>
+    /^\*\*[^*\n]+\*\*$/.test(parte)?<strong key={i}>{parte.slice(2,-2)}</strong>:parte.replace(/^#{1,3} /gm,""));
+}
+
 export default function App() {
   const [dark,   setDark]   = useState(false);
   const C = dark ? {...DARK} : {...LIGHT};
@@ -1169,7 +1176,7 @@ export default function App() {
                 ✕
               </button>
             )}
-            <div style={{paddingRight:pendingCoachAction?0:22,whiteSpace:"pre-line"}}>{coachMessages[coachMessages.length-1].content}</div>
+            <div style={{paddingRight:pendingCoachAction?0:22,whiteSpace:"pre-line"}}>{textoCoach(coachMessages[coachMessages.length-1].content)}</div>
             <button onClick={()=>setCoachExpanded(true)} style={{marginTop:6,background:"none",border:"none",padding:"4px 0",
               color:coachAccent,fontWeight:800,fontSize:11,cursor:"pointer"}}>Abrir conversa em tela cheia ↗</button>
             {/* Plano do objetivo, quando a ação pendente é create_objective — editável antes
@@ -1219,7 +1226,7 @@ export default function App() {
                 <div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"88%",
                   background:m.role==="user"?coachAccent+"22":C.card,border:"1px solid "+(m.role==="user"?coachAccent+"44":C.b1),
                   borderRadius:14,padding:"10px 13px",fontSize:14,lineHeight:1.55,color:m.isError?"#ef4444":C.text,whiteSpace:"pre-line",overflowWrap:"anywhere"}}>
-                  {m.content}
+                  {textoCoach(m.content)}
                 </div>
               ))}
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
