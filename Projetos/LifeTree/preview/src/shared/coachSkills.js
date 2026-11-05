@@ -1182,8 +1182,14 @@ export function detectModuleFromText(text) {
   return null;
 }
 
-export function pickSkillId(activeModule, text) {
+// lastSkillId (05/11/2026): módulos sem skill própria (Kether/Desejo, Malkuth/Controle) usavam
+// "hub" em toda mensagem — então, numa conversa iniciada pelo Desejo pra criar um objetivo de
+// saúde, a 2ª mensagem (as respostas sobre rotina, sem palavra-chave) caía no hub e perdia o
+// protocolo de objetivo com plano. Agora, nesses módulos, a conversa continua na última skill
+// usada até o texto apontar claramente pra outra.
+export function pickSkillId(activeModule, text, lastSkillId) {
   const detected = detectModuleFromText(text);
   if (detected && detected !== activeModule) return detected;
-  return activeModule || "hub";
+  if (activeModule && COACH_SKILLS[activeModule]) return activeModule;
+  return lastSkillId || "hub";
 }

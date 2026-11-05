@@ -516,6 +516,7 @@ export default function App() {
   // ── COACH DE IA ──────────────────────────────────────────────────────────────
   const [coachMessages, setCoachMessages] = useState([]);
   const [coachInput,    setCoachInput]    = useState("");
+  const [lastCoachSkillId, setLastCoachSkillId] = useState(null); // ver pickSkillId
   const [coachLoading,  setCoachLoading]  = useState(false);
   // Balão da última resposta não tinha como ser fechado manualmente — um erro (ex: "problema
   // de pagamento" da API) ficava preso na tela até o usuário mandar outra pergunta, o que só
@@ -642,8 +643,10 @@ export default function App() {
   };
 
   // ── COACH DE IA ──────────────────────────────────────────────────────────────
-  const sendToCoach=async(msgOverride)=>{
-    const msg=(msgOverride||coachInput).trim();
+  // forcedSkillId (05/11/2026): o Desejo/Kether cria objetivos de qualquer área e já sabe qual
+  // skill deve responder (a área escolhida pelo usuário) — não depende de palavra-chave.
+  const sendToCoach=async(msgOverride,forcedSkillId)=>{
+    const msg=(typeof msgOverride==="string"?msgOverride:coachInput).trim();
     if(!msg) return;
     setCoachInput("");
     setPendingCoachAction(null); // nova pergunta descarta silenciosamente qualquer ação ainda não confirmada
@@ -665,7 +668,8 @@ export default function App() {
 
     // roteamento: módulo ativo decide a skill por padrão, com fallback de intenção
     // (palavras-chave) quando a pergunta claramente foge do domínio do módulo atual
-    const skillId=pickSkillId(activeModule, msg);
+    const skillId=forcedSkillId||pickSkillId(activeModule, msg, lastCoachSkillId);
+    setLastCoachSkillId(skillId);
     const skill=getSkill(skillId);
     const skillCtx=skill.buildContext(universalCtx);
     const systemPrompt=skill.systemPrompt(skillCtx);
@@ -898,7 +902,7 @@ export default function App() {
           YesodModule.jsx — então ficam acima de tudo sem depender do zIndex deste wrapper. ── */}
       {activeModule==="yesod"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach}/>
+          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")}/>
         </div>
       )}
       {activeModule==="hod"&&(
@@ -913,7 +917,7 @@ export default function App() {
       )}
       {activeModule==="geburah"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach}/>
+          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")}/>
         </div>
       )}
       {activeModule==="chesed"&&(
@@ -943,7 +947,7 @@ export default function App() {
       )}
       {activeModule==="kether"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <KetherModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark}/>
+          <KetherModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach}/>
         </div>
       )}
 

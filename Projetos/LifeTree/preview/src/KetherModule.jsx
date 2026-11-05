@@ -6,6 +6,7 @@ import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
 import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { BINAH_ACTION_HANDLERS } from "./shared/binahActions.js";
+import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
 import { typeColor, typeLabel, phaseLabel } from "./hod/helpers.js";
 import { fmt } from "./yesod/constants.js";
 import { GoalCard, PlanoCard } from "./shared/ui.jsx";
@@ -82,7 +83,23 @@ const GOAL_ADAPTERS = {
     read: () => readOtherModule("lifetree_tiph_goals", []).map(g => ({ id: "tiph_" + g.id, title: g.title, xp: g.xp, done: g.done })),
     toggle: item => TIPHARETH_ACTION_HANDLERS.toggle_goal({ match: item.title }),
   },
+  // 05/11/2026 — objetivos de saúde com plano (geburah/ObjetivosTab.jsx, lifetree_geb_objetivos).
+  geburah: {
+    label: "Saúde", color: "#ef4444",
+    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
+    toggle: item => GEBURAH_ACTION_HANDLERS.toggle_objective({ match: item.title }),
+  },
 };
+
+// ── Criar objetivo com plano (05/11/2026) ─────────────────────────────────────────────
+// O Desejo é o ponto único de criação de objetivos (pedido do usuário): escolhe a área
+// impactada, escreve o objetivo, e o Coach daquela área conduz a conversa (protocolo de
+// objetivo com plano) e salva no módulo — que mostra, acompanha e edita. Só entram aqui as
+// áreas que já têm create_objective com plano; as outras continuam pelos "Desejos" abaixo.
+const AREAS_OBJETIVO = [
+  { id: "geburah", label: "Saúde",    color: "#ef4444", msg: t => "Quero criar o objetivo de saúde/treino: " + t, exemplo: "Ex: perder barriga até o verão, correr 5 km" },
+  { id: "yesod",   label: "Finanças", color: "#10b981", msg: t => "Quero criar o objetivo: " + t,                exemplo: "Ex: quitar o cartão, juntar a reserva de emergência" },
+];
 
 // Módulos onde dá pra criar uma meta derivada de um desejo — os 3 acima (meta real) mais
 // 3 sem conceito de "meta" limpo (Netzach/Chokmah/Binah, mesmo caso difícil do Geburah no
@@ -108,7 +125,7 @@ const STATUS_LOOKUP = {
 const DESEJOS_KEY = "lifetree_keth_desejos";
 const uid = () => Math.random().toString(36).slice(2, 8);
 
-export default function KetherModule({ onBack, dark, setDark }) {
+export default function KetherModule({ onBack, dark, setDark, askCoach }) {
   const C = dark ? DARK : LIGHT;
   const [, bump] = useState(0);
   const refresh = () => bump(n => n + 1);
@@ -119,6 +136,17 @@ export default function KetherModule({ onBack, dark, setDark }) {
   useCoachDataSync("netzach", refresh);
   useCoachDataSync("chokmah", refresh);
   useCoachDataSync("binah", refresh);
+  useCoachDataSync("geburah", refresh);
+
+  const [criandoObj, setCriandoObj] = useState(false);
+  const [areaObj, setAreaObj] = useState("geburah");
+  const [tituloObj, setTituloObj] = useState("");
+  const areaSel = AREAS_OBJETIVO.find(a => a.id === areaObj);
+  const pedirObjetivo = () => {
+    if (!tituloObj.trim() || !askCoach) return;
+    askCoach(areaSel.msg(tituloObj.trim()), areaSel.id);
+    setTituloObj(""); setCriandoObj(false);
+  };
 
   const [desejos, setDesejos] = useState(() => readOtherModule(DESEJOS_KEY, []));
   // Expande o plano (read-only) de uma meta com plano — mesmo padrão de toggle-só-uma-por-vez
@@ -203,7 +231,7 @@ export default function KetherModule({ onBack, dark, setDark }) {
         <div style={{ background: "linear-gradient(135deg," + ACCENT + "22," + ACCENT + "06)", border: "1px solid " + ACCENT + "44", borderRadius: 14, padding: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>PROTÓTIPO — TESTE DE INTEGRAÇÃO</div>
           <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>
-            Metas monitoradas nos 2 sentidos (Finanças, Profissional, Autocuidado) + projetos do Profissional (só leitura) + desejos que derivam metas em até 6 módulos.
+            Objetivos são criados aqui e aparecem no módulo impactado. Metas monitoradas nos 2 sentidos (Saúde, Finanças, Profissional, Autocuidado) + projetos do Profissional (só leitura) + desejos que derivam metas em até 6 módulos.
           </div>
         </div>
 
@@ -312,7 +340,39 @@ export default function KetherModule({ onBack, dark, setDark }) {
           </div>
         )}
 
-        <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>METAS</div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+          <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>METAS</div>
+          {!criandoObj && (
+            <button onClick={() => setCriandoObj(true)} style={{ display: "flex", alignItems: "center", gap: 5, background: ACCENT, border: "none", borderRadius: 8, padding: "6px 12px", color: "#04222a", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
+              <Ico n="plus" size={11} color="#04222a" sw={2.2}/> Objetivo
+            </button>
+          )}
+        </div>
+        {criandoObj && (
+          <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 14, marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4 }}>Novo objetivo</div>
+            <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 10, lineHeight: 1.45 }}>
+              Escolha a área. O Coach dessa área pergunta o que falta e devolve um objetivo com número, prazo e marcos para você aprovar. Depois ele aparece no módulo.
+            </div>
+            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+              {AREAS_OBJETIVO.map(a => (
+                <button key={a.id} onClick={() => setAreaObj(a.id)} aria-pressed={areaObj === a.id}
+                  style={{ padding: "6px 12px", borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    border: "1.5px solid " + a.color, background: areaObj === a.id ? a.color : "transparent", color: areaObj === a.id ? "#fff" : a.color }}>
+                  {a.label}
+                </button>
+              ))}
+            </div>
+            <input value={tituloObj} onChange={e => setTituloObj(e.target.value)} placeholder={areaSel.exemplo} aria-label="Objetivo"
+              onKeyDown={e => e.key === "Enter" && pedirObjetivo()}
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "1px solid " + C.b2, background: C.surface, color: C.text, fontSize: 13, outline: "none" }}/>
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <button onClick={() => { setCriandoObj(false); setTituloObj(""); }} style={{ padding: "9px 14px", borderRadius: 8, background: C.b1, border: "none", color: C.muted, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={pedirObjetivo} disabled={!tituloObj.trim() || !askCoach} style={{ flex: 1, padding: "9px 14px", borderRadius: 8, background: ACCENT, border: "none", color: "#04222a", fontWeight: 800, fontSize: 12, cursor: "pointer", opacity: tituloObj.trim() ? 1 : .5 }}>Montar plano com o Coach</button>
+            </div>
+            <div style={{ fontSize: 9.5, color: C.muted, marginTop: 8 }}>Outras áreas (Profissional, Autocuidado...) ainda não têm plano pelo Coach — use "Desejos" abaixo.</div>
+          </div>
+        )}
         {metas.length === 0 && (
           <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 12 }}>
             Nenhuma meta nos módulos conectados ainda.

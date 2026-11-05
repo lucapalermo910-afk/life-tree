@@ -1,3 +1,6 @@
+// 05/11/2026: objetivos passam a ser CRIADOS só no Desejo/Kether (pedido do usuário: "o
+// objetivo precisa ser criado no desejo e daí aparecer no módulo impactado"). Esta aba mostra,
+// acompanha e edita os objetivos de saúde; o botão leva ao Desejo.
 // Objetivos do Geburah com plano gerado pelo Coach (04/11/2026). Era um protótipo visual
 // (estado local, plano simulado) desde 29/08/2026; agora segue o mesmo motor genérico do Yesod
 // (yesod/ObjetivosTab.jsx): "+ Objetivo" manda "Quero criar o objetivo..." pro Coach, que
@@ -7,7 +10,7 @@
 // read-only no Malkuth (GOAL_ACTIVITY_ADAPTERS).
 import { useContext, useState } from "react";
 import { useGeburah } from "./context.js";
-import { ThemeCtx, ACCENT, GREEN, AMBER, FI, Btn } from "./theme.js";
+import { ThemeCtx, ACCENT, GREEN, Btn } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { fmt1, fmtKg } from "./helpers.js";
 import { GoalCard, PlanoCard } from "../shared/ui.jsx";
@@ -61,21 +64,10 @@ function linhaStatus(o) {
 export function ObjetivosTab() {
   const C = useContext(ThemeCtx);
   const g = useGeburah();
-  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, askCoach } = g;
+  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo } = g;
   const trendKg = sortedPes && sortedPes.length >= 2 ? sortedPes[sortedPes.length - 1].peso - sortedPes[sortedPes.length - 2].peso : null;
 
-  const [criando, setCriando] = useState(false);
-  const [titulo, setTitulo] = useState("");
   const [aberto, setAberto] = useState(null);
-
-  const pedirAoCoach = () => {
-    if (!titulo.trim() || !askCoach) return;
-    // "de saúde/treino" mantém o roteamento na skill geburah mesmo se o texto do objetivo
-    // tiver palavra-chave de outro módulo (pickSkillId → detectModuleFromText).
-    askCoach("Quero criar o objetivo de saúde/treino: " + titulo.trim());
-    setTitulo("");
-    setCriando(false);
-  };
 
   const toggleStep = (id, stepId) =>
     setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } })));
@@ -91,30 +83,15 @@ export function ObjetivosTab() {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0 10px" }}>
         <div style={{ fontSize: 13, fontWeight: 800 }}>Objetivos</div>
-        {!criando && (
-          <Btn sm full={false} color={ACCENT} onClick={() => setCriando(true)}>
-            <Ico n="plus" size={11} /> Objetivo
+        {abrirDesejo && (
+          <Btn sm full={false} color={ACCENT} onClick={abrirDesejo}>
+            <Ico n="plus" size={11} /> Criar no Desejo
           </Btn>
         )}
       </div>
 
-      {criando && (
-        <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 14, marginBottom: 14 }}>
-          <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4 }}>Novo objetivo</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 10, lineHeight: 1.45 }}>
-            Escreva com as suas palavras. O Coach vai perguntar sobre sua rotina, onde treina e restrições, e devolver um objetivo com número, prazo e marcos para você aprovar.
-          </div>
-          <FI label="Objetivo" value={titulo} onChange={setTitulo} placeholder="Ex: perder barriga até o verão, correr 5 km, voltar a treinar" />
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <Btn outline color={C.dim} onClick={() => { setCriando(false); setTitulo(""); }}>Cancelar</Btn>
-            <Btn color={ACCENT} onClick={pedirAoCoach}><Ico n="check" size={13} /> Montar plano com o Coach</Btn>
-          </div>
-          {!askCoach && <div style={{ fontSize: 10, color: AMBER, marginTop: 8 }}>Coach indisponível nesta tela.</div>}
-        </div>
-      )}
-
-      {objetivos.length === 0 && !criando && (
-        <div style={{ textAlign: "center", padding: 24, color: C.muted, fontSize: 11.5 }}>Nenhum objetivo ainda. Toque em "+ Objetivo" para montar um plano com o Coach.</div>
+      {objetivos.length === 0 && (
+        <div style={{ textAlign: "center", padding: 24, color: C.muted, fontSize: 11.5 }}>Nenhum objetivo de saúde ainda. Os objetivos são criados no Desejo, onde o Coach monta o plano com você, e aparecem aqui.</div>
       )}
 
       {objetivos.map((o) => (
