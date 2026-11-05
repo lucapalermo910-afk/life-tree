@@ -233,12 +233,6 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
       </div>
 
       <div style={{ padding: "14px 16px 100px" }}>
-        <div style={{ background: "linear-gradient(135deg," + ACCENT + "22," + ACCENT + "06)", border: "1px solid " + ACCENT + "44", borderRadius: 14, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>PROTÓTIPO — TESTE DE INTEGRAÇÃO</div>
-          <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>
-            Objetivos são criados aqui e aparecem no módulo impactado. Metas monitoradas nos 2 sentidos (Saúde, Finanças, Profissional, Autocuidado) + projetos do Profissional (só leitura) + desejos que derivam metas em até 6 módulos.
-          </div>
-        </div>
 
         {ifStatus && (
           <div style={{ marginBottom: 18 }}>
@@ -346,7 +340,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
         )}
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>METAS</div>
+          <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>OBJETIVOS</div>
           {!criandoObj && (
             <button onClick={() => setCriandoObj(true)} style={{ display: "flex", alignItems: "center", gap: 5, background: ACCENT, border: "none", borderRadius: 8, padding: "6px 12px", color: "#04222a", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
               <Ico n="plus" size={11} color="#04222a" sw={2.2}/> Objetivo
@@ -411,7 +405,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
         )}
         {metas.length === 0 && (
           <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 12 }}>
-            Nenhuma meta nos módulos conectados ainda.
+            Nenhum objetivo ainda. Toque em "+ Objetivo" para criar o primeiro.
           </div>
         )}
         {metas.map(item => item.plano ? (
@@ -479,7 +473,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
             <input value={wishTitle} onChange={e => setWishTitle(e.target.value)} placeholder="Ex: Morar na Itália"
               style={{ width: "100%", background: C.bg, border: "1px solid " + C.b2, borderRadius: 9, padding: "9px 12px", color: C.text, fontSize: 13, outline: "none", marginBottom: 10 }}/>
 
-            <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: .8, marginBottom: 6 }}>METAS DERIVADAS (OPCIONAL)</div>
+            <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: .8, marginBottom: 6 }}>OBJETIVOS DERIVADOS (OPCIONAL)</div>
             {draftMetas.map((m, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: DERIVE_TARGETS[m.moduleId].color, background: DERIVE_TARGETS[m.moduleId].color + "18", borderRadius: 6, padding: "3px 7px" }}>{DERIVE_TARGETS[m.moduleId].label}</span>

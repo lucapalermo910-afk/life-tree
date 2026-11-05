@@ -526,6 +526,13 @@ export default function App() {
   const [coachMessages, setCoachMessages] = useState([]);
   const [coachInput,    setCoachInput]    = useState("");
   const [lastCoachSkillId, setLastCoachSkillId] = useState(null); // ver pickSkillId
+  // Área travada (05/11/2026): quando a conversa começa com skill forçada (criação de objetivo
+  // pelo Desejo), ela fica nessa skill até o objetivo ser confirmado ou cancelado. Antes, uma
+  // palavra na resposta do usuário (ex: "dormir", "ansiedade") fazia pickSkillId trocar de
+  // skill no meio — um objetivo de peso virou meta simples do Autocuidado, sem plano nem dieta.
+  const [coachSkillTravada, setCoachSkillTravada] = useState(null);
+  // Sair do módulo também destrava (a conversa de criação ficou para trás).
+  useEffect(()=>{ setCoachSkillTravada(null); },[activeModule]);
   const [coachLoading,  setCoachLoading]  = useState(false);
   // Balão da última resposta não tinha como ser fechado manualmente — um erro (ex: "problema
   // de pagamento" da API) ficava preso na tela até o usuário mandar outra pergunta, o que só
@@ -682,7 +689,8 @@ export default function App() {
 
     // roteamento: módulo ativo decide a skill por padrão, com fallback de intenção
     // (palavras-chave) quando a pergunta claramente foge do domínio do módulo atual
-    const skillId=forcedSkillId||pickSkillId(activeModule, msg, lastCoachSkillId);
+    if(forcedSkillId) setCoachSkillTravada(forcedSkillId);
+    const skillId=forcedSkillId||coachSkillTravada||pickSkillId(activeModule, msg, lastCoachSkillId);
     setLastCoachSkillId(skillId);
     const skill=getSkill(skillId);
     const skillCtx=skill.buildContext(universalCtx);
@@ -854,11 +862,13 @@ export default function App() {
     if(!pendingCoachAction) return;
     const {action,skillId}=pendingCoachAction;
     const resultText=executeCoachAction(action,skillId);
+    if(action?.action==="create_objective") setCoachSkillTravada(null);
     setCoachMessages(p=>[...p,{role:"assistant",content:resultText}]);
     setCoachBubbleClosed(false);
     setPendingCoachAction(null);
   };
   const cancelPendingCoachAction=()=>{
+    setCoachSkillTravada(null);
     setCoachMessages(p=>[...p,{role:"assistant",content:"Ok, não fiz nada."}]);
     setCoachBubbleClosed(false);
     setPendingCoachAction(null);
