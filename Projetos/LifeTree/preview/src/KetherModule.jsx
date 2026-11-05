@@ -7,6 +7,7 @@ import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { BINAH_ACTION_HANDLERS } from "./shared/binahActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
+import { AREAS, sugerirArea } from "./shared/areaObjetivo.js";
 import { typeColor, typeLabel, phaseLabel } from "./hod/helpers.js";
 import { fmt } from "./yesod/constants.js";
 import { GoalCard, PlanoCard } from "./shared/ui.jsx";
@@ -96,10 +97,7 @@ const GOAL_ADAPTERS = {
 // impactada, escreve o objetivo, e o Coach daquela área conduz a conversa (protocolo de
 // objetivo com plano) e salva no módulo — que mostra, acompanha e edita. Só entram aqui as
 // áreas que já têm create_objective com plano; as outras continuam pelos "Desejos" abaixo.
-const AREAS_OBJETIVO = [
-  { id: "geburah", label: "Saúde",    color: "#ef4444", msg: t => "Quero criar o objetivo de saúde/treino: " + t, exemplo: "Ex: perder barriga até o verão, correr 5 km" },
-  { id: "yesod",   label: "Finanças", color: "#10b981", msg: t => "Quero criar o objetivo: " + t,                exemplo: "Ex: quitar o cartão, juntar a reserva de emergência" },
-];
+// Áreas e sugestão automática: shared/areaObjetivo.js (05/11/2026, sem etiquetas na criação).
 
 // Módulos onde dá pra criar uma meta derivada de um desejo — os 3 acima (meta real) mais
 // 3 sem conceito de "meta" limpo (Netzach/Chokmah/Binah, mesmo caso difícil do Geburah no
@@ -139,13 +137,20 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
   useCoachDataSync("geburah", refresh);
 
   const [criandoObj, setCriandoObj] = useState(false);
-  const [areaObj, setAreaObj] = useState("geburah");
+  // Área escolhida à mão (via "Trocar"), junto com a sugestão que existia naquele momento:
+  // se o usuário reescrever o objetivo e a sugestão mudar, a escolha manual deixa de valer.
+  const [areaManualDe, setAreaManualDe] = useState(null); // { area, sugestao } | null
+  const [trocandoArea, setTrocandoArea] = useState(false);
   const [tituloObj, setTituloObj] = useState("");
-  const areaSel = AREAS_OBJETIVO.find(a => a.id === areaObj);
+  const areaSugerida = sugerirArea(tituloObj);
+  const areaManual = areaManualDe && areaManualDe.sugestao === (areaSugerida?.id ?? null) ? areaManualDe.area : null;
+  const setAreaManual = id => setAreaManualDe(id ? { area: id, sugestao: areaSugerida?.id ?? null } : null);
+  const areaSel = AREAS.find(a => a.id === areaManual) || areaSugerida;
+  const podeCriar = !!(tituloObj.trim() && areaSel?.comPlano && askCoach);
   const pedirObjetivo = () => {
-    if (!tituloObj.trim() || !askCoach) return;
+    if (!podeCriar) return;
     askCoach(areaSel.msg(tituloObj.trim()), areaSel.id);
-    setTituloObj(""); setCriandoObj(false);
+    setTituloObj(""); setCriandoObj(false); setAreaManual(null); setTrocandoArea(false);
   };
 
   const [desejos, setDesejos] = useState(() => readOtherModule(DESEJOS_KEY, []));
@@ -352,25 +357,56 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
           <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 14, marginBottom: 14 }}>
             <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 4 }}>Novo objetivo</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 10, lineHeight: 1.45 }}>
-              Escolha a área. O Coach dessa área pergunta o que falta e devolve um objetivo com número, prazo e marcos para você aprovar. Depois ele aparece no módulo.
+              Escreva o objetivo com as suas palavras. O app identifica a área, e o Coach dessa área pergunta o que falta e devolve um objetivo com número, prazo e marcos para você aprovar. Depois ele aparece no módulo.
             </div>
-            <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
-              {AREAS_OBJETIVO.map(a => (
-                <button key={a.id} onClick={() => setAreaObj(a.id)} aria-pressed={areaObj === a.id}
-                  style={{ padding: "6px 12px", borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 700,
-                    border: "1.5px solid " + a.color, background: areaObj === a.id ? a.color : "transparent", color: areaObj === a.id ? "#fff" : a.color }}>
-                  {a.label}
-                </button>
-              ))}
-            </div>
-            <input value={tituloObj} onChange={e => setTituloObj(e.target.value)} placeholder={areaSel.exemplo} aria-label="Objetivo"
+            <input value={tituloObj} onChange={e => setTituloObj(e.target.value)} placeholder="Ex: perder barriga até o verão, quitar o cartão" aria-label="Objetivo"
               onKeyDown={e => e.key === "Enter" && pedirObjetivo()}
               style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 8, border: "1px solid " + C.b2, background: C.surface, color: C.text, fontSize: 13, outline: "none" }}/>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <button onClick={() => { setCriandoObj(false); setTituloObj(""); }} style={{ padding: "9px 14px", borderRadius: 8, background: C.b1, border: "none", color: C.muted, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>Cancelar</button>
-              <button onClick={pedirObjetivo} disabled={!tituloObj.trim() || !askCoach} style={{ flex: 1, padding: "9px 14px", borderRadius: 8, background: ACCENT, border: "none", color: "#04222a", fontWeight: 800, fontSize: 12, cursor: "pointer", opacity: tituloObj.trim() ? 1 : .5 }}>Montar plano com o Coach</button>
+
+            {/* Área: sugerida pelo texto, confirmada à vista, trocável com um toque. */}
+            {tituloObj.trim() && (
+              <div aria-live="polite" style={{ marginTop: 10, fontSize: 11.5, color: C.muted, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                {areaSel ? (
+                  <>
+                    <span>Vai para:</span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 800, color: areaSel.color }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 99, background: areaSel.color }}/>{areaSel.label}
+                    </span>
+                    {!areaManual && <span style={{ fontSize: 10 }}>(sugerido)</span>}
+                  </>
+                ) : <span>Não identifiquei a área. Escolha abaixo.</span>}
+                {areaSel && (
+                  <button onClick={() => setTrocandoArea(v => !v)} style={{ background: "none", border: "none", padding: "4px 2px", color: ACCENT, fontWeight: 800, fontSize: 11.5, cursor: "pointer" }}>
+                    · {trocandoArea ? "Fechar" : "Trocar"}
+                  </button>
+                )}
+              </div>
+            )}
+            {tituloObj.trim() && areaSel && !areaSel.comPlano && (
+              <div style={{ marginTop: 6, fontSize: 10.5, color: "#f97316", lineHeight: 1.4 }}>
+                {areaSel.label} ainda não tem plano pelo Coach. Troque para Saúde ou Finanças, ou use "Desejos" abaixo.
+              </div>
+            )}
+            {tituloObj.trim() && (trocandoArea || !areaSel) && (
+              <div role="group" aria-label="Escolher área" style={{ marginTop: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                {AREAS.map(a => (
+                  <button key={a.id} disabled={!a.comPlano} aria-pressed={areaSel?.id === a.id}
+                    onClick={() => { setAreaManual(a.id); setTrocandoArea(false); }}
+                    style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 10px", borderRadius: 9, textAlign: "left",
+                      cursor: a.comPlano ? "pointer" : "default", opacity: a.comPlano ? 1 : .6,
+                      border: "1.5px solid " + (areaSel?.id === a.id ? a.color : C.b1), background: areaSel?.id === a.id ? a.color + "18" : C.surface, color: C.text }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 99, background: a.color, flexShrink: 0 }}/>
+                    <span style={{ fontSize: 11.5, fontWeight: 700, flex: 1 }}>{a.label}</span>
+                    {!a.comPlano && <span style={{ fontSize: 9, color: C.muted }}>em breve</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button onClick={() => { setCriandoObj(false); setTituloObj(""); setAreaManual(null); setTrocandoArea(false); }} style={{ padding: "9px 14px", borderRadius: 8, background: C.b1, border: "none", color: C.muted, fontWeight: 600, fontSize: 12, cursor: "pointer" }}>Cancelar</button>
+              <button onClick={pedirObjetivo} disabled={!podeCriar} style={{ flex: 1, padding: "9px 14px", borderRadius: 8, background: ACCENT, border: "none", color: "#04222a", fontWeight: 800, fontSize: 12, cursor: podeCriar ? "pointer" : "default", opacity: podeCriar ? 1 : .5 }}>Montar plano com o Coach</button>
             </div>
-            <div style={{ fontSize: 9.5, color: C.muted, marginTop: 8 }}>Outras áreas (Profissional, Autocuidado...) ainda não têm plano pelo Coach — use "Desejos" abaixo.</div>
           </div>
         )}
         {metas.length === 0 && (
