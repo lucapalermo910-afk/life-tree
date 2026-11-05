@@ -7,6 +7,7 @@
 // storage (ver GeburahModule.jsx, usePersisted com reloadSignal=coachSyncTick).
 
 import { notifyCoachDataUpdated } from "./coachSync.js";
+import { calcularMacros } from "./macros.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -418,9 +419,23 @@ export function createGeburahObjective(a) {
     habitoSugerido: a.plano.habitoSugerido || null,
   } : null;
   const prazo = /^\d{4}-\d{2}-\d{2}$/.test(a.prazo || "") ? a.prazo : null;
-  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano }]);
+  // Metas de dieta calculadas pelo app (shared/macros.js) a partir do bloco "dieta" do Coach.
+  // Recalcula aqui em vez de confiar em números vindos da pré-visualização.
+  let macros = null;
+  if (a.dieta) {
+    const m = calcularMacros(a.dieta);
+    if (m.ok) {
+      macros = m;
+      writeJSON("metas", { ...readJSON("metas", {}), cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord });
+      const perfil = readJSON("perfil", {});
+      writeJSON("perfil", { ...perfil, peso: Number(a.dieta.peso_kg), altura: Number(a.dieta.altura_cm), idade: Number(a.dieta.idade),
+        sexo: String(a.dieta.sexo || perfil.sexo || "M").toUpperCase().startsWith("F") ? "F" : "M",
+        atividade: { 1.2: "sedentario", 1.375: "leve", 1.55: "moderado", 1.725: "intenso", 1.9: "muito_intenso" }[m.fator] });
+    }
+  }
+  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, ...(macros ? { macros } : {}) }]);
   notifyGeburahUpdated();
-  return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + "." };
+  return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }
 
 export function toggleGeburahObjective(a) {

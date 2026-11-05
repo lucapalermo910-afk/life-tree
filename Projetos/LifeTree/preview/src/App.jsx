@@ -12,6 +12,8 @@ import BinahModule from "./BinahModule.jsx";
 import MalkuthModule from "./MalkuthModule.jsx";
 import KetherModule from "./KetherModule.jsx";
 import { callCoachAPI, motivoErroCoach } from "./shared/coachClient.js";
+import { calcularMacros } from "./shared/macros.js";
+import { MacrosCard } from "./shared/MacrosCard.jsx";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -733,6 +735,11 @@ export default function App() {
               steps:(action.plano.steps||[]).map(s=>({id:"st"+Math.random().toString(36).slice(2,8),title:typeof s==="string"?s:s.title,done:false})),
             };
           }
+          // Metas de dieta: calculadas em código (shared/macros.js), nunca pelo modelo.
+          if(action.dieta&&skillId==="geburah"){
+            const m=calcularMacros(action.dieta);
+            action.macrosPrevia=m.ok?m:null;
+          }
           setPendingCoachAction({action,skillId});
         }catch(e){}
       } else {
@@ -1235,6 +1242,9 @@ export default function App() {
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>
+              )}
+              {pendingCoachAction?.action?.macrosPrevia&&(
+                <MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>
               )}
               {pendingCoachAction&&(
                 <div style={{display:"flex",gap:8}}>

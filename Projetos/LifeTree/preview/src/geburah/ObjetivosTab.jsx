@@ -14,6 +14,7 @@ import { ThemeCtx, ACCENT, GREEN, Btn } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { fmt1, fmtKg } from "./helpers.js";
 import { GoalCard, PlanoCard } from "../shared/ui.jsx";
+import { MacrosCard } from "../shared/MacrosCard.jsx";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -102,6 +103,7 @@ export function ObjetivosTab() {
               {o.plano
                 ? <PlanoCard C={C} plano={o.plano} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
+              {o.macros && <div style={{ marginTop: 10 }}><MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} /></div>}
               {o.plano?.habitoSugerido && (
                 <div style={{ fontSize: 10.5, color: GREEN, marginTop: 8 }}>Hábito sugerido: {o.plano.habitoSugerido}</div>
               )}
