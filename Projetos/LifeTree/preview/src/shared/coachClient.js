@@ -36,7 +36,9 @@ export function motivoErroCoach(e) {
   const msg = String(e?.message || "").toLowerCase();
   const st = e?.status;
   let motivo = "erro desconhecido";
-  if (st === undefined || e instanceof TypeError) motivo = "sem conexão com o servidor";
+  if (e?.vazia) motivo = "o Coach devolveu uma resposta vazia, tente de novo";
+  else if (st === undefined || e instanceof TypeError) motivo = "sem conexão com o servidor";
+  else if (st === 504 || msg.includes("timeout")) motivo = "o servidor demorou demais para responder, tente de novo";
   else if (msg.includes("credit balance") || msg.includes("billing")) motivo = "a conta da API está sem saldo";
   else if (st === 401 || msg.includes("x-api-key") || msg.includes("authentication")) motivo = "a chave da API é inválida ou foi revogada";
   else if (msg.includes("anthropic_api_key")) motivo = "a chave da API não está configurada no servidor";

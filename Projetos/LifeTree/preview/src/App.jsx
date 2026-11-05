@@ -680,12 +680,30 @@ export default function App() {
     const systemPrompt=skill.systemPrompt(skillCtx);
 
     try{
+      // 05/11/2026 — respostas cortadas e "Erro ao processar resposta":
+      // (1) maxTokens era 1000; pergunta + plano completo em português passava disso e o texto
+      //     (às vezes o <ACTION> com o plano) era cortado no meio. Agora 3000 (teto no servidor).
+      // (2) o histórico mandava também as bolhas de erro ("O Coach está indisponível…") como se
+      //     fossem falas do Coach, e crescia sem limite; agora sem erros e só as últimas 16.
+      // (3) só blocos de texto viram resposta; resposta vazia ou cortada ganha aviso claro.
+      const historico=newMsgs.filter(m=>!m.isError).slice(-16);
+      while(historico.length&&historico[0].role!=="user") historico.shift();
+      // Sem as bolhas de erro, podem sobrar falas seguidas do mesmo lado: junta numa só.
+      const mensagens=historico.reduce((acc,m)=>{
+        const ult=acc[acc.length-1];
+        if(ult&&ult.role===m.role) ult.content+="\n\n"+m.content;
+        else acc.push({role:m.role,content:m.content});
+        return acc;
+      },[]);
       const data=await callCoachAPI({
         system:systemPrompt,
-        messages:newMsgs.map(m=>({role:m.role,content:m.content})),
-        maxTokens:1000,
+        messages:mensagens,
+        maxTokens:3000,
       });
-      const text=data.content?.map(b=>b.text||"").join("")||"Erro ao processar resposta.";
+      const cortada=data.stop_reason==="max_tokens";
+      let text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+      if(!text) throw Object.assign(new Error("resposta vazia"),{status:200,vazia:true});
+      if(cortada) text=text.replace(/<ACTION>(?![\s\S]*<\/ACTION>)[\s\S]*$/,"").trim()+"\n\n(A resposta foi cortada. Escreva \"continue\" para o Coach terminar.)";
 
       // parse action if present — só skills com actions:true propõem ação. Nenhuma ação
       // executa aqui: fica pendente até o usuário confirmar explicitamente (ver
