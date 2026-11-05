@@ -11,7 +11,7 @@ import ChokmahModule from "./ChokmahModule.jsx";
 import BinahModule from "./BinahModule.jsx";
 import MalkuthModule from "./MalkuthModule.jsx";
 import KetherModule from "./KetherModule.jsx";
-import { callCoachAPI } from "./shared/coachClient.js";
+import { callCoachAPI, motivoErroCoach } from "./shared/coachClient.js";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -716,7 +716,7 @@ export default function App() {
       // console pra debug; a bolha mostra sempre uma mensagem amigável, marcada com
       // `isError` pra também acionar o auto-dismiss abaixo (ver useEffect de coachBubbleClosed).
       console.error("Coach API error:", e);
-      setCoachMessages(p=>[...p,{role:"assistant",content:"O Coach está indisponível agora. Tente de novo em instantes.",isError:true}]);
+      setCoachMessages(p=>[...p,{role:"assistant",content:"O Coach está indisponível agora: "+motivoErroCoach(e)+".",isError:true}]);
     }
     setCoachBubbleClosed(false);
     setCoachLoading(false);
