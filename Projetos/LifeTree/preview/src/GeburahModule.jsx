@@ -16,7 +16,7 @@ import { ObjetivosTab } from "./geburah/ObjetivosTab.jsx";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
-export default function GeburahModule({ onBack, dark, setDark }) {
+export default function GeburahModule({ onBack, dark, setDark, askCoach }) {
   // Correto: const local, não variável global mutável (bug corrigido em 12/08/2026 —
   // ver [[04 Bugs Conhecidos]] → "Tema global mutável (C)"). Sheet/FI/FTA/FS/Card/Bar
   // (agora em geburah/theme.js) recebem esse valor via ThemeCtx.
@@ -55,6 +55,8 @@ export default function GeburahModule({ onBack, dark, setDark }) {
   const [metas,     setMetas]     = usePersisted("metas",    {cal:2200,prot:160,carb:220,gord:70}, coachSyncTick);
   const [perfil,    setPerfil]    = usePersisted("perfil",   {nome:"",peso:0,altura:0,idade:0,sexo:"M",atividade:"moderado"});
   const [agua,      setAgua]      = usePersisted("agua",     {meta:3000,copos:[]}, coachSyncTick);  // copos: [{id,data,ml}]
+  // Objetivos com plano (04/11/2026) — criados pelo Coach (create_objective), editados na aba Objetivos.
+  const [objetivos, setObjetivos] = usePersisted("objetivos", [], coachSyncTick);
   const [planSem,   setPlanSem]   = usePersisted("planSem",  {}); // {YYYY-MM-DD_refeicao: [alimentoId,...]}
 
   // ── MIGRAÇÃO: biblioteca de exercícios (09/08/2026) ──────────────────────────
@@ -327,7 +329,7 @@ export default function GeburahModule({ onBack, dark, setDark }) {
     alimentos, setAlimentos, receitas, setReceitas, logDieta, setLogDieta, todayLog, calcMacro, calHoje, protHoje, carbHoje, gordHoje,
     agua, setAgua, aguaHoje, aguaPct, metas, setMetas, tdee,
     medidasCorp, setMedidasCorp, pesoHoje, navyEstimate, pesosMeta, setPesosMeta, pesoMeta, pesoScore, perdaTotal, faltaPerder, diasRest,
-    sortedPes, pesagens, setPesagens,
+    sortedPes, pesagens, setPesagens, objetivos, setObjetivos, askCoach,
     planSem, setPlanSem,
     gebScore, treinoScore, dietaScore, streak, treinos7d,
   };

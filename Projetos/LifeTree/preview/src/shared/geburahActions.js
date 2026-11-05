@@ -403,7 +403,28 @@ export function createGeburahExercise(a) {
   return { ok: true, message: "Exercício '" + novo.name + "' criado em " + grupo + "." };
 }
 
+// ── OBJETIVO COM PLANO (04/11/2026) ──────────────────────────────────────────────
+// Mesmo formato do create_objective do Yesod (yesodActions.js → createYesodObjective), pra
+// GoalCard/PlanoCard/Malkuth lerem os dois do mesmo jeito. Chave "objetivos" (e não "metas":
+// "lifetree_geb_metas" já guarda as metas nutricionais cal/prot/carb/gord).
+export function createGeburahObjective(a) {
+  const objetivos = readJSON("objetivos", []);
+  const titulo = (a.titulo || a.title || "").trim();
+  if (!titulo) return { ok: false, message: "Título vazio." };
+  const plano = a.plano ? {
+    steps: (a.plano.steps || []).map(s => ({ id: "st" + uid(), title: typeof s === "string" ? s : s.title, done: false })),
+    impactoPositivo: a.plano.impactoPositivo || [],
+    impactoNegativo: a.plano.impactoNegativo || [],
+    habitoSugerido: a.plano.habitoSugerido || null,
+  } : null;
+  const prazo = /^\d{4}-\d{2}-\d{2}$/.test(a.prazo || "") ? a.prazo : null;
+  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano }]);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + "." };
+}
+
 export const GEBURAH_ACTION_HANDLERS = {
+  create_objective: createGeburahObjective,
   register_weight: registerGeburahWeight,
   register_meal: registerGeburahMeal,
   delete_meal_item: deleteGeburahMealItem,
