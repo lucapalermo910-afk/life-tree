@@ -523,6 +523,11 @@ export default function App() {
   // trocava um erro pelo próximo. `coachBubbleClosed` dá um X explícito; reseta pra false toda
   // vez que uma nova resposta chega (ver sendToCoach/confirmPendingCoachAction/cancelPendingCoachAction).
   const [coachBubbleClosed, setCoachBubbleClosed] = useState(false);
+  // Conversa em tela cheia (05/11/2026): a bolha (maxHeight 160, fonte 11) era pequena demais
+  // pras respostas do protocolo de objetivo — várias perguntas numeradas + plano. Abre sozinha
+  // quando a resposta é longa ou traz um plano; dá pra abrir/fechar a qualquer momento.
+  const [coachExpanded, setCoachExpanded] = useState(false);
+  const [coachDraft, setCoachDraft] = useState("");
   // Ação proposta pelo coach, aguardando confirmação explícita do usuário — nenhuma ação
   // (de nenhuma skill) executa no primeiro turno, sempre fica pendente até Confirmar/Cancelar.
   const [pendingCoachAction, setPendingCoachAction] = useState(null); // {action, skillId} | null
@@ -710,6 +715,7 @@ export default function App() {
       }
 
       setCoachMessages(p=>[...p,{role:"assistant",content:cleanText}]);
+      if(cleanText.length>280||(actionMatch&&/"plano"\s*:/.test(actionMatch[1]))) setCoachExpanded(true);
     }catch(e){
       // O texto cru de erro (billing da Anthropic em inglês, "Payload grande demais", etc.)
       // não deve chegar ao usuário final — ver achado do Raio-X de 29/08/2026. Fica só no
@@ -1145,7 +1151,9 @@ export default function App() {
                 ✕
               </button>
             )}
-            <div style={{paddingRight:pendingCoachAction?0:22}}>{coachMessages[coachMessages.length-1].content}</div>
+            <div style={{paddingRight:pendingCoachAction?0:22,whiteSpace:"pre-line"}}>{coachMessages[coachMessages.length-1].content}</div>
+            <button onClick={()=>setCoachExpanded(true)} style={{marginTop:6,background:"none",border:"none",padding:"4px 0",
+              color:coachAccent,fontWeight:800,fontSize:11,cursor:"pointer"}}>Abrir conversa em tela cheia ↗</button>
             {/* Plano do objetivo, quando a ação pendente é create_objective — editável antes
                 de confirmar (mesmo componente/mecanismo já validado ao vivo no mockup de
                 Geburah, promovido pra shared/ui.jsx em 29/08/2026, ver o plano salvo). */}
@@ -1166,6 +1174,66 @@ export default function App() {
                   background:C.b1,border:"none",color:C.muted,fontWeight:700,fontSize:11,cursor:"pointer"}}>Cancelar</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* CONVERSA EM TELA CHEIA (05/11/2026) — histórico completo, fonte maior e caixa de várias
+          linhas pra responder todas as perguntas do Coach numa mensagem só. zIndex acima da barra
+          (150) e da bolha (149). Reaproveita o mesmo estado (coachMessages, pendingCoachAction) e
+          as mesmas funções da bolha — nada é duplicado. */}
+      {coachExpanded && (
+        <div role="dialog" aria-modal="true" aria-label="Conversa com o Coach"
+          style={{position:"fixed",inset:0,zIndex:200,background:"#0008",display:"flex",justifyContent:"center"}}
+          onClick={()=>setCoachExpanded(false)}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{width:"100%",maxWidth:430,height:"100%",background:C.bg,display:"flex",flexDirection:"column",boxSizing:"border-box"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,padding:"14px 16px",borderBottom:"1px solid "+C.b1}}>
+              <Icon name="lotus" size={16} color={coachAccent}/>
+              <div style={{flex:1,fontSize:14,fontWeight:800,color:C.text}}>Coach</div>
+              <button onClick={()=>setCoachExpanded(false)} aria-label="Fechar conversa"
+                style={{width:34,height:34,borderRadius:99,background:C.b1,border:"none",cursor:"pointer",color:C.muted,fontSize:15}}>✕</button>
+            </div>
+            <div ref={el=>{ if(el) el.scrollTop=el.scrollHeight; }}
+              style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
+              {coachMessages.length===0&&<div style={{color:C.muted,fontSize:13,textAlign:"center",marginTop:30}}>Escreva abaixo para começar.</div>}
+              {coachMessages.map((m,i)=>(
+                <div key={i} style={{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"88%",
+                  background:m.role==="user"?coachAccent+"22":C.card,border:"1px solid "+(m.role==="user"?coachAccent+"44":C.b1),
+                  borderRadius:14,padding:"10px 13px",fontSize:14,lineHeight:1.55,color:m.isError?"#ef4444":C.text,whiteSpace:"pre-line",overflowWrap:"anywhere"}}>
+                  {m.content}
+                </div>
+              ))}
+              {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
+              {pendingCoachAction?.action?.plano&&(
+                <PlanoCard C={C} plano={pendingCoachAction.action.plano}
+                  onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
+                  onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
+                  accent={coachAccent}/>
+              )}
+              {pendingCoachAction&&(
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={confirmPendingCoachAction} style={{flex:1,padding:"11px",borderRadius:10,
+                    background:"linear-gradient(135deg,"+coachAccent+"dd,"+coachAccent+"88)",border:"none",color:"#fff",
+                    fontWeight:800,fontSize:13,cursor:"pointer"}}>Confirmar</button>
+                  <button onClick={cancelPendingCoachAction} style={{flex:1,padding:"11px",borderRadius:10,
+                    background:C.b1,border:"none",color:C.muted,fontWeight:800,fontSize:13,cursor:"pointer"}}>Cancelar</button>
+                </div>
+              )}
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"flex-end",padding:"10px 16px 16px",borderTop:"1px solid "+C.b1}}>
+              <textarea value={coachDraft} onChange={e=>setCoachDraft(e.target.value)} rows={4}
+                placeholder={coachLoading?"Pensando…":"Responda tudo de uma vez. Enter quebra a linha."}
+                disabled={coachLoading} aria-label="Mensagem para o Coach"
+                style={{flex:1,minWidth:0,resize:"none",background:coachAccent+"10",border:"1.5px solid "+coachAccent+"55",borderRadius:14,
+                  padding:"10px 12px",color:C.text,fontSize:14,lineHeight:1.45,outline:"none",fontFamily:"inherit"}}/>
+              <button onClick={()=>{ if(!coachDraft.trim()) return; sendToCoach(coachDraft); setCoachDraft(""); }}
+                disabled={coachLoading||!coachDraft.trim()} aria-label="Enviar"
+                style={{width:44,height:44,borderRadius:99,flexShrink:0,background:coachLoading||!coachDraft.trim()?C.b2:coachAccent,
+                  border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <Icon name="back" size={16} color="#fff" style={{transform:"rotate(180deg)"}}/>
+              </button>
+            </div>
           </div>
         </div>
       )}
