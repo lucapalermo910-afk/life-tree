@@ -20,14 +20,14 @@ import { OrcamentoFluxoTab } from "./yesod/OrcamentoFluxoTab.jsx";
 import { ObjetivosTab } from "./yesod/ObjetivosTab.jsx";
 import { ConfigTab } from "./yesod/ConfigTab.jsx";
 
-export default function YesodModule({ onBack, dark, setDark, askCoach }) {
+export default function YesodModule({ onBack, dark, setDark, askCoach, abrirDesejo }) {
   const C = dark ? DARK : LIGHT;
   const ctx0 = useYesodState();
   // askCoach (29/08/2026, motor genérico de objetivo+plano) — dispara sendToCoach do App.jsx
   // com uma mensagem programática, reaproveitando 100% do chat/skill/ação que já existe.
   // Só ObjetivosTab.jsx usa hoje (consumido via useContext(YesodCtx), não passado por prop
   // direta — mesmo padrão do resto do ctx).
-  const ctx = { ...ctx0, askCoach };
+  const ctx = { ...ctx0, askCoach, abrirDesejo };
   // Destructuring parcial de propósito (26/08/2026, encolhido de novo no passo 4 — ver 11
   // Plano de Decomposição — Arquivos Monolíticos.md) — ctx tem 177 chaves (tudo que
   // useYesodState expõe), mas o shell só puxa pro escopo local o que ele mesmo usa direto

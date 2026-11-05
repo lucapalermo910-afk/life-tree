@@ -423,8 +423,18 @@ export function createGeburahObjective(a) {
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + "." };
 }
 
+export function toggleGeburahObjective(a) {
+  const objetivos = readJSON("objetivos", []);
+  const alvo = objetivos.find(o => o.title === a.match || o.id === a.id);
+  if (!alvo) return { ok: false, message: "Objetivo não encontrado." };
+  writeJSON("objetivos", objetivos.map(o => o === alvo ? { ...o, done: !o.done } : o));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Objetivo '" + alvo.title + "' " + (alvo.done ? "reaberto" : "concluído") + "." };
+}
+
 export const GEBURAH_ACTION_HANDLERS = {
   create_objective: createGeburahObjective,
+  toggle_objective: toggleGeburahObjective,
   register_weight: registerGeburahWeight,
   register_meal: registerGeburahMeal,
   delete_meal_item: deleteGeburahMealItem,

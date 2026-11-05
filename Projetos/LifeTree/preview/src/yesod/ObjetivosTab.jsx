@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { Btn, FI, GoalCard, PlanoCard } from "../shared/ui.jsx";
+import { Btn, GoalCard, PlanoCard } from "../shared/ui.jsx";
 import { ACCENT } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { fmt } from "./constants.js";
@@ -163,7 +163,7 @@ function IfPlanCard({ C, ifPlan, setIfPlan, yGoals, yHabits }) {
 export function ObjetivosTab({ C }) {
   const ctx = useContext(YesodCtx);
   const {
-    askCoach, back, cashflowMonth, getMonthStr, guard, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk, monthLabel2, nav, net,
+    abrirDesejo, back, cashflowMonth, getMonthStr, guard, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk, monthLabel2, nav, net,
     openSh, page, setFinXp, setIfBaseline, setIfGoal, setIfMonthly, setYGoals, yGoals, yHabits,
   } = ctx;
   // Plano da Meta de IF (metas secundárias + ações) — até 30/08/2026 só dava pra editar/apagar
@@ -179,15 +179,7 @@ export function ObjetivosTab({ C }) {
   // pro Coach ("Quero criar o objetivo: X") reaproveitando o chat que já existe — a conversa
   // de coleta de informação e o plano em si acontecem lá, não numa tela dedicada. O objetivo
   // só é salvo quando o usuário confirmar a ação que o Coach propuser (create_objective).
-  const [criando, setCriando] = useState(false);
-  const [tituloNovo, setTituloNovo] = useState("");
   const [expandedId, setExpandedId] = useState(null);
-  const criarObjetivo = () => {
-    if (!tituloNovo.trim() || !askCoach) return;
-    askCoach("Quero criar o objetivo: " + tituloNovo.trim());
-    setCriando(false);
-    setTituloNovo("");
-  };
   // Apagar a Meta de IF inteira — até 30/08/2026 só dava pra fazer isso mexendo direto no
   // localStorage (usuário pediu uma funcionalidade de verdade pra apagar/editar objetivos,
   // não só pelo dev). Some com o card (volta ao estado "sem meta definida"), o plano
@@ -264,19 +256,9 @@ export function ObjetivosTab({ C }) {
           return(<div style={{animation:"slideUp .3s ease"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:13,fontWeight:800}}>Objetivos</div>
-              {!criando&&<Btn sm full={false} color={ACCENT} onClick={()=>setCriando(true)}><Ico n="plus" size={11}/> Objetivo</Btn>}
+              {/* 05/11/2026: objetivos são criados só no Desejo/Kether e aparecem aqui (pedido do usuário). */}
+              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo}><Ico n="plus" size={11}/> Criar no Desejo</Btn>}
             </div>
-            {criando&&(
-              <div style={{background:C.card,border:"1px solid "+C.b1,borderRadius:12,padding:14,marginBottom:14}}>
-                <div style={{fontSize:12,fontWeight:800,marginBottom:10,color:C.text}}>Novo Objetivo</div>
-                <div style={{fontSize:10,color:C.muted,marginBottom:10,lineHeight:1.4}}>O Coach conversa com você no chat pra montar o plano — escreva só o objetivo.</div>
-                <FI label="Título" value={tituloNovo} onChange={setTituloNovo} placeholder="Ex: Quitar dívida do cartão, Comprar um carro..." C={C}/>
-                <div style={{display:"flex",gap:8,marginTop:10}}>
-                  <Btn outline color={C.dim} onClick={()=>{setCriando(false);setTituloNovo("");}}>Cancelar</Btn>
-                  <Btn color="#f59e0b" onClick={criarObjetivo}><Ico n="check" size={14}/> Perguntar ao Coach</Btn>
-                </div>
-              </div>
-            )}
             {/* Sem meta de IF configurada: nenhum card/prompt aqui — só a lista de objetivos
                 abaixo (achado 30/08/2026, pedido explícito do usuário: "não tenha nada na aba,
                 somente a opção de criar um novo objetivo"). */}
@@ -289,7 +271,7 @@ export function ObjetivosTab({ C }) {
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted}}><span>Atual: {fmt(net)}</span><span>Faltam: {fmt(Math.max(0,ifNeeded-net))}</span></div>
               </div>
             )}
-            {yGoals.length===0&&!criando&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:11.5}}>Nenhum objetivo ainda — toque em "+ Objetivo" pra criar um.</div>}
+            {yGoals.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:11.5}}>Nenhum objetivo de finanças ainda. Os objetivos são criados no Desejo, onde o Coach monta o plano com você, e aparecem aqui.</div>}
             {yGoals.map(g=>(
               <GoalRow key={g.id} g={g} C={C} net={net} expanded={expandedId===g.id}
                 onToggleExpand={id=>setExpandedId(p=>p===id?null:id)} onToggleStep={toggleStep} onUpdatePlano={updatePlano}
