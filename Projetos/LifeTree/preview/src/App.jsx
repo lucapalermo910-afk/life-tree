@@ -17,7 +17,8 @@ import { MacrosCard } from "./shared/MacrosCard.jsx";
 import { TreinoCard } from "./shared/TreinoCard.jsx";
 import { normalizarTreino, hojeLocal } from "./shared/treino.js";
 import { ResultadosCard } from "./shared/ResultadosCard.jsx";
-import { normalizarResultados, marcosDoObjetivo, comRotina } from "./shared/planejamento.js";
+import { normalizarResultados, marcosDoObjetivo, comRotina, normalizarFase, limitesDasFases, totaisDasFases } from "./shared/planejamento.js";
+import { FaseDetalhe } from "./shared/FaseSaude.jsx";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -753,12 +754,13 @@ export default function App() {
           if(action.plano){
             action.plano=comRotina({
               ...action.plano,
-              steps:(action.plano.steps||[]).map(s=>({id:"st"+Math.random().toString(36).slice(2,8),title:typeof s==="string"?s:s.title,done:false})),
+              steps:(action.plano.steps||[]).map(normalizarFase),
             });
           }
           // Metas de dieta: calculadas em código (shared/macros.js), nunca pelo modelo.
           if(action.dieta&&skillId==="geburah"){
-            if(action.treino) action.dieta={...action.dieta,treinos_semana:normalizarTreino(action.treino).treinos_semana};
+            const w1=action.plano?.steps?.find(s=>s.semana)?.semana;
+            if(action.treino||w1) action.dieta={...action.dieta,treinos_semana:(w1||normalizarTreino(action.treino)).treinos_semana};
             const m=calcularMacros(action.dieta);
             action.macrosPrevia=m.ok?m:null;
           }
@@ -1264,10 +1266,18 @@ export default function App() {
               {pendingCoachAction?.action?.plano&&(
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
                   tituloPassos={pendingCoachAction.skillId==="geburah"?"LINHA DO TEMPO":undefined}
-                  marcoDoPasso={pendingCoachAction.skillId==="geburah"?marcosDoObjetivo({dieta:pendingCoachAction.action.dieta,macros:pendingCoachAction.action.macrosPrevia,inicio:hojeLocal(),prazo:pendingCoachAction.action.prazo}):null}
+                  renderDetalhe={pendingCoachAction.skillId==="geburah"?(s,i)=>{
+                    const a=pendingCoachAction.action;
+                    const marco=marcosDoObjetivo({dieta:a.dieta,macros:a.macrosPrevia,inicio:hojeLocal(),prazo:a.prazo});
+                    return <FaseDetalhe C={C} s={s} accent={coachAccent} marco={marco&&marco(((s.title||"").match(/^([^:]{3,40}):/)||[])[1]||"")} fim={limitesDasFases(a.plano.steps,hojeLocal(),a.prazo)[i]?.fim}/>;
+                  }:null}
                   metas={[
                     pendingCoachAction.skillId==="geburah"&&{chave:"resultados",titulo:"Resultados-chave",render:()=><ResultadosCard C={C} r={normalizarResultados(pendingCoachAction.action.resultados)} dieta={pendingCoachAction.action.macrosPrevia?pendingCoachAction.action.dieta:null} temDieta={!!pendingCoachAction.action.macrosPrevia} accent={coachAccent}/>},
-                    pendingCoachAction.action.treino&&{chave:"treino",titulo:"Metas de treino",render:()=><TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent} prazo={pendingCoachAction.action.prazo}/>},
+                    (pendingCoachAction.action.treino||pendingCoachAction.action.plano.steps.some(s=>s.semana))&&{chave:"treino",titulo:"Metas de treino",render:()=>{
+                      const a=pendingCoachAction.action, f=a.plano.steps.findIndex(s=>s.semana);
+                      return <TreinoCard C={C} t={f>=0?a.plano.steps[f].semana:normalizarTreino(a.treino)} accent={coachAccent} prazo={a.prazo} inicio={hojeLocal()}
+                        subtitulo={f>=0?"Fase "+(f+1):null} totais={totaisDasFases(a.plano.steps,hojeLocal(),a.prazo)}/>;
+                    }},
                     pendingCoachAction.action.macrosPrevia&&{chave:"dieta",titulo:"Metas de dieta",render:()=><MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>},
                   ]}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}

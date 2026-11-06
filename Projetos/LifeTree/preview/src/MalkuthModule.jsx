@@ -6,6 +6,8 @@ import { HOD_ACTION_HANDLERS } from "./shared/hodActions.js";
 import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
+import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
+import { execucaoDoPlano } from "./shared/planejamento.js";
 import { GoalCard } from "./shared/ui.jsx";
 import { fmt } from "./yesod/constants.js";
 
@@ -121,9 +123,19 @@ const GOAL_ACTIVITY_ADAPTERS = {
   },
   geburah: {
     label: "Saúde", color: "#ef4444",
-    read: () => readOtherModule("lifetree_geb_objetivos", []).filter(g => g.plano).map(g => ({ id: "geburah_" + g.id, title: g.title, plano: g.plano, metrica: null })),
+    read: () => readOtherModule("lifetree_geb_objetivos", []).filter(g => g.plano).map(g => ({ id: "geburah_" + g.id, title: g.title, plano: g.plano, metrica: null, execucao: true })),
   },
 };
+
+// Tarefas das fases dos objetivos (06/11/2026, pedido do usuário): descritas no plano da
+// Saúde, marcadas AQUI — o Controle é onde a execução é acompanhada. O % de tarefas feitas
+// vira o gauge do objetivo (Saúde, Desejo e aqui).
+const dataCurta = (s) => (s ? s.slice(8, 10) + "/" + s.slice(5, 7) : "");
+function tarefasDosObjetivos() {
+  return readOtherModule("lifetree_geb_objetivos", []).flatMap(o => (o.plano?.steps || []).flatMap((s, i) =>
+    (s.tarefas || []).map(t => ({ ...t, objetivoId: o.id, objetivo: o.title, fase: i + 1 }))))
+    .sort((a, b) => (a.done - b.done) || (a.ate || "9999").localeCompare(b.ate || "9999"));
+}
 
 export default function MalkuthModule({ onBack, dark, setDark }) {
   const C = dark ? DARK : LIGHT;
@@ -150,6 +162,8 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
     ad.read().map(item => ({ ...item, moduleId, moduleLabel: ad.label, color: ad.color }))
   );
   const ifStatus = readOtherModule("lifetree_fin_ifstatus", null);
+  const tarefas = tarefasDosObjetivos();
+  const hoje = todayS();
 
   return (
     <div style={{ fontFamily: "system-ui,sans-serif", background: C.bg, minHeight: "100vh", maxWidth: 430, margin: "0 auto", color: C.text }}>
@@ -173,19 +187,39 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
       </div>
 
       <div style={{ padding: "14px 16px 100px" }}>
-        <div style={{ background: "linear-gradient(135deg," + ACCENT + "22," + ACCENT + "06)", border: "1px solid " + ACCENT + "44", borderRadius: 14, padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>PROTÓTIPO — TESTE DE INTEGRAÇÃO</div>
-          <div style={{ fontSize: 12, color: C.text, lineHeight: 1.5 }}>
-            Só a aba Atividades, mas já com os 8 módulos conectados — pra validar a sincronização nos dois sentidos antes de construir o módulo completo.
-          </div>
-        </div>
+        {tarefas.length > 0 && (
+          <>
+            <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>TAREFAS DOS OBJETIVOS</div>
+            {tarefas.map(t => {
+              const atrasada = !t.done && t.ate && t.ate < hoje;
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: C.card, border: "1px solid #ef444422", borderRadius: 12, marginBottom: 7 }}>
+                  <button onClick={() => GEBURAH_ACTION_HANDLERS.toggle_tarefa_objetivo({ objetivoId: t.objetivoId, tarefaId: t.id })}
+                    aria-label={(t.done ? "Reabrir" : "Concluir") + " tarefa " + t.texto}
+                    style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, cursor: "pointer", border: "1.5px solid " + (t.done ? "#ef4444" : C.b2),
+                      background: t.done ? "#ef4444" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                    {t.done && <Ico n="check" size={11} color="#fff" sw={2.5}/>}
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: t.done ? C.muted : C.text, textDecoration: t.done ? "line-through" : "none" }}>{t.texto}</div>
+                    <div style={{ fontSize: 9, color: atrasada ? "#ef4444" : "#ef4444aa", fontWeight: atrasada ? 800 : 500 }}>
+                      Saúde · {t.objetivo} · Fase {t.fase}{t.ate ? " · " + (atrasada ? "atrasada, era até " : "até ") + dataCurta(t.ate) : ""}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ height: 10 }} />
+          </>
+        )}
 
         {goals.length > 0 && (
           <>
             <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>OBJETIVOS</div>
             {goals.map(item => {
-              const pct = item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100);
-              const statLine = item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos";
+              const ex = item.execucao ? execucaoDoPlano(item.plano) : null;
+              const pct = ex ? ex.pct : item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100);
+              const statLine = ex ? ex.feitas + " de " + ex.total + " tarefas" : item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos";
               return (
                 <div key={item.id} style={{ marginBottom: 10 }}>
                   <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
