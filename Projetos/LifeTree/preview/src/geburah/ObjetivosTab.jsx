@@ -8,7 +8,7 @@
 // restrições, prazo), devolve um objetivo SMART com marcos e só salva depois da confirmação
 // (create_objective → geburahActions.js). Persistido em lifetree_geb_objetivos e espelhado
 // read-only no Malkuth (GOAL_ACTIVITY_ADAPTERS).
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useGeburah } from "./context.js";
 import { ThemeCtx, ACCENT, GREEN, Btn } from "./theme.js";
 import { Ico } from "./icons.jsx";
@@ -65,10 +65,12 @@ function linhaStatus(o) {
 export function ObjetivosTab() {
   const C = useContext(ThemeCtx);
   const g = useGeburah();
-  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo } = g;
+  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo, objetivoInicial } = g;
   const trendKg = sortedPes && sortedPes.length >= 2 ? sortedPes[sortedPes.length - 1].peso - sortedPes[sortedPes.length - 2].peso : null;
 
-  const [aberto, setAberto] = useState(null);
+  const [aberto, setAberto] = useState(objetivoInicial || null);
+  // Vindo do Desejo: rola até o objetivo aberto.
+  useEffect(() => { if (objetivoInicial) document.getElementById("obj-" + objetivoInicial)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [objetivoInicial]);
 
   const toggleStep = (id, stepId) =>
     setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } })));
@@ -96,7 +98,7 @@ export function ObjetivosTab() {
       )}
 
       {objetivos.map((o) => (
-        <div key={o.id} style={{ borderTop: "1px solid " + C.b1, padding: "9px 0" }}>
+        <div key={o.id} id={"obj-" + o.id} style={{ borderTop: "1px solid " + C.b1, padding: "9px 0", scrollMarginTop: 70 }}>
           <GoalCard C={C} accent={ACCENT} label={o.title} pct={pctDe(o)} statLine={linhaStatus(o)} onClick={() => setAberto(aberto === o.id ? null : o.id)} />
           {aberto === o.id && (
             <div style={{ marginTop: 10 }}>

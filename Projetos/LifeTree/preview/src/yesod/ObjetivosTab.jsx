@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Btn, GoalCard, PlanoCard } from "../shared/ui.jsx";
 import { ACCENT } from "./theme.js";
 import { Ico } from "./icons.jsx";
@@ -163,7 +163,7 @@ function IfPlanCard({ C, ifPlan, setIfPlan, yGoals, yHabits }) {
 export function ObjetivosTab({ C }) {
   const ctx = useContext(YesodCtx);
   const {
-    abrirDesejo, back, cashflowMonth, getMonthStr, guard, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk, monthLabel2, nav, net,
+    abrirDesejo, objetivoInicial, back, cashflowMonth, getMonthStr, guard, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk, monthLabel2, nav, net,
     openSh, page, setFinXp, setIfBaseline, setIfGoal, setIfMonthly, setYGoals, yGoals, yHabits,
   } = ctx;
   // Plano da Meta de IF (metas secundárias + ações) — até 30/08/2026 só dava pra editar/apagar
@@ -179,7 +179,9 @@ export function ObjetivosTab({ C }) {
   // pro Coach ("Quero criar o objetivo: X") reaproveitando o chat que já existe — a conversa
   // de coleta de informação e o plano em si acontecem lá, não numa tela dedicada. O objetivo
   // só é salvo quando o usuário confirmar a ação que o Coach propuser (create_objective).
-  const [expandedId, setExpandedId] = useState(null);
+  const [expandedId, setExpandedId] = useState(objetivoInicial || null);
+  // Vindo do Desejo: rola até o objetivo aberto.
+  useEffect(() => { if (objetivoInicial) document.getElementById("obj-" + objetivoInicial)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [objetivoInicial]);
   // Apagar a Meta de IF inteira — até 30/08/2026 só dava pra fazer isso mexendo direto no
   // localStorage (usuário pediu uma funcionalidade de verdade pra apagar/editar objetivos,
   // não só pelo dev). Some com o card (volta ao estado "sem meta definida"), o plano
@@ -273,9 +275,9 @@ export function ObjetivosTab({ C }) {
             )}
             {yGoals.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:11.5}}>Nenhum objetivo de finanças ainda. Os objetivos são criados no Desejo, onde o Coach monta o plano com você, e aparecem aqui.</div>}
             {yGoals.map(g=>(
-              <GoalRow key={g.id} g={g} C={C} net={net} expanded={expandedId===g.id}
+              <div key={g.id} id={"obj-"+g.id} style={{scrollMarginTop:70}}><GoalRow g={g} C={C} net={net} expanded={expandedId===g.id}
                 onToggleExpand={id=>setExpandedId(p=>p===id?null:id)} onToggleStep={toggleStep} onUpdatePlano={updatePlano}
-                setFinXp={setFinXp} setYGoals={setYGoals}/>
+                setFinXp={setFinXp} setYGoals={setYGoals}/></div>
             ))}
           </div>);
 }
