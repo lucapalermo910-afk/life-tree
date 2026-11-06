@@ -698,7 +698,12 @@ export default function App() {
     setLastCoachSkillId(skillId);
     const skill=getSkill(skillId);
     const skillCtx=skill.buildContext(universalCtx);
-    const systemPrompt=skill.systemPrompt(skillCtx);
+    // Data de hoje (06/11/2026): o Coach não sabia que dia era e errava prazos ("até o fim do
+    // ano", "em 12 semanas"). Vai em todo prompt, no fuso do aparelho.
+    const agoraCoach=new Date();
+    const dataHoje=agoraCoach.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    const isoHoje=agoraCoach.getFullYear()+"-"+String(agoraCoach.getMonth()+1).padStart(2,"0")+"-"+String(agoraCoach.getDate()).padStart(2,"0");
+    const systemPrompt="DATA DE HOJE: "+dataHoje+" ("+isoHoje+"). Use esta data para calcular prazos, semanas restantes e datas no formato YYYY-MM-DD. Unidades: kg = quilos, km = quilômetros.\n\n"+skill.systemPrompt(skillCtx);
 
     try{
       // 05/11/2026 — respostas cortadas e "Erro ao processar resposta":

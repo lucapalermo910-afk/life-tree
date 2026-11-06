@@ -52,8 +52,9 @@ export function sugerirArea(texto) {
   let pontos = 0;
   for (const a of AREAS) {
     // Palavra precisa começar numa fronteira ("mil" não pode casar dentro de "família"),
-    // mas pode ser prefixo ("financ" casa "finanças" e "financeiro").
-    const n = a.palavras.filter((p) => new RegExp("(^|[^a-z0-9])" + p.replace(/[$.*+?()[\]{}|\\^]/g, "\\$&")).test(t)).length;
+    // mas pode ser prefixo ("financ" casa "finanças" e "financeiro"). Número colado conta como
+    // fronteira (06/11/2026): "75kg", "5km" e "30mil" eram ignorados.
+    const n = a.palavras.filter((p) => new RegExp("(^|[^a-z])" + p.replace(/[$.*+?()[\]{}|\\^]/g, "\\$&")).test(t)).length;
     if (n > pontos) { melhor = a; pontos = n; }
   }
   return melhor;
