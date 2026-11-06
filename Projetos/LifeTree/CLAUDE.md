@@ -75,6 +75,26 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
   para não escrever esses números no texto.
 - Todo prompt do Coach recebe a data de hoje (já feito em `sendToCoach`).
 
+**Planejamento × acompanhamento (06/11/2026, pedido do usuário — hierarquia tipo OKR)**
+- A aba Objetivos **só planeja**. O acompanhamento (pesagens, treinos feitos, diário) fica
+  nas outras abas e será ligado ao objetivo depois. Não criar telas de marcar execução aqui.
+- Estrutura do plano: **O objetivo → Resultados-chave → metas da semana → Linha do tempo
+  (fases com marco) → Rotina → Impactos**. Tudo ligado direto ao objetivo (sem aninhar por KR).
+- **Resultados-chave** (`ResultadosCard`, `o.krs`): alvos de "como saber que deu certo".
+  Saúde: peso (vem da dieta, fonte única), % de treinos feitos, % de dias dentro da dieta,
+  % de gordura opcional. Resultado sem número não entra.
+- **Linha do tempo**: os passos são fases que começam por "DD/MM a DD/MM/AAAA: ". O **marco**
+  de cada fase é calculado em código (`shared/planejamento.js`: peso esperado na data final
+  pelo ritmo da dieta, sem passar do peso-meta) e recalcula quando o ritmo muda. O Coach não
+  escreve pesos nas fases. Na Saúde o título é "LINHA DO TEMPO" (`tituloPassos`).
+- **Rotina** (`plano.rotina`): 3–5 hábitos recorrentes, editáveis como os impactos. O antigo
+  `habitoSugerido` vira o primeiro item (`comRotina`).
+- Na interface, palavras curtas em português (Resultados-chave, Marco, Rotina); nada de
+  "KR"/"milestone" na tela.
+- Cartão do objetivo **sem percentual** enquanto só houver planejamento (`GoalCard` com
+  `pct={null}`): "Até DD/MM/AAAA", nome e "faltam N dias · N fases". Piloto na Saúde; levar
+  às outras áreas depois do piloto.
+
 **Visual**
 - **Editar = tocar no item; apagar = ×** (pedido do usuário, 06/11/2026 — "UX mais limpa").
   Sem lápis, lixeira, botão "Editar" ou menu de segurar. Cartão do objetivo (`GoalCard`):

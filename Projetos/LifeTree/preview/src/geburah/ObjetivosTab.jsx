@@ -18,6 +18,8 @@ import { MacrosCard } from "../shared/MacrosCard.jsx";
 import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
 import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.js";
+import { ResultadosCard } from "../shared/ResultadosCard.jsx";
+import { normalizarResultados, marcosDoObjetivo, comRotina } from "../shared/planejamento.js";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -52,17 +54,17 @@ function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
 // parece texto estático até o usuário tocar nele, com um × pra apagar a linha.
 
 
-const pctDe = (o) => (o.plano?.steps?.length ? Math.round((o.plano.steps.filter((s) => s.done).length / o.plano.steps.length) * 100) : 0);
 const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "");
 const diasAte = (iso) => Math.ceil((new Date(iso + "T00:00:00") - new Date(new Date().toDateString())) / 86400000);
 
+// Só planejamento (06/11/2026): o cartão mostra prazo e fases, sem percentual — o
+// acompanhamento fica nas outras abas e será ligado depois.
 function linhaStatus(o) {
-  const feitos = o.plano ? o.plano.steps.filter((s) => s.done).length : 0;
   const total = o.plano ? o.plano.steps.length : 0;
-  const base = feitos + " de " + total + " marcos";
-  if (!o.prazo) return base;
-  const d = diasAte(o.prazo);
-  return base + " · " + (d >= 0 ? "faltam " + d + " dias (" + dataBR(o.prazo) + ")" : "prazo vencido em " + dataBR(o.prazo));
+  const partes = [];
+  if (o.prazo) { const d = diasAte(o.prazo); partes.push(d >= 0 ? "faltam " + d + " dias" : "prazo vencido em " + dataBR(o.prazo)); }
+  if (total) partes.push(total + (total === 1 ? " fase" : " fases"));
+  return partes.join(" · ");
 }
 
 export function ObjetivosTab() {
@@ -103,7 +105,7 @@ export function ObjetivosTab() {
 
   const toggleStep = (id, stepId) =>
     setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } })));
-  const updatePlano = (id, updater) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: updater(o.plano) })));
+  const updatePlano = (id, updater) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: updater(comRotina(o.plano)) })));
   const apagar = (o) => {
     if (!window.confirm("Apagar o objetivo '" + o.title + "' e o plano dele?")) return;
     setObjetivos((p) => p.filter((x) => x.id !== o.id));
@@ -128,16 +130,21 @@ export function ObjetivosTab() {
 
       {objetivos.map((o) => (
         <div key={o.id} id={"obj-" + o.id} style={{ borderTop: "1px solid " + C.b1, padding: "9px 0", scrollMarginTop: 70 }}>
-          <GoalCard C={C} accent={ACCENT} label={o.title} pct={pctDe(o)} statLine={linhaStatus(o)} onClick={() => { setAberto(aberto === o.id ? null : o.id); setEditando(null); }}
+          <GoalCard C={C} accent={ACCENT} label={o.title} pct={null} rotulo={o.prazo ? "Até " + dataBR(o.prazo) : "Objetivo"} titulo={o.title} statLine={linhaStatus(o)} onClick={() => { setAberto(aberto === o.id ? null : o.id); setEditando(null); }}
             onEdit={() => { setAberto(o.id); setEditando(o.id); }} onDelete={() => apagar(o)} />
           {aberto === o.id && (
             <div style={{ marginTop: 10 }}>
               {o.plano
-                ? <PlanoCard C={C} plano={o.plano} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
+                ? <PlanoCard C={C} plano={comRotina(o.plano)} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
+                    tituloPassos="LINHA DO TEMPO"
+                    marcoDoPasso={marcosDoObjetivo({ dieta: o.macros ? dietaDoObjetivo(o, perfil) : null, macros: o.macros, inicio: o.criado || hojeLocal(), prazo: o.prazo })}
                     metas={[
+                      { chave: "resultados", titulo: "Resultados-chave",
+                        render: (ed) => <ResultadosCard C={C} r={normalizarResultados(o.krs)} dieta={o.macros ? dietaDoObjetivo(o, perfil) : null} temDieta={!!o.macros} accent={ACCENT} editando={ed}
+                          onChange={(k, v) => mudar(o.id, { krs: { ...normalizarResultados(o.krs), [k]: v } })} /> },
                       treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)) && { chave: "treino", titulo: "Metas de treino",
                         render: (ed) => <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)} />,
                         onApagar: () => { if (window.confirm("Apagar as metas de treino deste objetivo?")) mudar(o.id, { treino: null, semTreino: true }); } },
@@ -147,9 +154,6 @@ export function ObjetivosTab() {
                     ]}
                     editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
-              {o.plano?.habitoSugerido && (
-                <div style={{ fontSize: 10.5, color: GREEN, marginTop: 8 }}>Hábito sugerido: {o.plano.habitoSugerido}</div>
-              )}
             </div>
           )}
         </div>

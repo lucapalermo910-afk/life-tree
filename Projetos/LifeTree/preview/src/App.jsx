@@ -15,7 +15,9 @@ import { callCoachAPI, motivoErroCoach } from "./shared/coachClient.js";
 import { calcularMacros } from "./shared/macros.js";
 import { MacrosCard } from "./shared/MacrosCard.jsx";
 import { TreinoCard } from "./shared/TreinoCard.jsx";
-import { normalizarTreino } from "./shared/treino.js";
+import { normalizarTreino, hojeLocal } from "./shared/treino.js";
+import { ResultadosCard } from "./shared/ResultadosCard.jsx";
+import { normalizarResultados, marcosDoObjetivo, comRotina } from "./shared/planejamento.js";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -749,10 +751,10 @@ export default function App() {
           // precisa de um id por passo pra editar/apagar linha, mesma exigência do handler
           // que persiste depois de confirmado (achado ao testar com Coach simulado, 30/08/2026).
           if(action.plano){
-            action.plano={
+            action.plano=comRotina({
               ...action.plano,
               steps:(action.plano.steps||[]).map(s=>({id:"st"+Math.random().toString(36).slice(2,8),title:typeof s==="string"?s:s.title,done:false})),
-            };
+            });
           }
           // Metas de dieta: calculadas em código (shared/macros.js), nunca pelo modelo.
           if(action.dieta&&skillId==="geburah"){
@@ -1261,7 +1263,10 @@ export default function App() {
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
               {pendingCoachAction?.action?.plano&&(
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
+                  tituloPassos={pendingCoachAction.skillId==="geburah"?"LINHA DO TEMPO":undefined}
+                  marcoDoPasso={pendingCoachAction.skillId==="geburah"?marcosDoObjetivo({dieta:pendingCoachAction.action.dieta,macros:pendingCoachAction.action.macrosPrevia,inicio:hojeLocal(),prazo:pendingCoachAction.action.prazo}):null}
                   metas={[
+                    pendingCoachAction.skillId==="geburah"&&{chave:"resultados",titulo:"Resultados-chave",render:()=><ResultadosCard C={C} r={normalizarResultados(pendingCoachAction.action.resultados)} dieta={pendingCoachAction.action.macrosPrevia?pendingCoachAction.action.dieta:null} temDieta={!!pendingCoachAction.action.macrosPrevia} accent={coachAccent}/>},
                     pendingCoachAction.action.treino&&{chave:"treino",titulo:"Metas de treino",render:()=><TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent} prazo={pendingCoachAction.action.prazo}/>},
                     pendingCoachAction.action.macrosPrevia&&{chave:"dieta",titulo:"Metas de dieta",render:()=><MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>},
                   ]}
