@@ -91,7 +91,7 @@ const GOAL_ADAPTERS = {
   geburah: {
     label: "Saúde", color: "#ef4444",
     chave: "lifetree_geb_objetivos",
-    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, rawId: g.id, descricao: g.descricao || null, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
+    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, rawId: g.id, descricao: g.descricao || null, prazo: g.prazo || null, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
     toggle: item => GEBURAH_ACTION_HANDLERS.toggle_objective({ match: item.title }),
   },
 };
@@ -451,8 +451,9 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
           <div key={item.id} style={{ marginBottom: 10 }}>
             <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
             <GoalCard C={C} accent={item.color} label={item.title}
-              pct={item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
-              statLine={item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
+              {...(item.moduleId === "geburah" ? { rotulo: item.prazo ? "Até " + item.prazo.split("-").reverse().join("/") : "Objetivo", titulo: item.title } : {})}
+              pct={item.moduleId === "geburah" ? null : item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
+              statLine={item.moduleId === "geburah" ? item.plano.steps.length + (item.plano.steps.length === 1 ? " fase" : " fases") + " · plano de Saúde" : item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
               onClick={() => abrirObjetivo && item.rawId && (item.moduleId === "geburah" || item.moduleId === "yesod")
                 ? abrirObjetivo(item.moduleId, item.rawId)
                 : setExpandedMetaId(p => p === item.id ? null : item.id)}

@@ -9,6 +9,7 @@
 import { notifyCoachDataUpdated } from "./coachSync.js";
 import { calcularMacros } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
+import { normalizarResultados } from "./planejamento.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -418,8 +419,11 @@ export function createGeburahObjective(a) {
     impactoPositivo: a.plano.impactoPositivo || [],
     impactoNegativo: a.plano.impactoNegativo || [],
     habitoSugerido: a.plano.habitoSugerido || null,
+    // Planejamento (06/11/2026): rotina = hábitos recorrentes do plano.
+    rotina: (Array.isArray(a.plano.rotina) ? a.plano.rotina : a.plano.habitoSugerido ? [a.plano.habitoSugerido] : []).map(String).filter(Boolean),
   } : null;
   const prazo = /^\d{4}-\d{2}-\d{2}$/.test(a.prazo || "") ? a.prazo : null;
+  const krs = normalizarResultados(a.resultados || {});
   // Metas de dieta calculadas pelo app (shared/macros.js) a partir do bloco "dieta" do Coach.
   // Recalcula aqui em vez de confiar em números vindos da pré-visualização.
   let macros = null;
@@ -437,7 +441,7 @@ export function createGeburahObjective(a) {
         atividade: { 1.2: "sedentario", 1.375: "leve", 1.55: "moderado", 1.725: "intenso", 1.9: "muito_intenso" }[m.fator] });
     }
   }
-  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}), ...(treino ? { treino } : {}) }]);
+  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, krs, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}), ...(treino ? { treino } : {}) }]);
   notifyGeburahUpdated();
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }

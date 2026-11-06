@@ -185,13 +185,13 @@ function PlusIcon({ color = "currentColor", size = 11 }) {
 // ("R$X de R$Y") quanto o caso sem métrica (% vem dos passos do plano concluídos).
 // onDelete (06/11/2026, pedido do usuário): × discreto no canto; o toque no cartão abre o
 // plano, e no plano cada item se edita com um toque. `onEdit` não é mais usado.
-export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick, onDelete }) {
+export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick, onDelete, rotulo = null, titulo = null }) {
   const p = Math.max(0, Math.min(100, pct || 0));
   return (
     <div onClick={onClick} aria-label={label}
       style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>{label.toUpperCase()}</div>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>{(rotulo || label).toUpperCase()}</div>
         {onDelete && (
           <button onClick={(e) => { e.stopPropagation(); onDelete(); }} aria-label={"Apagar objetivo " + label}
             style={{ background: "none", border: "none", cursor: "pointer", padding: 4, margin: -4, opacity: 0.6, flexShrink: 0 }}>
@@ -199,11 +199,21 @@ export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick,
           </button>
         )}
       </div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
-      {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
-      <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
-      </div>
+      {pct == null ? (
+        // Só planejamento (06/11/2026): sem percentual até o acompanhamento ser ligado.
+        <>
+          <div style={{ fontSize: 20, fontWeight: 900, color: C.text, margin: "2px 0 4px", lineHeight: 1.25 }}>{titulo || label}</div>
+          {statLine && <div style={{ fontSize: 12, color: C.muted }}>{statLine}</div>}
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
+          {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
+          <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -263,10 +273,13 @@ function partesDoPasso(t) {
 // ✓ (concluir) e × (apagar) no canto. Sem botão "Editar", lápis ou menu.
 //   chaves: "cabecalho" (nome, prazo, objetivo) · "meta:<chave>" · "passo:<id>" · "imp:<tipo>:<i>".
 // `metas`: lista [{ chave, titulo, render(editando), onApagar }] (ou um nó, só leitura).
+// Planejamento (06/11/2026): `tituloPassos` (ex: "LINHA DO TEMPO"), `marcoDoPasso(periodo)` →
+// texto do marco calculado no fim de cada fase, e `plano.rotina` (lista de hábitos, se existir).
 // `editando`/`onEditando` (booleanos): quem chama pode abrir o cabeçalho em edição (ex:
 // "Editar" vindo do Desejo) e fica sabendo quando algum item está em edição.
 export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
-  nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando }) {
+  nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando,
+  tituloPassos = "PASSO A PASSO", marcoDoPasso = null }) {
   const [chave, setChaveInt] = useState(editandoExt ? "cabecalho" : null);
   const setChave = (k) => { setChaveInt(k); if (onEditando) onEditando(!!k); };
   // Quem chama abriu/fechou a edição: ajusta durante o render.
@@ -315,7 +328,7 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
   const temCabecalho = podeEditar && (onNome || onPrazo || onDescricao);
   const listaMetas = Array.isArray(metas) ? metas.filter(Boolean) : null;
 
-  const impactos = (kind, rotulo, cor, marca) => (
+  const lista = (kind, rotulo, cor, marca) => (
     <div style={{ marginTop: 16 }}>
       {titulo(rotulo, cor)}
       {plano[kind].map((t, i) => chave === "imp:" + kind + ":" + i ? (
@@ -369,7 +382,7 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
         <div style={{ marginBottom: 16 }}>{typeof metas === "function" ? metas(false) : metas}</div>
       )}
 
-      {titulo("PASSO A PASSO")}
+      {titulo(tituloPassos)}
       {plano.steps.map((s, i) => {
         const { periodo, texto } = partesDoPasso(s.title);
         const ultimo = i === plano.steps.length - 1;
@@ -398,6 +411,11 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
                   {periodo && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>{periodo}</div>}
                   <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done ? "line-through" : "none",
                     overflowWrap: "anywhere", marginTop: periodo ? 0 : 4 }}>{texto || <em style={{ color: C.muted }}>vazio</em>}</div>
+                  {marcoDoPasso && periodo && marcoDoPasso(periodo) && (
+                    <div style={{ display: "inline-block", marginTop: 6, padding: "3px 9px", borderRadius: 99, background: accent + "14", color: accent, fontSize: 11, fontWeight: 800 }}>
+                      {marcoDoPasso(periodo)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -406,8 +424,9 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
       })}
       {adicionar("Adicionar passo", addStep)}
 
-      {impactos("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
-      {impactos("impactoNegativo", "PONTOS DE ATENÇÃO", "#ef4444", "!")}
+      {Array.isArray(plano.rotina) && lista("rotina", "ROTINA", accent, "↻")}
+      {lista("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
+      {lista("impactoNegativo", "PONTOS DE ATENÇÃO", "#ef4444", "!")}
     </div>
   );
 }
