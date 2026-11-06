@@ -220,6 +220,21 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
     refresh();
   };
 
+  // Renomear pelo Desejo (06/11/2026): mesmo caminho do apagar — escreve na chave do módulo de
+  // origem. O nome anterior vira a descrição quando ainda não há uma.
+  const renomearObjetivo = item => {
+    const ad = GOAL_ADAPTERS[item.moduleId];
+    if (!ad?.chave || item.rawId == null) return;
+    const novo = window.prompt("Nome do objetivo (curto):", item.title);
+    if (!novo || !novo.trim() || novo.trim() === item.title) return;
+    try {
+      const lista = readOtherModule(ad.chave, []);
+      localStorage.setItem(ad.chave, JSON.stringify(lista.map(g => g.id !== item.rawId ? g : { ...g, title: novo.trim(), descricao: g.descricao || g.title })));
+    } catch { return; }
+    notifyCoachDataUpdated(item.moduleId);
+    refresh();
+  };
+
   const metas = Object.entries(GOAL_ADAPTERS).flatMap(([moduleId, ad]) =>
     ad.read().map(item => ({ ...item, moduleId, moduleLabel: ad.label, color: ad.color }))
   );
@@ -434,19 +449,14 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
           // que read-only (sem onUpdate/onToggleStep de verdade): Kether nunca edita nem
           // recalcula, só espelha o que já foi salvo lá.
           <div key={item.id} style={{ marginBottom: 10 }}>
-            <div style={{ marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</span>
-              <button onClick={() => apagarObjetivo(item)} aria-label={"Apagar objetivo " + item.title}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 4px", display: "flex", alignItems: "center", gap: 4, color: C.muted, fontSize: 10, fontWeight: 700 }}>
-                <Ico n="x" size={11} color={C.muted}/> Apagar
-              </button>
-            </div>
+            <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
             <GoalCard C={C} accent={item.color} label={item.title}
               pct={item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
               statLine={item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
               onClick={() => abrirObjetivo && item.rawId && (item.moduleId === "geburah" || item.moduleId === "yesod")
                 ? abrirObjetivo(item.moduleId, item.rawId)
-                : setExpandedMetaId(p => p === item.id ? null : item.id)}/>
+                : setExpandedMetaId(p => p === item.id ? null : item.id)}
+              onEdit={() => renomearObjetivo(item)} onDelete={() => apagarObjetivo(item)}/>
             {expandedMetaId === item.id && (
               <div style={{ marginTop: 8 }}>
                 <PlanoCard C={C} plano={item.plano} descricao={item.descricao || null} accent={item.color} onToggleStep={() => {}} onUpdate={() => {}} somenteLeitura/>

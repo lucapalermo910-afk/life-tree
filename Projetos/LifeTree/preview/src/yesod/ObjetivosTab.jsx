@@ -61,13 +61,16 @@ function GoalRow({ g, C, net, expanded, onToggleExpand, onToggleStep, onUpdatePl
   const statLine = g.metrica?.id === "patrimonio_liquido" ? fmt(net) + " de " + fmt(g.metrica.valor) : g.plano.steps.filter(s => s.done).length + " de " + g.plano.steps.length + " passos concluídos";
   return (
     <div style={{ borderTop: "1px solid " + C.b1, padding: "9px 0" }}>
-      <GoalCard C={C} accent={ACCENT} label={g.title} pct={pct} statLine={statLine} onClick={() => onToggleExpand(g.id)} />
+      <GoalCard C={C} accent={ACCENT} label={g.title} pct={pct} statLine={statLine} onClick={() => onToggleExpand(g.id)}
+        onEdit={() => {
+          const novo = window.prompt("Nome do objetivo (curto, ex: Quitar o cartão):", g.title);
+          if (!novo || !novo.trim() || novo.trim() === g.title) return;
+          setYGoals(p => p.map(x => x.id !== g.id ? x : { ...x, title: novo.trim(), descricao: x.descricao || x.title }));
+        }}
+        onDelete={() => { if (window.confirm("Apagar o objetivo '" + g.title + "' e o plano dele?")) setYGoals(p => p.filter(x => x.id !== g.id)); }} />
       {expanded && (
         <div style={{ marginTop: 10 }}>
           <PlanoCard C={C} plano={g.plano} descricao={g.descricao||null} accent={ACCENT} onToggleStep={stepId => onToggleStep(g.id, stepId)} onUpdate={updater => onUpdatePlano(g.id, updater)} />
-          <button onClick={() => setYGoals(p => p.filter(x => x.id !== g.id))} style={{ marginTop: 8, background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-            <Ico n="x" size={11} color={C.muted} /> Apagar objetivo
-          </button>
         </div>
       )}
     </div>
