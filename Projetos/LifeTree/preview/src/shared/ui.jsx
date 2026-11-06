@@ -164,6 +164,20 @@ export function Badge({ label, color = "#818cf8" }) {
 // módulos que entrarem no motor genérico (Yesod primeiro). Mesmo motivo do resto deste
 // arquivo: um componente só, não uma cópia por módulo.
 
+function PencilIcon({ color = "currentColor", size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+function TrashIcon({ color = "currentColor", size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
 function CheckIcon({ color = "currentColor", size = 12 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
@@ -183,11 +197,24 @@ function PlusIcon({ color = "currentColor", size = 11 }) {
 // da Meta de Independência Financeira do Yesod (padrão que o usuário pediu explicitamente
 // pra generalizar, 29/08/2026) — `statLine` é livre pra caber tanto o caso com métrica real
 // ("R$X de R$Y") quanto o caso sem métrica (% vem dos passos do plano concluídos).
-export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick }) {
+// onEdit/onDelete (06/11/2026, pedido do usuário): botões de editar e apagar no próprio
+// cartão do percentual, em vez de escondidos no fim do plano. O toque neles não abre o plano.
+export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick, onEdit, onDelete }) {
   const p = Math.max(0, Math.min(100, pct || 0));
+  const acao = (rotulo, fn, icone) => (
+    <button onClick={(e) => { e.stopPropagation(); fn(); }} aria-label={rotulo + " objetivo " + label}
+      style={{ width: 34, height: 34, borderRadius: 99, border: "1px solid " + accent + "33", background: C.card, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>
+      {icone}
+    </button>
+  );
   return (
     <div onClick={onClick} style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
-      <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, paddingTop: onEdit || onDelete ? 4 : 0 }}>{label.toUpperCase()}</div>
+        {onEdit && acao("Editar", onEdit, <PencilIcon color={C.muted} size={14} />)}
+        {onDelete && acao("Apagar", onDelete, <TrashIcon color={C.muted} size={14} />)}
+      </div>
       <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
       {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
       <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>

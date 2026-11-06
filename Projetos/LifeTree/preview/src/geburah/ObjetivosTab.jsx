@@ -78,7 +78,7 @@ export function ObjetivosTab() {
   // Renomear (06/11/2026): nomes antigos vinham com a frase SMART inteira. O nome anterior vira
   // a descrição quando o objetivo ainda não tem uma, para não perder os detalhes.
   const renomear = (o) => {
-    const novo = window.prompt("Novo nome do objetivo (curto, ex: Bater 75 kg):", o.descricao ? o.title : "");
+    const novo = window.prompt("Nome do objetivo (curto, ex: Bater 75 kg):", o.title);
     if (!novo || !novo.trim() || novo.trim() === o.title) return;
     setObjetivos((p) => p.map((x) => (x.id !== o.id ? x : { ...x, title: novo.trim(), descricao: x.descricao || x.title })));
   };
@@ -106,7 +106,7 @@ export function ObjetivosTab() {
 
       {objetivos.map((o) => (
         <div key={o.id} id={"obj-" + o.id} style={{ borderTop: "1px solid " + C.b1, padding: "9px 0", scrollMarginTop: 70 }}>
-          <GoalCard C={C} accent={ACCENT} label={o.title} pct={pctDe(o)} statLine={linhaStatus(o)} onClick={() => setAberto(aberto === o.id ? null : o.id)} />
+          <GoalCard C={C} accent={ACCENT} label={o.title} pct={pctDe(o)} statLine={linhaStatus(o)} onClick={() => setAberto(aberto === o.id ? null : o.id)} onEdit={() => renomear(o)} onDelete={() => apagar(o)} />
           {aberto === o.id && (
             <div style={{ marginTop: 10 }}>
               {o.plano
@@ -116,14 +116,6 @@ export function ObjetivosTab() {
               {o.plano?.habitoSugerido && (
                 <div style={{ fontSize: 10.5, color: GREEN, marginTop: 8 }}>Hábito sugerido: {o.plano.habitoSugerido}</div>
               )}
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button onClick={() => renomear(o)} style={{ background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700 }}>
-                Renomear
-              </button>
-              <button onClick={() => apagar(o)} style={{ background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-                <Ico n="x" size={11} color={C.muted} /> Apagar objetivo
-              </button>
-              </div>
             </div>
           )}
         </div>
