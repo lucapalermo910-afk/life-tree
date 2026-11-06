@@ -17,7 +17,7 @@ import { GoalCard, PlanoCard } from "../shared/ui.jsx";
 import { MacrosCard } from "../shared/MacrosCard.jsx";
 import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
-import { normalizarTreino, treinoDoObjetivo } from "../shared/treino.js";
+import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.js";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -79,10 +79,11 @@ export function ObjetivosTab() {
   // Metas de treino: treinos por semana alimentam a dieta, que é recalculada junto.
   const mudarTreino = (o, k, v) => {
     const treino = normalizarTreino({ ...treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)), [k]: v });
-    if (!o.macros) { mudar(o.id, { treino }); return; }
+    const criado = o.criado ? {} : { criado: hojeLocal() };
+    if (!o.macros) { mudar(o.id, { treino, ...criado }); return; }
     const dieta = { ...dietaDoObjetivo(o, perfil), treinos_semana: treino.treinos_semana };
     const m = calcularMacros(dieta, o.ajustes || {});
-    mudar(o.id, m.ok ? { treino, dieta, macros: m } : { treino, dieta });
+    mudar(o.id, m.ok ? { treino, dieta, macros: m, ...criado } : { treino, dieta, ...criado });
     if (m.ok && setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
   };
   const mudarMacro = (o, k, v) => {
@@ -138,7 +139,7 @@ export function ObjetivosTab() {
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
                     metas={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)) || o.macros ? (ed) => (
                       <div style={{ display: "grid", gap: 10 }}>
-                        <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} onChange={(k, v) => mudarTreino(o, k, v)} />
+                        <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)} />
                         {o.macros && <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} />}
                       </div>
                     ) : null}

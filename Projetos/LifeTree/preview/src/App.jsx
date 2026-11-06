@@ -1263,7 +1263,7 @@ export default function App() {
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
                   metas={(pendingCoachAction.action.treino||pendingCoachAction.action.macrosPrevia)?(
                     <div style={{display:"grid",gap:10}}>
-                      {pendingCoachAction.action.treino&&<TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent}/>}
+                      {pendingCoachAction.action.treino&&<TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent} prazo={pendingCoachAction.action.prazo}/>}
                       {pendingCoachAction.action.macrosPrevia&&<MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>}
                     </div>):null}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
