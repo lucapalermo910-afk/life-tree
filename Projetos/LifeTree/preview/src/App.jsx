@@ -1261,11 +1261,10 @@ export default function App() {
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
               {pendingCoachAction?.action?.plano&&(
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
-                  metas={(pendingCoachAction.action.treino||pendingCoachAction.action.macrosPrevia)?(
-                    <div style={{display:"grid",gap:10}}>
-                      {pendingCoachAction.action.treino&&<TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent} prazo={pendingCoachAction.action.prazo}/>}
-                      {pendingCoachAction.action.macrosPrevia&&<MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>}
-                    </div>):null}
+                  metas={[
+                    pendingCoachAction.action.treino&&{chave:"treino",titulo:"Metas de treino",render:()=><TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent} prazo={pendingCoachAction.action.prazo}/>},
+                    pendingCoachAction.action.macrosPrevia&&{chave:"dieta",titulo:"Metas de dieta",render:()=><MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>},
+                  ]}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>

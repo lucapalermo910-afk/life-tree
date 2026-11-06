@@ -34,7 +34,7 @@ export function MacrosCard({ C, m, prazo, accent = "#ef4444", editando = false, 
 
   return (
     <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 12 }}>
-      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: accent, marginBottom: 8 }}>{m.ajustado ? "METAS DE DIETA (AJUSTADAS POR VOCÊ)" : "METAS DE DIETA (CALCULADAS PELO APP)"}</div>
+      <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: accent, marginBottom: 8 }}>{m.ajustado ? "METAS DE DIETA (AJUSTADAS POR VOCÊ)" : "METAS DE DIETA"}</div>
 
       {ed && dieta && (
         <>

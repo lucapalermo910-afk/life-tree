@@ -23,6 +23,7 @@ export function sequenciaDaSemana({ treinos_semana, divisao }) {
 
 /** Metas de treino do objetivo; objetivos antigos derivam os treinos da dieta. */
 export function treinoDoObjetivo(o, dieta) {
+  if (o.semTreino) return null;
   if (o.treino) return normalizarTreino(o.treino);
   if (!o.macros) return null;
   return normalizarTreino({ treinos_semana: dieta?.treinos_semana ?? 3, cardio_min_semana: 0 });
