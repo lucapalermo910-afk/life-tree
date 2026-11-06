@@ -2,6 +2,10 @@
 // cardio em minutos por semana e tipo de treino em letras (A, AB, ABC...). Sem duração,
 // horário ou acompanhamento de execução. Treinos por semana é a fonte única: a dieta lê daqui.
 
+export function hojeLocal() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
 export const DIVISOES = ["A", "AB", "ABC", "ABCD", "ABCDE"];
 
 export function normalizarTreino(t = {}) {
@@ -22,4 +26,14 @@ export function treinoDoObjetivo(o, dieta) {
   if (o.treino) return normalizarTreino(o.treino);
   if (!o.macros) return null;
   return normalizarTreino({ treinos_semana: dieta?.treinos_semana ?? 3, cardio_min_semana: 0 });
+}
+
+// Totais do plano (06/11/2026): do início do objetivo (criado) até o prazo.
+// total = meta semanal × dias / 7, arredondado. Recalcula sempre que a meta semanal muda.
+export function totaisAteFim(t, inicio, prazo) {
+  if (!t || !/^\d{4}-\d{2}-\d{2}$/.test(prazo || "")) return null;
+  const ini = /^\d{4}-\d{2}-\d{2}$/.test(inicio || "") ? inicio : hojeLocal();
+  const dias = Math.round((Date.parse(prazo + "T12:00:00Z") - Date.parse(ini + "T12:00:00Z")) / 86400000);
+  if (dias <= 0) return null;
+  return { dias, treinos: Math.round((t.treinos_semana * dias) / 7), cardio: Math.round((t.cardio_min_semana * dias) / 7) };
 }

@@ -1,12 +1,15 @@
 // Quadro de metas de treino (06/11/2026). Mesmo desenho do MacrosCard: leitura por padrão,
 // campos no modo de edição do plano. "Treinos por semana" é a fonte única — a dieta lê daqui.
 // onChange(campo, valor) com campo em: treinos_semana, cardio_min_semana, divisao.
-import { DIVISOES, sequenciaDaSemana } from "./treino.js";
+import { DIVISOES, sequenciaDaSemana, totaisAteFim } from "./treino.js";
 
-export function TreinoCard({ C, t, accent = "#ef4444", editando = false, onChange = null }) {
+export function TreinoCard({ C, t, accent = "#ef4444", editando = false, onChange = null, inicio = null, prazo = null }) {
   if (!t) return null;
   const ed = editando && onChange;
   const seq = sequenciaDaSemana(t);
+  const tot = totaisAteFim(t, inicio, prazo);
+  const fim = prazo ? prazo.slice(8, 10) + "/" + prazo.slice(5, 7) + "/" + prazo.slice(0, 4) : "";
+  const horas = (min) => (min >= 60 ? " · " + (Math.round((min / 60) * 10) / 10).toLocaleString("pt-BR") + " h" : "");
   const caixa = { flex: 1, minWidth: 0, background: C.surface || C.card, borderRadius: 10, padding: "8px 6px", textAlign: "center" };
   const valor = (rot, val, un) => (
     <div style={caixa}>
@@ -28,9 +31,15 @@ export function TreinoCard({ C, t, accent = "#ef4444", editando = false, onChang
     <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 12 }}>
       <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, color: accent, marginBottom: 8 }}>METAS DE TREINO</div>
       <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-        {ed ? campo("Treinos", "treinos_semana", t.treinos_semana, "/semana", 7) : valor("Treinos por semana", t.treinos_semana, "")}
-        {ed ? campo("Cardio", "cardio_min_semana", t.cardio_min_semana, "min/semana") : valor("Cardio por semana", t.cardio_min_semana, "min")}
+        {ed ? campo("Treinos na semana", "treinos_semana", t.treinos_semana, "nº", 7) : valor("Treinos na semana", t.treinos_semana, "")}
+        {ed ? campo("Cardio na semana", "cardio_min_semana", t.cardio_min_semana, "min") : valor("Cardio na semana", t.cardio_min_semana, "min")}
       </div>
+      {tot && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+          {valor("Total de treinos até " + fim, tot.treinos.toLocaleString("pt-BR"), "")}
+          {valor("Total de cardio até " + fim + horas(tot.cardio), tot.cardio.toLocaleString("pt-BR"), "min")}
+        </div>
+      )}
 
       <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, marginBottom: 6 }}>Tipo de treino</div>
       {ed ? (
