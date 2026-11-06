@@ -8,6 +8,7 @@
 
 import { notifyCoachDataUpdated } from "./coachSync.js";
 import { calcularMacros } from "./macros.js";
+import { normalizarTreino } from "./treino.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -422,6 +423,9 @@ export function createGeburahObjective(a) {
   // Metas de dieta calculadas pelo app (shared/macros.js) a partir do bloco "dieta" do Coach.
   // Recalcula aqui em vez de confiar em números vindos da pré-visualização.
   let macros = null;
+  // Metas de treino (06/11/2026): treinos por semana moram aqui e alimentam a dieta.
+  const treino = a.treino ? normalizarTreino(a.treino) : null;
+  if (a.dieta && treino) a.dieta = { ...a.dieta, treinos_semana: treino.treinos_semana };
   if (a.dieta) {
     const m = calcularMacros(a.dieta);
     if (m.ok) {
@@ -433,7 +437,7 @@ export function createGeburahObjective(a) {
         atividade: { 1.2: "sedentario", 1.375: "leve", 1.55: "moderado", 1.725: "intenso", 1.9: "muito_intenso" }[m.fator] });
     }
   }
-  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}) }]);
+  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}), ...(treino ? { treino } : {}) }]);
   notifyGeburahUpdated();
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }

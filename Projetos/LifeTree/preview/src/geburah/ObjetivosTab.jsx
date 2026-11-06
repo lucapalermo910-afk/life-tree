@@ -16,6 +16,8 @@ import { fmt1, fmtKg } from "./helpers.js";
 import { GoalCard, PlanoCard } from "../shared/ui.jsx";
 import { MacrosCard } from "../shared/MacrosCard.jsx";
 import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
+import { TreinoCard } from "../shared/TreinoCard.jsx";
+import { normalizarTreino, treinoDoObjetivo } from "../shared/treino.js";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -74,6 +76,15 @@ export function ObjetivosTab() {
   const mudar = (id, campos) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, ...campos })));
   // Ajustar uma meta recalcula todas (shared/macros.js) e o resultado vira as metas diárias
   // da aba Nutrição. Perda semanal e calorias são alavancas excludentes: mexer numa solta a outra.
+  // Metas de treino: treinos por semana alimentam a dieta, que é recalculada junto.
+  const mudarTreino = (o, k, v) => {
+    const treino = normalizarTreino({ ...treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)), [k]: v });
+    if (!o.macros) { mudar(o.id, { treino }); return; }
+    const dieta = { ...dietaDoObjetivo(o, perfil), treinos_semana: treino.treinos_semana };
+    const m = calcularMacros(dieta, o.ajustes || {});
+    mudar(o.id, m.ok ? { treino, dieta, macros: m } : { treino, dieta });
+    if (m.ok && setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
+  };
   const mudarMacro = (o, k, v) => {
     const dieta = { ...dietaDoObjetivo(o, perfil) };
     const ajustes = { ...(o.ajustes || {}) };
@@ -125,7 +136,12 @@ export function ObjetivosTab() {
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
-                    metas={o.macros ? (ed) => <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} /> : null}
+                    metas={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)) || o.macros ? (ed) => (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} onChange={(k, v) => mudarTreino(o, k, v)} />
+                        {o.macros && <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} />}
+                      </div>
+                    ) : null}
                     editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
               {o.plano?.habitoSugerido && (

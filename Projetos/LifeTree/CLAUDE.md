@@ -67,7 +67,8 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 
 **Conteúdo do objetivo**
 - `titulo` = **nome curto** (até ~30 caracteres, como o usuário falaria: "Bater 75 kg").
-  `descricao` = a frase SMART completa, mostrada dentro do plano como "O objetivo".
+  `descricao` = **uma linha só: resultado + data** ("Chegar a 75 kg em 28/02/2027"), mostrada
+  no plano como "O objetivo". Condições (frequência, dieta, etapas) vão para metas e passos.
 - Números que dependem de conta (calorias, macros, prazos em semanas, valores) são
   **calculados em código**, nunca pelo modelo. O Coach coleta os dados e explica
   (ex: bloco `dieta` → `shared/macros.js` → `MacrosCard`). O prompt diz explicitamente
@@ -81,8 +82,11 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - **O lápis abre o plano inteiro em edição** (`PlanoCard` com `editando`/`onEditando`):
   nome, prazo, "O objetivo", metas da área e passos/impactos, com "Concluir" no topo. No
   Desejo, o lápis leva ao módulo de destino já em edição (`abrirObjetivo(modulo, id, true)`).
-- Ordem do plano: **O objetivo → metas da área (ex: `MacrosCard`) → passo a passo →
-  impactos**. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano. Meta
+- Ordem do plano: **O objetivo → metas da área → passo a passo → impactos**. Em Saúde, as
+  metas são **treino (`TreinoCard`) e depois dieta (`MacrosCard`)**. Treino = só treinos por
+  semana, cardio (min/semana) e tipo de treino (A, AB, ABC…, com a sequência da semana); sem
+  duração, horário ou acompanhamento de execução. Treinos por semana têm **fonte única** no
+  quadro de treino: a dieta lê de lá e recalcula quando muda. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano. Meta
   ajustada à mão fica marcada como "ajustada por você".
 - **Metas editáveis recalculam tudo.** Em edição, o quadro de metas vira calculadora: o
   usuário mexe nos dados e nas alavancas (ex: peso, peso-meta, treinos, perda por semana,
