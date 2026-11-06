@@ -76,8 +76,14 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 
 **Visual**
 - Cartão do objetivo = `GoalCard` (nome, percentual, linha de status, barra) com
-  **lápis (editar/renomear) e lixeira (apagar)** no canto do cartão (`onEdit`/`onDelete`).
-  Tocar nos botões não abre o plano. Apagar sempre pede confirmação.
+  **lápis e lixeira** no canto do cartão (`onEdit`/`onDelete`). Tocar nos botões não abre o
+  plano. Apagar sempre pede confirmação.
+- **O lápis abre o plano inteiro em edição** (`PlanoCard` com `editando`/`onEditando`):
+  nome, prazo, "O objetivo", metas da área e passos/impactos, com "Concluir" no topo. No
+  Desejo, o lápis leva ao módulo de destino já em edição (`abrirObjetivo(modulo, id, true)`).
+- Ordem do plano: **O objetivo → metas da área (ex: `MacrosCard`) → passo a passo →
+  impactos**. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano. Meta
+  ajustada à mão fica marcada como "ajustada por você".
 - Plano = `PlanoCard` em **modo leitura por padrão**: "O objetivo" no topo, passos numerados
   em linha do tempo com o período ("20/11 a 31/12/2026:") em destaque e o texto completo,
   com quebra de linha; impactos empilhados (+ positivo, ! atenção). Edição só depois de

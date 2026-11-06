@@ -456,7 +456,10 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
               onClick={() => abrirObjetivo && item.rawId && (item.moduleId === "geburah" || item.moduleId === "yesod")
                 ? abrirObjetivo(item.moduleId, item.rawId)
                 : setExpandedMetaId(p => p === item.id ? null : item.id)}
-              onEdit={() => renomearObjetivo(item)} onDelete={() => apagarObjetivo(item)}/>
+              onEdit={() => abrirObjetivo && item.rawId && (item.moduleId === "geburah" || item.moduleId === "yesod")
+                ? abrirObjetivo(item.moduleId, item.rawId, true)
+                : renomearObjetivo(item)}
+              onDelete={() => apagarObjetivo(item)}/>
             {expandedMetaId === item.id && (
               <div style={{ marginTop: 8 }}>
                 <PlanoCard C={C} plano={item.plano} descricao={item.descricao || null} accent={item.color} onToggleStep={() => {}} onUpdate={() => {}} somenteLeitura/>

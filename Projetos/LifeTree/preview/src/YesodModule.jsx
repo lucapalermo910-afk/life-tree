@@ -21,7 +21,7 @@ import { OrcamentoFluxoTab } from "./yesod/OrcamentoFluxoTab.jsx";
 import { ObjetivosTab } from "./yesod/ObjetivosTab.jsx";
 import { ConfigTab } from "./yesod/ConfigTab.jsx";
 
-export default function YesodModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, limparDestino }) {
+export default function YesodModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, editarDestino, limparDestino }) {
   const C = dark ? DARK : LIGHT;
   const ctx0 = useYesodState();
   // askCoach (29/08/2026, motor genérico de objetivo+plano) — dispara sendToCoach do App.jsx
@@ -30,12 +30,13 @@ export default function YesodModule({ onBack, dark, setDark, askCoach, abrirDese
   // direta — mesmo padrão do resto do ctx).
   // Vindo do Desejo com um objetivo escolhido: abre direto na aba Objetivos (05/11/2026).
   const [objetivoInicial] = useState(destinoObjetivo || null);
+  const [editarInicial] = useState(!!editarDestino);
   useEffect(() => {
     if (!destinoObjetivo) return;
     ctx0.setTab("goals"); ctx0.setPage(null);
     if (limparDestino) limparDestino();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const ctx = { ...ctx0, askCoach, abrirDesejo, objetivoInicial };
+  const ctx = { ...ctx0, askCoach, abrirDesejo, objetivoInicial, editarInicial };
   // Destructuring parcial de propósito (26/08/2026, encolhido de novo no passo 4 — ver 11
   // Plano de Decomposição — Arquivos Monolíticos.md) — ctx tem 177 chaves (tudo que
   // useYesodState expõe), mas o shell só puxa pro escopo local o que ele mesmo usa direto

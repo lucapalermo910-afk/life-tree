@@ -275,8 +275,15 @@ function partesDoPasso(t) {
 // destaque, impactos empilhados) e edição só depois de tocar em "Editar". Antes era tudo
 // <input> de uma linha, em duas colunas, e os textos do Coach ficavam cortados.
 // `somenteLeitura` esconde o botão Editar (ex: espelho no Kether).
-export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false }) {
-  const [editando, setEditando] = useState(false);
+// 06/11/2026: o lápis do cartão abre o plano INTEIRO em edição — nome (`nome`/`onNome`),
+// objetivo (`descricao`/`onDescricao`), metas (`metas`: nó renderizado antes do passo a passo,
+// recebe o modo de edição por função) e passos/impactos. `editando`/`onEditando` deixam quem
+// chama controlar o modo (ex: o lápis do GoalCard); sem eles, o estado é interno.
+export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
+  nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando }) {
+  const [editandoInt, setEditandoInt] = useState(false);
+  const editando = editandoExt ?? editandoInt;
+  const setEditando = (v) => { const novo = typeof v === "function" ? v(editando) : v; if (onEditando) onEditando(novo); else setEditandoInt(novo); };
   const editStep = (id, title) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, title } : s)) }));
   const removeStep = (id) => onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) }));
   const addStep = () => onUpdate((p) => ({ ...p, steps: [...p.steps, { id: "st" + Date.now(), title: "", done: false }] }));
@@ -307,18 +314,50 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
 
   return (
     <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 14, padding: 16 }}>
-      {descricao && (
+      {editando && !somenteLeitura && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, padding: "8px 10px",
+          borderRadius: 10, background: accent + "14", color: accent, fontSize: 11, fontWeight: 800 }}>
+          <span>Editando o plano</span>
+          <button onClick={() => setEditando(false)} style={{ background: accent, border: "none", borderRadius: 99, padding: "6px 14px", color: "#fff", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Concluir</button>
+        </div>
+      )}
+      {editando && onNome && (
+        <div style={{ marginBottom: 14 }}>
+          {titulo("NOME")}
+          <input value={nome || ""} onChange={(e) => onNome(e.target.value)} placeholder="Nome curto, ex: Bater 75 kg"
+            style={{ width: "100%", boxSizing: "border-box", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent", outline: "none",
+              padding: "8px 10px", fontSize: 14, fontWeight: 700, fontFamily: "inherit", color: C.text }} />
+        </div>
+      )}
+      {editando && onPrazo && (
+        <div style={{ marginBottom: 14 }}>
+          {titulo("PRAZO")}
+          <input type="date" value={prazo || ""} onChange={(e) => onPrazo(e.target.value || null)}
+            style={{ border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent", outline: "none",
+              padding: "8px 10px", fontSize: 14, fontFamily: "inherit", color: C.text }} />
+        </div>
+      )}
+      {(descricao || (editando && onDescricao)) && (
         <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid " + C.b1 }}>
           {titulo("O OBJETIVO")}
-          <div style={{ fontSize: 13, lineHeight: 1.5, color: C.text, overflowWrap: "anywhere" }}>{descricao}</div>
+          {editando && onDescricao ? (
+            <textarea value={descricao || ""} onChange={(e) => onDescricao(e.target.value)} rows={3} placeholder="O objetivo completo, com número e prazo"
+              style={{ width: "100%", boxSizing: "border-box", resize: "none", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent",
+                outline: "none", padding: "8px 10px", fontSize: 13, lineHeight: 1.45, fontFamily: "inherit", color: C.text, fieldSizing: "content" }} />
+          ) : (
+            <div style={{ fontSize: 13, lineHeight: 1.5, color: C.text, overflowWrap: "anywhere" }}>{descricao}</div>
+          )}
         </div>
+      )}
+      {metas && (
+        <div style={{ marginBottom: 16 }}>{typeof metas === "function" ? metas(editando) : metas}</div>
       )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         {titulo("PASSO A PASSO")}
-        {!somenteLeitura && (
-          <button onClick={() => setEditando((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 0 8px", color: accent, fontSize: 11, fontWeight: 800 }}>
-            {editando ? "Concluir" : "Editar"}
+        {!somenteLeitura && !editando && (
+          <button onClick={() => setEditando(true)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 0 8px", color: accent, fontSize: 11, fontWeight: 800 }}>
+            Editar
           </button>
         )}
       </div>
