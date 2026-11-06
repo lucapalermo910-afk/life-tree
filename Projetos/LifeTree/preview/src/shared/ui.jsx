@@ -199,20 +199,23 @@ export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick 
 
 // Linha de texto editável inline (passo do plano ou item de impacto) — input sem borda
 // visível que parece texto estático até o usuário tocar nele, com um × pra apagar a linha.
+// Linha editável (06/11/2026): era um <input> de uma linha só, e textos longos do Coach
+// ficavam cortados. Agora é uma textarea que cresce com o conteúdo.
 function EditableRow({ C, value, onChange, onRemove, strike, dim }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <input
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+      <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        rows={Math.max(1, Math.ceil((value || "").length / 38))}
         style={{
-          flex: 1, border: "none", background: "transparent", outline: "none", padding: 0,
-          fontSize: 11, fontFamily: "inherit", color: dim ? C.muted : C.text,
-          textDecoration: strike ? "line-through" : "none",
+          flex: 1, minWidth: 0, resize: "none", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent",
+          outline: "none", padding: "6px 8px", fontSize: 13, lineHeight: 1.45, fontFamily: "inherit",
+          color: dim ? C.muted : C.text, textDecoration: strike ? "line-through" : "none", fieldSizing: "content",
         }}
       />
-      <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, opacity: 0.5, flexShrink: 0 }}>
-        <XIcon color={C.muted} size={11} />
+      <button onClick={onRemove} aria-label="Remover linha" style={{ background: "none", border: "none", cursor: "pointer", padding: 6, opacity: 0.6, flexShrink: 0 }}>
+        <XIcon color={C.muted} size={12} />
       </button>
     </div>
   );
@@ -229,7 +232,24 @@ function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
 // `onUpdate` recebe um updater (prev => next), mesma assinatura de um setState — quem chama
 // decide se aplica direto (plano ainda em confirmação, ex: `pendingCoachAction`) ou dentro de
 // uma lista já persistida (objetivo salvo) — ver usos em App.jsx/yesod/ObjetivosTab.jsx.
-export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8" }) {
+// Separa "06/11 a 19/11/2026: adaptação com 4 sessões" em período + texto, pra mostrar o
+// período em destaque. Só quando o trecho antes dos ":" é curto (parece um rótulo).
+function partesDoPasso(t) {
+  const m = String(t || "").match(/^([^:]{2,40}):\s+([\s\S]+)$/);
+  const maiuscula = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  return m ? { periodo: m[1].trim(), texto: maiuscula(m[2].trim()) } : { periodo: null, texto: String(t || "") };
+}
+
+// Plano gerado pelo Coach — descrição, passo a passo e impactos.
+// `onUpdate` recebe um updater (prev => next), mesma assinatura de um setState — quem chama
+// decide se aplica direto (plano ainda em confirmação, ex: `pendingCoachAction`) ou dentro de
+// uma lista já persistida (objetivo salvo) — ver usos em App.jsx/yesod/ObjetivosTab.jsx.
+// 06/11/2026: leitura por padrão (texto completo, com quebra de linha, período do passo em
+// destaque, impactos empilhados) e edição só depois de tocar em "Editar". Antes era tudo
+// <input> de uma linha, em duas colunas, e os textos do Coach ficavam cortados.
+// `somenteLeitura` esconde o botão Editar (ex: espelho no Kether).
+export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false }) {
+  const [editando, setEditando] = useState(false);
   const editStep = (id, title) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, title } : s)) }));
   const removeStep = (id) => onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) }));
   const addStep = () => onUpdate((p) => ({ ...p, steps: [...p.steps, { id: "st" + Date.now(), title: "", done: false }] }));
@@ -238,52 +258,81 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
   const removeImpacto = (kind, i) => onUpdate((p) => ({ ...p, [kind]: p[kind].filter((_, idx) => idx !== i) }));
   const addImpacto = (kind) => onUpdate((p) => ({ ...p, [kind]: [...p[kind], ""] }));
 
-  return (
-    <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 14 }}>
-      <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PASSO A PASSO</div>
-      {plano.steps.map((s) => (
-        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
-          <button
-            onClick={() => onToggleStep(s.id)}
-            style={{
-              width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer", padding: 0,
-              border: "1.5px solid " + (s.done ? "#10b981" : C.b2), background: s.done ? "#10b981" : "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            {s.done && <CheckIcon color="#fff" size={10} />}
-          </button>
-          <div style={{ flex: 1 }}>
-            <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} onRemove={() => removeStep(s.id)} strike={s.done} dim={s.done} />
-          </div>
+  const titulo = (texto, cor = C.muted) => (
+    <div style={{ fontSize: 10, color: cor, fontWeight: 800, letterSpacing: 1, margin: "0 0 8px" }}>{texto}</div>
+  );
+  const impactos = (kind, rotulo, cor, marca) => (
+    <div style={{ marginTop: 16 }}>
+      {titulo(rotulo, cor)}
+      {plano[kind].map((t, i) => editando ? (
+        <div key={i} style={{ marginBottom: 6 }}>
+          <EditableRow C={C} value={t} onChange={(v) => editImpacto(kind, i, v)} onRemove={() => removeImpacto(kind, i)} />
+        </div>
+      ) : (
+        <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, fontSize: 13, lineHeight: 1.45, color: C.text }}>
+          <span style={{ color: cor, fontWeight: 900, flexShrink: 0, width: 14, textAlign: "center" }}>{marca}</span>
+          <span style={{ overflowWrap: "anywhere" }}>{t}</span>
         </div>
       ))}
-      <AddRowBtn C={C} onClick={addStep} label="Adicionar passo" accent={accent} />
+      {editando && <AddRowBtn C={C} onClick={() => addImpacto(kind)} label="Adicionar" accent={accent} />}
+    </div>
+  );
 
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9, color: "#10b981", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>IMPACTO POSITIVO</div>
-          {plano.impactoPositivo.map((t, i) => (
-            <div key={i} style={{ marginBottom: 5 }}>
-              <EditableRow C={C} value={t} onChange={(v) => editImpacto("impactoPositivo", i, v)} onRemove={() => removeImpacto("impactoPositivo", i)} />
-            </div>
-          ))}
-          <AddRowBtn C={C} onClick={() => addImpacto("impactoPositivo")} label="Adicionar" accent={accent} />
+  return (
+    <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 14, padding: 16 }}>
+      {descricao && (
+        <div style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid " + C.b1 }}>
+          {titulo("O OBJETIVO")}
+          <div style={{ fontSize: 13, lineHeight: 1.5, color: C.text, overflowWrap: "anywhere" }}>{descricao}</div>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9, color: "#ef4444", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PONTOS DE ATENÇÃO</div>
-          {plano.impactoNegativo.map((t, i) => (
-            <div key={i} style={{ marginBottom: 5 }}>
-              <EditableRow C={C} value={t} onChange={(v) => editImpacto("impactoNegativo", i, v)} onRemove={() => removeImpacto("impactoNegativo", i)} />
-            </div>
-          ))}
-          <AddRowBtn C={C} onClick={() => addImpacto("impactoNegativo")} label="Adicionar" accent={accent} />
-        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        {titulo("PASSO A PASSO")}
+        {!somenteLeitura && (
+          <button onClick={() => setEditando((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 0 8px", color: accent, fontSize: 11, fontWeight: 800 }}>
+            {editando ? "Concluir" : "Editar"}
+          </button>
+        )}
       </div>
 
-      <div style={{ fontSize: 9, color: C.muted, textAlign: "center", marginTop: 10 }}>
-        Toque em qualquer passo ou impacto pra editar o texto — × remove a linha.
-      </div>
+      {plano.steps.map((s, i) => {
+        const { periodo, texto } = partesDoPasso(s.title);
+        const ultimo = i === plano.steps.length - 1;
+        return (
+          <div key={s.id} style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+              <button
+                onClick={() => onToggleStep(s.id)}
+                aria-label={(s.done ? "Desmarcar" : "Marcar") + " passo " + (i + 1)}
+                style={{
+                  width: 26, height: 26, borderRadius: 99, flexShrink: 0, cursor: "pointer", padding: 0,
+                  border: "2px solid " + (s.done ? "#10b981" : accent), background: s.done ? "#10b981" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 11, fontWeight: 900,
+                }}
+              >
+                {s.done ? <CheckIcon color="#fff" size={12} /> : i + 1}
+              </button>
+              {!ultimo && <div style={{ width: 2, flex: 1, minHeight: 12, background: C.b1, margin: "3px 0" }} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, paddingBottom: ultimo ? 0 : 14 }}>
+              {editando ? (
+                <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} onRemove={() => removeStep(s.id)} strike={s.done} dim={s.done} />
+              ) : (
+                <>
+                  {periodo && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>{periodo}</div>}
+                  <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done ? "line-through" : "none",
+                    overflowWrap: "anywhere", marginTop: periodo ? 0 : 4 }}>{texto}</div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {editando && <AddRowBtn C={C} onClick={addStep} label="Adicionar passo" accent={accent} />}
+
+      {impactos("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
+      {impactos("impactoNegativo", "PONTOS DE ATENÇÃO", "#ef4444", "!")}
     </div>
   );
 }

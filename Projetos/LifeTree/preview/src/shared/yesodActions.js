@@ -796,7 +796,7 @@ export function createYesodObjective(a) {
     habitoSugerido: a.plano.habitoSugerido || null,
   } : null;
   const metrica = a.metrica && a.metrica.id ? { id: a.metrica.id, valor: Number(a.metrica.valor) || 0 } : null;
-  writeJSON("ygoals", [...ygoals, { id: "yg"+uid(), title: titulo, xp: Number(a.xp) || 100, done: false, metrica, plano }]);
+  writeJSON("ygoals", [...ygoals, { id: "yg"+uid(), title: titulo, xp: Number(a.xp) || 100, done: false, metrica, plano, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}) }]);
   notifyYesodUpdated();
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + "." };
 }
