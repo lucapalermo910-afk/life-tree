@@ -47,3 +47,50 @@ a brand-new area module, always do this integration pass — don't paste it in a
 Both of the module edits above should be applied to **all** `*Module.jsx` files
 consistently — they share the same `DARK`/`LIGHT` shape and the same integration
 contract, so a fix or convention in one belongs in all six.
+
+## Objetivos com plano — padrão obrigatório (definido pelo usuário em 05–06/11/2026)
+
+Vale para todo objetivo de qualquer área (Saúde, Finanças e as próximas: Profissional,
+Autocuidado, Conhecimento, Relacionamentos). Ao levar o plano pelo Coach para uma área
+nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente variações.
+
+**Criação e roteamento**
+- Objetivo é criado **só no Desejo (Kether)**, pelo "+ Objetivo". Os módulos não criam:
+  a aba Objetivos deles tem o botão **"+ Novo"**, que leva ao Desejo (`abrirDesejo`).
+- Sem etiquetas de área na criação: a área é sugerida pelo texto (`shared/areaObjetivo.js`)
+  e aparece como "Vai para: X (sugerido) · Trocar". Área sem plano pelo Coach = "em breve".
+- A skill do Coach escolhida no Desejo fica **travada** até confirmar ou cancelar
+  (`coachSkillTravada` no `App.jsx`). Palavras-chave de outros módulos nas respostas do
+  usuário não podem desviar a conversa.
+- Ao tocar no cartão de um objetivo no Desejo, abrir o módulo de destino na aba Objetivos
+  com o plano aberto (`abrirObjetivo` / `destinoObjetivo`).
+
+**Conteúdo do objetivo**
+- `titulo` = **nome curto** (até ~30 caracteres, como o usuário falaria: "Bater 75 kg").
+  `descricao` = a frase SMART completa, mostrada dentro do plano como "O objetivo".
+- Números que dependem de conta (calorias, macros, prazos em semanas, valores) são
+  **calculados em código**, nunca pelo modelo. O Coach coleta os dados e explica
+  (ex: bloco `dieta` → `shared/macros.js` → `MacrosCard`). O prompt diz explicitamente
+  para não escrever esses números no texto.
+- Todo prompt do Coach recebe a data de hoje (já feito em `sendToCoach`).
+
+**Visual**
+- Cartão do objetivo = `GoalCard` (nome, percentual, linha de status, barra) com
+  **lápis (editar/renomear) e lixeira (apagar)** no canto do cartão (`onEdit`/`onDelete`).
+  Tocar nos botões não abre o plano. Apagar sempre pede confirmação.
+- Plano = `PlanoCard` em **modo leitura por padrão**: "O objetivo" no topo, passos numerados
+  em linha do tempo com o período ("20/11 a 31/12/2026:") em destaque e o texto completo,
+  com quebra de linha; impactos empilhados (+ positivo, ! atenção). Edição só depois de
+  tocar em "Editar". Nunca `<input>` de uma linha para texto do Coach.
+- Respostas do Coach: negrito em Markdown vira negrito (`textoCoach`); respostas longas
+  ou com plano abrem a conversa em tela cheia.
+- Textos de interface em português, curtos. Sem quadros de "protótipo"/"teste" em telas
+  que o usuário já usa.
+
+**Fluxo de trabalho**
+- Mudanças vão por PR para a branch `dev` (endereço de teste
+  `preview-git-dev-lucapalermo910-5080s-projects.vercel.app`). A `main` (produção,
+  `preview-gamma-fawn.vercel.app`) só recebe um PR `dev` → `main` quando o usuário disser
+  para publicar.
+- Depois de cada mudança, atualizar `01 Estado Atual.md` (o que mudou, o que foi e o que
+  não foi testado).
