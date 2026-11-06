@@ -72,7 +72,7 @@ const GOAL_ADAPTERS = {
     // incluídos além de {id,title,xp,done} de sempre — Kether só espelha (read-only, sem
     // onUpdate), edição continua só no módulo de origem.
     chave: "lifetree_fin_ygoals",
-    read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: g.metrica || null })),
+    read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, rawId: g.id, descricao: g.descricao || null, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: g.metrica || null })),
     toggle: item => YESOD_ACTION_HANDLERS.toggle_ygoal({ match: item.title }),
   },
   hod: {
@@ -91,7 +91,7 @@ const GOAL_ADAPTERS = {
   geburah: {
     label: "Saúde", color: "#ef4444",
     chave: "lifetree_geb_objetivos",
-    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
+    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, rawId: g.id, descricao: g.descricao || null, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
     toggle: item => GEBURAH_ACTION_HANDLERS.toggle_objective({ match: item.title }),
   },
 };
@@ -449,7 +449,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
                 : setExpandedMetaId(p => p === item.id ? null : item.id)}/>
             {expandedMetaId === item.id && (
               <div style={{ marginTop: 8 }}>
-                <PlanoCard C={C} plano={item.plano} accent={item.color} onToggleStep={() => {}} onUpdate={() => {}}/>
+                <PlanoCard C={C} plano={item.plano} descricao={item.descricao || null} accent={item.color} onToggleStep={() => {}} onUpdate={() => {}} somenteLeitura/>
                 <div style={{ fontSize: 9, color: C.muted, textAlign: "center", marginTop: 6 }}>Só leitura aqui — editar no módulo de origem ({item.moduleLabel}).</div>
               </div>
             )}

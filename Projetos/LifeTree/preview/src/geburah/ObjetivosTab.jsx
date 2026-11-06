@@ -75,6 +75,13 @@ export function ObjetivosTab() {
   const toggleStep = (id, stepId) =>
     setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } })));
   const updatePlano = (id, updater) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: updater(o.plano) })));
+  // Renomear (06/11/2026): nomes antigos vinham com a frase SMART inteira. O nome anterior vira
+  // a descrição quando o objetivo ainda não tem uma, para não perder os detalhes.
+  const renomear = (o) => {
+    const novo = window.prompt("Novo nome do objetivo (curto, ex: Bater 75 kg):", o.descricao ? o.title : "");
+    if (!novo || !novo.trim() || novo.trim() === o.title) return;
+    setObjetivos((p) => p.map((x) => (x.id !== o.id ? x : { ...x, title: novo.trim(), descricao: x.descricao || x.title })));
+  };
   const apagar = (o) => {
     if (!window.confirm("Apagar o objetivo '" + o.title + "' e o plano dele?")) return;
     setObjetivos((p) => p.filter((x) => x.id !== o.id));
@@ -88,7 +95,7 @@ export function ObjetivosTab() {
         <div style={{ fontSize: 13, fontWeight: 800 }}>Objetivos</div>
         {abrirDesejo && (
           <Btn sm full={false} color={ACCENT} onClick={abrirDesejo}>
-            <Ico n="plus" size={11} /> Criar no Desejo
+            <Ico n="plus" size={11} /> Novo
           </Btn>
         )}
       </div>
@@ -103,15 +110,20 @@ export function ObjetivosTab() {
           {aberto === o.id && (
             <div style={{ marginTop: 10 }}>
               {o.plano
-                ? <PlanoCard C={C} plano={o.plano} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)} />
+                ? <PlanoCard C={C} plano={o.plano} descricao={o.descricao || null} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
               {o.macros && <div style={{ marginTop: 10 }}><MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} /></div>}
               {o.plano?.habitoSugerido && (
                 <div style={{ fontSize: 10.5, color: GREEN, marginTop: 8 }}>Hábito sugerido: {o.plano.habitoSugerido}</div>
               )}
-              <button onClick={() => apagar(o)} style={{ marginTop: 8, background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={() => renomear(o)} style={{ background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700 }}>
+                Renomear
+              </button>
+              <button onClick={() => apagar(o)} style={{ background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
                 <Ico n="x" size={11} color={C.muted} /> Apagar objetivo
               </button>
+              </div>
             </div>
           )}
         </div>

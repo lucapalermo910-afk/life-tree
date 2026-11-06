@@ -1210,7 +1210,7 @@ export default function App() {
                 Geburah, promovido pra shared/ui.jsx em 29/08/2026, ver o plano salvo). */}
             {pendingCoachAction?.action?.plano&&(
               <div style={{marginTop:10,maxHeight:220,overflowY:"auto"}}>
-                <PlanoCard C={C} plano={pendingCoachAction.action.plano}
+                <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(s=>s.id===stepId?{...s,done:!s.done}:s)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>
@@ -1257,7 +1257,7 @@ export default function App() {
               ))}
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
               {pendingCoachAction?.action?.plano&&(
-                <PlanoCard C={C} plano={pendingCoachAction.action.plano}
+                <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>

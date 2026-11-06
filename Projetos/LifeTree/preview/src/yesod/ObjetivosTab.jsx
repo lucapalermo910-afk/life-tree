@@ -64,7 +64,7 @@ function GoalRow({ g, C, net, expanded, onToggleExpand, onToggleStep, onUpdatePl
       <GoalCard C={C} accent={ACCENT} label={g.title} pct={pct} statLine={statLine} onClick={() => onToggleExpand(g.id)} />
       {expanded && (
         <div style={{ marginTop: 10 }}>
-          <PlanoCard C={C} plano={g.plano} accent={ACCENT} onToggleStep={stepId => onToggleStep(g.id, stepId)} onUpdate={updater => onUpdatePlano(g.id, updater)} />
+          <PlanoCard C={C} plano={g.plano} descricao={g.descricao||null} accent={ACCENT} onToggleStep={stepId => onToggleStep(g.id, stepId)} onUpdate={updater => onUpdatePlano(g.id, updater)} />
           <button onClick={() => setYGoals(p => p.filter(x => x.id !== g.id))} style={{ marginTop: 8, background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
             <Ico n="x" size={11} color={C.muted} /> Apagar objetivo
           </button>
@@ -259,7 +259,7 @@ export function ObjetivosTab({ C }) {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:13,fontWeight:800}}>Objetivos</div>
               {/* 05/11/2026: objetivos são criados só no Desejo/Kether e aparecem aqui (pedido do usuário). */}
-              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo}><Ico n="plus" size={11}/> Criar no Desejo</Btn>}
+              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo}><Ico n="plus" size={11}/> Novo</Btn>}
             </div>
             {/* Sem meta de IF configurada: nenhum card/prompt aqui — só a lista de objetivos
                 abaixo (achado 30/08/2026, pedido explícito do usuário: "não tenha nada na aba,
