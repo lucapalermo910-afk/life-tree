@@ -9,7 +9,7 @@
 import { notifyCoachDataUpdated } from "./coachSync.js";
 import { calcularMacros } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
-import { normalizarResultados } from "./planejamento.js";
+import { normalizarResultados, normalizarFase } from "./planejamento.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -415,7 +415,8 @@ export function createGeburahObjective(a) {
   const titulo = (a.titulo || a.title || "").trim();
   if (!titulo) return { ok: false, message: "Título vazio." };
   const plano = a.plano ? {
-    steps: (a.plano.steps || []).map(s => ({ id: "st" + uid(), title: typeof s === "string" ? s : s.title, done: false })),
+    // Fases executáveis (06/11/2026): { periodo, titulo, semana, tarefas, revisao } → shared/planejamento.js.
+    steps: (a.plano.steps || []).map(normalizarFase),
     impactoPositivo: a.plano.impactoPositivo || [],
     impactoNegativo: a.plano.impactoNegativo || [],
     habitoSugerido: a.plano.habitoSugerido || null,
@@ -428,7 +429,9 @@ export function createGeburahObjective(a) {
   // Recalcula aqui em vez de confiar em números vindos da pré-visualização.
   let macros = null;
   // Metas de treino (06/11/2026): treinos por semana moram aqui e alimentam a dieta.
-  const treino = a.treino ? normalizarTreino(a.treino) : null;
+  // Com fases, a meta da semana vem da fase 1; o quadro de treino lê sempre a fase atual.
+  const semana1 = plano?.steps.find(s => s.semana)?.semana;
+  const treino = a.treino ? normalizarTreino(a.treino) : semana1 || null;
   if (a.dieta && treino) a.dieta = { ...a.dieta, treinos_semana: treino.treinos_semana };
   if (a.dieta) {
     const m = calcularMacros(a.dieta);
@@ -446,6 +449,19 @@ export function createGeburahObjective(a) {
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }
 
+// Tarefa de uma fase do plano (06/11/2026): marcada no Controle (Malkuth), que é onde a
+// execução é acompanhada. a = { objetivoId, tarefaId }.
+export function toggleGeburahTarefa(a) {
+  const objetivos = readJSON("objetivos", []);
+  let achou = null;
+  const novos = objetivos.map(o => o.id !== a.objetivoId || !o.plano ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map(s => ({
+    ...s, tarefas: (s.tarefas || []).map(t => (t.id !== a.tarefaId ? t : (achou = { ...t, done: !t.done }))) })) } });
+  if (!achou) return { ok: false, message: "Tarefa não encontrada." };
+  writeJSON("objetivos", novos);
+  notifyGeburahUpdated();
+  return { ok: true, message: "Tarefa '" + achou.texto + "' " + (achou.done ? "concluída." : "reaberta.") };
+}
+
 export function toggleGeburahObjective(a) {
   const objetivos = readJSON("objetivos", []);
   const alvo = objetivos.find(o => o.title === a.match || o.id === a.id);
@@ -456,6 +472,7 @@ export function toggleGeburahObjective(a) {
 }
 
 export const GEBURAH_ACTION_HANDLERS = {
+  toggle_tarefa_objetivo: toggleGeburahTarefa,
   create_objective: createGeburahObjective,
   toggle_objective: toggleGeburahObjective,
   register_weight: registerGeburahWeight,

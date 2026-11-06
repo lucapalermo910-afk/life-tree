@@ -222,7 +222,7 @@ export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick,
 // visível que parece texto estático até o usuário tocar nele, com um × pra apagar a linha.
 // Linha editável (06/11/2026): era um <input> de uma linha só, e textos longos do Coach
 // ficavam cortados. Agora é uma textarea que cresce com o conteúdo.
-function EditableRow({ C, value, onChange, onRemove, strike, dim, autoFocus }) {
+export function EditableRow({ C, value, onChange, onRemove, strike, dim, autoFocus }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
       <textarea
@@ -243,7 +243,7 @@ function EditableRow({ C, value, onChange, onRemove, strike, dim, autoFocus }) {
     </div>
   );
 }
-function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
+export function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
   return (
     <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 0", display: "flex", alignItems: "center", gap: 4, color: accent, fontSize: 10, fontWeight: 700 }}>
       <PlusIcon color={accent} size={10} /> {label}
@@ -273,13 +273,16 @@ function partesDoPasso(t) {
 // ✓ (concluir) e × (apagar) no canto. Sem botão "Editar", lápis ou menu.
 //   chaves: "cabecalho" (nome, prazo, objetivo) · "meta:<chave>" · "passo:<id>" · "imp:<tipo>:<i>".
 // `metas`: lista [{ chave, titulo, render(editando), onApagar }] (ou um nó, só leitura).
-// Planejamento (06/11/2026): `tituloPassos` (ex: "LINHA DO TEMPO"), `marcoDoPasso(periodo)` →
-// texto do marco calculado no fim de cada fase, e `plano.rotina` (lista de hábitos, se existir).
+// Planejamento (06/11/2026): `tituloPassos` (ex: "LINHA DO TEMPO"), `renderDetalhe(passo, i)` →
+// conteúdo extra da fase (meta da semana, tarefas, revisão, marco), `renderEditor(passo, patch)`
+// → editor próprio da fase, `passoFeito(passo)` → concluído derivado (ex: todas as tarefas
+// feitas no Controle). Sem `onToggleStep`, o círculo só mostra o estado. `plano.rotina` =
+// lista de hábitos, se existir.
 // `editando`/`onEditando` (booleanos): quem chama pode abrir o cabeçalho em edição (ex:
 // "Editar" vindo do Desejo) e fica sabendo quando algum item está em edição.
 export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
   nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando,
-  tituloPassos = "PASSO A PASSO", marcoDoPasso = null }) {
+  tituloPassos = "PASSO A PASSO", renderDetalhe = null, renderEditor = null, passoFeito = null }) {
   const [chave, setChaveInt] = useState(editandoExt ? "cabecalho" : null);
   const setChave = (k) => { setChaveInt(k); if (onEditando) onEditando(!!k); };
   // Quem chama abriu/fechou a edição: ajusta durante o render.
@@ -293,6 +296,7 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
   const tocar = (k) => (podeEditar ? { onClick: () => setChave(k), style: { cursor: "pointer" } } : {});
 
   const editStep = (id, title) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, title } : s)) }));
+  const patchStep = (id, patch) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
   const removeStep = (id) => { onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) })); setChave(null); };
   const addStep = () => {
     const novo = { id: "st" + Date.now(), title: "", done: false };
@@ -387,35 +391,33 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
         const { periodo, texto } = partesDoPasso(s.title);
         const ultimo = i === plano.steps.length - 1;
         const emEdicao = chave === "passo:" + s.id;
+        const feito = passoFeito ? passoFeito(s) : s.done;
         return (
           <div key={s.id} style={{ display: "flex", gap: 10 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
               <button
-                onClick={() => onToggleStep(s.id)}
-                aria-label={(s.done ? "Desmarcar" : "Marcar") + " passo " + (i + 1)}
+                onClick={onToggleStep ? () => onToggleStep(s.id) : undefined} disabled={!onToggleStep}
+                aria-label={onToggleStep ? (feito ? "Desmarcar" : "Marcar") + " passo " + (i + 1) : "Fase " + (i + 1) + (feito ? " concluída" : "")}
                 style={{
-                  width: 26, height: 26, borderRadius: 99, flexShrink: 0, cursor: "pointer", padding: 0,
-                  border: "2px solid " + (s.done ? "#10b981" : accent), background: s.done ? "#10b981" : "transparent",
+                  width: 26, height: 26, borderRadius: 99, flexShrink: 0, cursor: onToggleStep ? "pointer" : "default", padding: 0,
+                  border: "2px solid " + (feito ? "#10b981" : accent), background: feito ? "#10b981" : "transparent",
                   display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 11, fontWeight: 900,
                 }}
               >
-                {s.done ? <CheckIcon color="#fff" size={12} /> : i + 1}
+                {feito ? <CheckIcon color="#fff" size={12} /> : i + 1}
               </button>
               {!ultimo && <div style={{ width: 2, flex: 1, minHeight: 12, background: C.b1, margin: "3px 0" }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0, paddingBottom: ultimo ? 0 : 14 }}>
               {emEdicao ? (
-                caixa(<EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} strike={s.done} dim={s.done} autoFocus />, () => removeStep(s.id), "Apagar passo " + (i + 1))
+                caixa(renderEditor ? renderEditor(s, (patch) => patchStep(s.id, patch))
+                  : <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} strike={s.done} dim={s.done} autoFocus />, () => removeStep(s.id), "Apagar passo " + (i + 1))
               ) : (
                 <div aria-label={"Passo " + (i + 1)} {...tocar("passo:" + s.id)}>
                   {periodo && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>{periodo}</div>}
-                  <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done ? "line-through" : "none",
+                  <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done && !passoFeito ? "line-through" : "none", fontWeight: renderDetalhe ? 700 : 400,
                     overflowWrap: "anywhere", marginTop: periodo ? 0 : 4 }}>{texto || <em style={{ color: C.muted }}>vazio</em>}</div>
-                  {marcoDoPasso && periodo && marcoDoPasso(periodo) && (
-                    <div style={{ display: "inline-block", marginTop: 6, padding: "3px 9px", borderRadius: 99, background: accent + "14", color: accent, fontSize: 11, fontWeight: 800 }}>
-                      {marcoDoPasso(periodo)}
-                    </div>
-                  )}
+                  {renderDetalhe && renderDetalhe(s, i)}
                 </div>
               )}
             </div>

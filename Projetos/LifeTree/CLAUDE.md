@@ -76,24 +76,32 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - Todo prompt do Coach recebe a data de hoje (já feito em `sendToCoach`).
 
 **Planejamento × acompanhamento (06/11/2026, pedido do usuário — hierarquia tipo OKR)**
-- A aba Objetivos **só planeja**. O acompanhamento (pesagens, treinos feitos, diário) fica
-  nas outras abas e será ligado ao objetivo depois. Não criar telas de marcar execução aqui.
+- A aba Objetivos **só planeja**. A execução é marcada no **Controle (Malkuth)** e nas outras
+  abas (pesagens, treinos, diário). Não criar checkboxes de execução na aba Objetivos.
 - Estrutura do plano: **O objetivo → Resultados-chave → metas da semana → Linha do tempo
   (fases com marco) → Rotina → Impactos**. Tudo ligado direto ao objetivo (sem aninhar por KR).
 - **Resultados-chave** (`ResultadosCard`, `o.krs`): alvos de "como saber que deu certo".
   Saúde: peso (vem da dieta, fonte única), % de treinos feitos, % de dias dentro da dieta,
   % de gordura opcional. Resultado sem número não entra.
-- **Linha do tempo**: os passos são fases que começam por "DD/MM a DD/MM/AAAA: ". O **marco**
-  de cada fase é calculado em código (`shared/planejamento.js`: peso esperado na data final
-  pelo ritmo da dieta, sem passar do peso-meta) e recalcula quando o ritmo muda. O Coach não
-  escreve pesos nas fases. Na Saúde o título é "LINHA DO TEMPO" (`tituloPassos`).
+- **Linha do tempo executável** (`shared/planejamento.js`, `shared/FaseSaude.jsx`): cada
+  fase = `{ title "DD/MM a DD/MM/AAAA: nome", semana {treinos, cardio, divisão}, tarefas
+  [{texto, ate, done}], revisao }`. Mostra: período e nome → Na semana → Tarefas (só
+  descritas, com "até DD/MM") → Revisão em DD/MM → **Marco** (peso esperado no fim da fase,
+  calculado pelo ritmo da dieta; o Coach não escreve pesos). As metas da semana progridem
+  fase a fase; o **quadro de treino mostra e edita a fase atual** ("Fase 1 · até 30/11") e a
+  dieta usa os treinos da fase atual. Totais até o prazo somam fase a fase. Tocar na fase
+  abre o editor (período/nome, meta da semana, tarefas com data, revisão). O círculo da fase
+  não marca: fica verde quando todas as tarefas da fase estão feitas.
+- **Tarefas → Controle**: o Malkuth lista "TAREFAS DOS OBJETIVOS" (pendentes primeiro, por
+  data, atrasadas em destaque) e marca via `GEBURAH_ACTION_HANDLERS.toggle_tarefa_objetivo`.
+- **Gauge do objetivo = % de tarefas feitas** (`execucaoDoPlano`), igual na Saúde, no Desejo e
+  no Controle, com "N de M tarefas · faltam N dias".
 - **Rotina** (`plano.rotina`): 3–5 hábitos recorrentes, editáveis como os impactos. O antigo
   `habitoSugerido` vira o primeiro item (`comRotina`).
 - Na interface, palavras curtas em português (Resultados-chave, Marco, Rotina); nada de
   "KR"/"milestone" na tela.
-- Cartão do objetivo **sem percentual** enquanto só houver planejamento (`GoalCard` com
-  `pct={null}`): "Até DD/MM/AAAA", nome e "faltam N dias · N fases". Piloto na Saúde; levar
-  às outras áreas depois do piloto.
+- Piloto na Saúde; levar às outras áreas depois do piloto. (`GoalCard` com `pct={null}`
+  continua disponível para objetivo sem tarefas, mas a Saúde usa o gauge.)
 
 **Visual**
 - **Editar = tocar no item; apagar = ×** (pedido do usuário, 06/11/2026 — "UX mais limpa").

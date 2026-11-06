@@ -19,7 +19,8 @@ import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
 import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.js";
 import { ResultadosCard } from "../shared/ResultadosCard.jsx";
-import { normalizarResultados, marcosDoObjetivo, comRotina } from "../shared/planejamento.js";
+import { normalizarResultados, marcosDoObjetivo, comRotina, treinoAtual, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
+import { FaseDetalhe, FaseEditor } from "../shared/FaseSaude.jsx";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -57,13 +58,13 @@ function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
 const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "");
 const diasAte = (iso) => Math.ceil((new Date(iso + "T00:00:00") - new Date(new Date().toDateString())) / 86400000);
 
-// Só planejamento (06/11/2026): o cartão mostra prazo e fases, sem percentual — o
-// acompanhamento fica nas outras abas e será ligado depois.
+const periodoDe = (title) => (String(title || "").match(/^([^:]{3,40}):/) || [])[1] || "";
+
+// Gauge do cartão (06/11/2026): % de tarefas das fases concluídas — marcadas no Controle.
 function linhaStatus(o) {
-  const total = o.plano ? o.plano.steps.length : 0;
-  const partes = [];
+  const ex = execucaoDoPlano(o.plano);
+  const partes = [ex.total ? ex.feitas + " de " + ex.total + " tarefas" : "sem tarefas"];
   if (o.prazo) { const d = diasAte(o.prazo); partes.push(d >= 0 ? "faltam " + d + " dias" : "prazo vencido em " + dataBR(o.prazo)); }
-  if (total) partes.push(total + (total === 1 ? " fase" : " fases"));
   return partes.join(" · ");
 }
 
@@ -76,20 +77,34 @@ export function ObjetivosTab() {
   const [aberto, setAberto] = useState(objetivoInicial || null);
   const [editando, setEditando] = useState(editarInicial ? objetivoInicial : null);
   const mudar = (id, campos) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, ...campos })));
+  // Meta de treino em vigor: a da fase atual (fases executáveis) ou a do plano (objetivos antigos).
+  const treinoVigente = (o) => treinoAtual(o) || treinoDoObjetivo(o, dietaDoObjetivo(o, perfil));
+  const dietaVigente = (o, t = treinoVigente(o)) => (o.macros ? { ...dietaDoObjetivo(o, perfil), ...(t ? { treinos_semana: t.treinos_semana } : {}) } : null);
+  const macrosVigentes = (o) => { if (!o.macros) return null; const m = calcularMacros(dietaVigente(o), o.ajustes || {}); return m.ok ? m : o.macros; };
+  // Grava e recalcula a dieta com o treino da fase atual; as metas diárias da Nutrição seguem.
+  const gravarComDieta = (o, campos) => {
+    const novo = { ...o, ...campos };
+    if (!novo.macros) { mudar(o.id, campos); return; }
+    const dieta = dietaVigente(novo);
+    const m = calcularMacros(dieta, novo.ajustes || {});
+    mudar(o.id, m.ok ? { ...campos, dieta, macros: m } : { ...campos, dieta });
+    if (m.ok && setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
+  };
   // Ajustar uma meta recalcula todas (shared/macros.js) e o resultado vira as metas diárias
   // da aba Nutrição. Perda semanal e calorias são alavancas excludentes: mexer numa solta a outra.
   // Metas de treino: treinos por semana alimentam a dieta, que é recalculada junto.
+  // Com fases executáveis, o quadro de treino edita a meta da FASE ATUAL.
   const mudarTreino = (o, k, v) => {
-    const treino = normalizarTreino({ ...treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)), [k]: v });
+    const atual = treinoVigente(o);
+    const treino = normalizarTreino({ ...atual, [k]: v });
     const criado = o.criado ? {} : { criado: hojeLocal() };
-    if (!o.macros) { mudar(o.id, { treino, ...criado }); return; }
-    const dieta = { ...dietaDoObjetivo(o, perfil), treinos_semana: treino.treinos_semana };
-    const m = calcularMacros(dieta, o.ajustes || {});
-    mudar(o.id, m.ok ? { treino, dieta, macros: m, ...criado } : { treino, dieta, ...criado });
-    if (m.ok && setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
+    if (atual?.fase != null) {
+      const steps = o.plano.steps.map((s, i) => (i === atual.fase ? { ...s, semana: treino } : s));
+      gravarComDieta(o, { plano: { ...o.plano, steps }, ...criado });
+    } else gravarComDieta(o, { treino, ...criado });
   };
   const mudarMacro = (o, k, v) => {
-    const dieta = { ...dietaDoObjetivo(o, perfil) };
+    const dieta = { ...dietaVigente(o) };
     const ajustes = { ...(o.ajustes || {}) };
     if (k === "kgSemana") { ajustes.kgSemana = v || undefined; delete ajustes.cal; }
     else if (k === "cal") { ajustes.cal = v || undefined; delete ajustes.kgSemana; }
@@ -105,7 +120,10 @@ export function ObjetivosTab() {
 
   const toggleStep = (id, stepId) =>
     setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } })));
-  const updatePlano = (id, updater) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: updater(comRotina(o.plano)) })));
+  const updatePlano = (id, updater) => {
+    const o = objetivos.find((x) => x.id === id);
+    if (o) gravarComDieta(o, { plano: updater(comRotina(o.plano)) });
+  };
   const apagar = (o) => {
     if (!window.confirm("Apagar o objetivo '" + o.title + "' e o plano dele?")) return;
     setObjetivos((p) => p.filter((x) => x.id !== o.id));
@@ -130,26 +148,36 @@ export function ObjetivosTab() {
 
       {objetivos.map((o) => (
         <div key={o.id} id={"obj-" + o.id} style={{ borderTop: "1px solid " + C.b1, padding: "9px 0", scrollMarginTop: 70 }}>
-          <GoalCard C={C} accent={ACCENT} label={o.title} pct={null} rotulo={o.prazo ? "Até " + dataBR(o.prazo) : "Objetivo"} titulo={o.title} statLine={linhaStatus(o)} onClick={() => { setAberto(aberto === o.id ? null : o.id); setEditando(null); }}
+          <GoalCard C={C} accent={ACCENT} label={o.title} pct={execucaoDoPlano(o.plano).pct} statLine={linhaStatus(o)} onClick={() => { setAberto(aberto === o.id ? null : o.id); setEditando(null); }}
             onEdit={() => { setAberto(o.id); setEditando(o.id); }} onDelete={() => apagar(o)} />
           {aberto === o.id && (
             <div style={{ marginTop: 10 }}>
               {o.plano
-                ? <PlanoCard C={C} plano={comRotina(o.plano)} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
+                ? <PlanoCard C={C} plano={comRotina(o.plano)} accent={ACCENT} onToggleStep={o.plano.steps.some((s) => s.tarefas) ? null : (sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
                     tituloPassos="LINHA DO TEMPO"
-                    marcoDoPasso={marcosDoObjetivo({ dieta: o.macros ? dietaDoObjetivo(o, perfil) : null, macros: o.macros, inicio: o.criado || hojeLocal(), prazo: o.prazo })}
+                    renderDetalhe={(s, i) => {
+                      const marco = marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio: o.criado || hojeLocal(), prazo: o.prazo });
+                      return <FaseDetalhe C={C} s={s} accent={ACCENT} marco={marco && marco(periodoDe(s.title))} fim={limitesDasFases(o.plano.steps, o.criado || hojeLocal(), o.prazo)[i]?.fim} />;
+                    }}
+                    renderEditor={(s, patch) => <FaseEditor C={C} s={s} accent={ACCENT} onPatch={(p) => patch(p.semana ? { ...p, semana: normalizarTreino(p.semana) } : p)} />}
+                    passoFeito={(s) => (s.tarefas?.length ? s.tarefas.every((t) => t.done) : !!s.done)}
                     metas={[
                       { chave: "resultados", titulo: "Resultados-chave",
-                        render: (ed) => <ResultadosCard C={C} r={normalizarResultados(o.krs)} dieta={o.macros ? dietaDoObjetivo(o, perfil) : null} temDieta={!!o.macros} accent={ACCENT} editando={ed}
+                        render: (ed) => <ResultadosCard C={C} r={normalizarResultados(o.krs)} dieta={dietaVigente(o)} temDieta={!!o.macros} accent={ACCENT} editando={ed}
                           onChange={(k, v) => mudar(o.id, { krs: { ...normalizarResultados(o.krs), [k]: v } })} /> },
-                      treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)) && { chave: "treino", titulo: "Metas de treino",
-                        render: (ed) => <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)} />,
+                      treinoVigente(o) && { chave: "treino", titulo: "Metas de treino",
+                        render: (ed) => {
+                          const t = treinoVigente(o);
+                          return <TreinoCard C={C} t={t} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)}
+                            subtitulo={t.fase != null ? "Fase " + (t.fase + 1) + (t.fim ? " · até " + dataBR(t.fim).slice(0, 5) : "") : null}
+                            totais={totaisDasFases(o.plano?.steps, o.criado || hojeLocal(), o.prazo)} />;
+                        },
                         onApagar: () => { if (window.confirm("Apagar as metas de treino deste objetivo?")) mudar(o.id, { treino: null, semTreino: true }); } },
                       o.macros && { chave: "dieta", titulo: "Metas de dieta",
-                        render: (ed) => <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} />,
+                        render: (ed) => <MacrosCard C={C} m={macrosVigentes(o)} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaVigente(o)} onChange={(k, v) => mudarMacro(o, k, v)} />,
                         onApagar: () => { if (window.confirm("Apagar as metas de dieta deste objetivo?")) mudar(o.id, { macros: null, dieta: null, ajustes: null }); } },
                     ]}
                     editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />
