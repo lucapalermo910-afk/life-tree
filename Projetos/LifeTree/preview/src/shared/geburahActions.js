@@ -433,7 +433,7 @@ export function createGeburahObjective(a) {
         atividade: { 1.2: "sedentario", 1.375: "leve", 1.55: "moderado", 1.725: "intenso", 1.9: "muito_intenso" }[m.fator] });
     }
   }
-  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros } : {}) }]);
+  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}) }]);
   notifyGeburahUpdated();
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }

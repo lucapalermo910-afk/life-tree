@@ -84,6 +84,12 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - Ordem do plano: **O objetivo → metas da área (ex: `MacrosCard`) → passo a passo →
   impactos**. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano. Meta
   ajustada à mão fica marcada como "ajustada por você".
+- **Metas editáveis recalculam tudo.** Em edição, o quadro de metas vira calculadora: o
+  usuário mexe nos dados e nas alavancas (ex: peso, peso-meta, treinos, perda por semana,
+  calorias, proteína) e o código recalcula o resto (ex: carboidrato, gordura, semanas até a
+  meta), com os mesmos limites de segurança e avisos. Nunca deixar números dependentes
+  editáveis de forma solta. Guardar os dados de entrada no objetivo (ex: `dieta`, `ajustes`)
+  para poder recalcular depois.
 - Plano = `PlanoCard` em **modo leitura por padrão**: "O objetivo" no topo, passos numerados
   em linha do tempo com o período ("20/11 a 31/12/2026:") em destaque e o texto completo,
   com quebra de linha; impactos empilhados (+ positivo, ! atenção). Edição só depois de
