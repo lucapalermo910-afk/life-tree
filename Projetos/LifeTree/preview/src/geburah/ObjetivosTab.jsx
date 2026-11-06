@@ -137,12 +137,14 @@ export function ObjetivosTab() {
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
-                    metas={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)) || o.macros ? (ed) => (
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)} />
-                        {o.macros && <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} />}
-                      </div>
-                    ) : null}
+                    metas={[
+                      treinoDoObjetivo(o, dietaDoObjetivo(o, perfil)) && { chave: "treino", titulo: "Metas de treino",
+                        render: (ed) => <TreinoCard C={C} t={treinoDoObjetivo(o, dietaDoObjetivo(o, perfil))} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)} />,
+                        onApagar: () => { if (window.confirm("Apagar as metas de treino deste objetivo?")) mudar(o.id, { treino: null, semTreino: true }); } },
+                      o.macros && { chave: "dieta", titulo: "Metas de dieta",
+                        render: (ed) => <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} />,
+                        onApagar: () => { if (window.confirm("Apagar as metas de dieta deste objetivo?")) mudar(o.id, { macros: null, dieta: null, ajustes: null }); } },
+                    ]}
                     editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
               {o.plano?.habitoSugerido && (
