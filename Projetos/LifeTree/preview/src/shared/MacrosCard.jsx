@@ -5,7 +5,8 @@ const fmt = (n) => Number(n).toLocaleString("pt-BR");
 // Edição (06/11/2026): no modo de edição do plano o cartão vira calculadora. O usuário ajusta
 // os dados (peso atual, peso-meta, treinos por semana) e as alavancas (perda por semana,
 // calorias, proteína); quem chama recalcula com calcularMacros e devolve o novo `m`.
-// onChange(campo, valor) com campo em: peso_kg, peso_meta_kg, treinos_semana, kgSemana, cal, prot.
+// onChange(campo, valor) com campo em: peso_kg, peso_meta_kg, kgSemana, cal, prot.
+// Treinos por semana vêm do quadro de treino (TreinoCard) e aparecem aqui só para leitura.
 export function MacrosCard({ C, m, prazo, accent = "#ef4444", editando = false, onChange = null, dieta = null }) {
   if (!m) return null;
   const semanasAtePrazo = prazo ? Math.floor((new Date(prazo + "T00:00:00") - new Date(new Date().toDateString())) / (7 * 86400000)) : null;
@@ -41,7 +42,7 @@ export function MacrosCard({ C, m, prazo, accent = "#ef4444", editando = false, 
           <div style={{ display: "flex", gap: 6 }}>
             {campo("Peso atual", "peso_kg", dieta.peso_kg, "kg", 0.1)}
             {campo("Peso-meta", "peso_meta_kg", dieta.peso_meta_kg, "kg", 0.1)}
-            {campo("Treinos", "treinos_semana", dieta.treinos_semana, "/sem")}
+            {valor("Treinos", dieta.treinos_semana, "/sem")}
           </div>
           {sub("RITMO")}
           <div style={{ display: "flex", gap: 6 }}>

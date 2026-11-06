@@ -14,6 +14,8 @@ import KetherModule from "./KetherModule.jsx";
 import { callCoachAPI, motivoErroCoach } from "./shared/coachClient.js";
 import { calcularMacros } from "./shared/macros.js";
 import { MacrosCard } from "./shared/MacrosCard.jsx";
+import { TreinoCard } from "./shared/TreinoCard.jsx";
+import { normalizarTreino } from "./shared/treino.js";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -754,6 +756,7 @@ export default function App() {
           }
           // Metas de dieta: calculadas em código (shared/macros.js), nunca pelo modelo.
           if(action.dieta&&skillId==="geburah"){
+            if(action.treino) action.dieta={...action.dieta,treinos_semana:normalizarTreino(action.treino).treinos_semana};
             const m=calcularMacros(action.dieta);
             action.macrosPrevia=m.ok?m:null;
           }
@@ -1258,7 +1261,11 @@ export default function App() {
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
               {pendingCoachAction?.action?.plano&&(
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
-                  metas={pendingCoachAction.action.macrosPrevia?<MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>:null}
+                  metas={(pendingCoachAction.action.treino||pendingCoachAction.action.macrosPrevia)?(
+                    <div style={{display:"grid",gap:10}}>
+                      {pendingCoachAction.action.treino&&<TreinoCard C={C} t={normalizarTreino(pendingCoachAction.action.treino)} accent={coachAccent}/>}
+                      {pendingCoachAction.action.macrosPrevia&&<MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>}
+                    </div>):null}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>

@@ -78,7 +78,7 @@ const TREINOS_POR_FATOR = { 1.2: 0, 1.375: 2, 1.55: 3, 1.725: 5, 1.9: 7 };
 /** Dados de entrada do objetivo. Objetivos criados antes de 06/11/2026 não guardavam o bloco
  *  "dieta": reconstrói pelo perfil (peso, altura, idade, sexo) e pelas metas salvas. */
 export function dietaDoObjetivo(o, perfil = {}) {
-  if (o.dieta) return o.dieta;
+  if (o.dieta) return o.treino ? { ...o.dieta, treinos_semana: o.treino.treinos_semana } : o.dieta;
   const m = o.macros || {};
   const peso = Number(perfil.peso) || null;
   const pesoMeta = peso && m.semanas && m.kgSemana ? Math.round(peso - m.semanas * m.kgSemana) : peso;
