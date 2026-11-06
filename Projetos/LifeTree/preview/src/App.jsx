@@ -531,6 +531,10 @@ export default function App() {
   // palavra na resposta do usuário (ex: "dormir", "ansiedade") fazia pickSkillId trocar de
   // skill no meio — um objetivo de peso virou meta simples do Autocuidado, sem plano nem dieta.
   const [coachSkillTravada, setCoachSkillTravada] = useState(null);
+  // Destino ao tocar num objetivo no Desejo (05/11/2026): abre o módulo da área já na aba
+  // Objetivos com aquele plano aberto. Consumido uma vez pelo módulo e limpo em seguida.
+  const [destinoObjetivo, setDestinoObjetivo] = useState(null); // { moduleId, id } | null
+  const abrirObjetivo=(moduleId,id)=>{ setDestinoObjetivo({moduleId,id}); setActiveModule(moduleId); };
   // Sair do módulo também destrava (a conversa de criação ficou para trás).
   useEffect(()=>{ setCoachSkillTravada(null); },[activeModule]);
   const [coachLoading,  setCoachLoading]  = useState(false);
@@ -950,7 +954,7 @@ export default function App() {
           YesodModule.jsx — então ficam acima de tudo sem depender do zIndex deste wrapper. ── */}
       {activeModule==="yesod"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")}/>
+          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="yesod"?destinoObjetivo.id:null} limparDestino={()=>setDestinoObjetivo(null)}/>
         </div>
       )}
       {activeModule==="hod"&&(
@@ -965,7 +969,7 @@ export default function App() {
       )}
       {activeModule==="geburah"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")}/>
+          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} limparDestino={()=>setDestinoObjetivo(null)}/>
         </div>
       )}
       {activeModule==="chesed"&&(
@@ -995,7 +999,7 @@ export default function App() {
       )}
       {activeModule==="kether"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <KetherModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach}/>
+          <KetherModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirObjetivo={abrirObjetivo}/>
         </div>
       )}
 

@@ -2,6 +2,7 @@
 // 26/08/2026. Desde o passo 4 (Bolsos/OrçamentoFluxo/Objetivos/Config viraram arquivos
 // próprios), o shell não usa mais nenhum export de shared/ui.jsx nem de yesod/helpers.jsx —
 // só o que sobrou de cross-cutting (hub, DetailPages, Sheets, renderXRow) precisa daqui.
+import { useEffect, useState } from "react";
 import { ACCENT, DARK, LIGHT } from "./yesod/theme.js";
 import { Ico } from "./yesod/icons.jsx";
 import { fmt, accBal, getStmts, TABS } from "./yesod/constants.js";
@@ -20,14 +21,21 @@ import { OrcamentoFluxoTab } from "./yesod/OrcamentoFluxoTab.jsx";
 import { ObjetivosTab } from "./yesod/ObjetivosTab.jsx";
 import { ConfigTab } from "./yesod/ConfigTab.jsx";
 
-export default function YesodModule({ onBack, dark, setDark, askCoach, abrirDesejo }) {
+export default function YesodModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, limparDestino }) {
   const C = dark ? DARK : LIGHT;
   const ctx0 = useYesodState();
   // askCoach (29/08/2026, motor genérico de objetivo+plano) — dispara sendToCoach do App.jsx
   // com uma mensagem programática, reaproveitando 100% do chat/skill/ação que já existe.
   // Só ObjetivosTab.jsx usa hoje (consumido via useContext(YesodCtx), não passado por prop
   // direta — mesmo padrão do resto do ctx).
-  const ctx = { ...ctx0, askCoach, abrirDesejo };
+  // Vindo do Desejo com um objetivo escolhido: abre direto na aba Objetivos (05/11/2026).
+  const [objetivoInicial] = useState(destinoObjetivo || null);
+  useEffect(() => {
+    if (!destinoObjetivo) return;
+    ctx0.setTab("goals"); ctx0.setPage(null);
+    if (limparDestino) limparDestino();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const ctx = { ...ctx0, askCoach, abrirDesejo, objetivoInicial };
   // Destructuring parcial de propósito (26/08/2026, encolhido de novo no passo 4 — ver 11
   // Plano de Decomposição — Arquivos Monolíticos.md) — ctx tem 177 chaves (tudo que
   // useYesodState expõe), mas o shell só puxa pro escopo local o que ele mesmo usa direto

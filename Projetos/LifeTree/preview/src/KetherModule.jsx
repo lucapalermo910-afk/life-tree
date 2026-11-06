@@ -71,7 +71,7 @@ const GOAL_ADAPTERS = {
     // plano/metrica (29/08/2026, motor genérico de objetivo+plano — ver plano salvo)
     // incluídos além de {id,title,xp,done} de sempre — Kether só espelha (read-only, sem
     // onUpdate), edição continua só no módulo de origem.
-    read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: g.metrica || null })),
+    read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: g.metrica || null })),
     toggle: item => YESOD_ACTION_HANDLERS.toggle_ygoal({ match: item.title }),
   },
   hod: {
@@ -87,7 +87,7 @@ const GOAL_ADAPTERS = {
   // 05/11/2026 — objetivos de saúde com plano (geburah/ObjetivosTab.jsx, lifetree_geb_objetivos).
   geburah: {
     label: "Saúde", color: "#ef4444",
-    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
+    read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
     toggle: item => GEBURAH_ACTION_HANDLERS.toggle_objective({ match: item.title }),
   },
 };
@@ -123,7 +123,7 @@ const STATUS_LOOKUP = {
 const DESEJOS_KEY = "lifetree_keth_desejos";
 const uid = () => Math.random().toString(36).slice(2, 8);
 
-export default function KetherModule({ onBack, dark, setDark, askCoach }) {
+export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObjetivo }) {
   const C = dark ? DARK : LIGHT;
   const [, bump] = useState(0);
   const refresh = () => bump(n => n + 1);
@@ -417,7 +417,9 @@ export default function KetherModule({ onBack, dark, setDark, askCoach }) {
             <GoalCard C={C} accent={item.color} label={item.title}
               pct={item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
               statLine={item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
-              onClick={() => setExpandedMetaId(p => p === item.id ? null : item.id)}/>
+              onClick={() => abrirObjetivo && item.rawId && (item.moduleId === "geburah" || item.moduleId === "yesod")
+                ? abrirObjetivo(item.moduleId, item.rawId)
+                : setExpandedMetaId(p => p === item.id ? null : item.id)}/>
             {expandedMetaId === item.id && (
               <div style={{ marginTop: 8 }}>
                 <PlanoCard C={C} plano={item.plano} accent={item.color} onToggleStep={() => {}} onUpdate={() => {}}/>
