@@ -533,8 +533,8 @@ export default function App() {
   const [coachSkillTravada, setCoachSkillTravada] = useState(null);
   // Destino ao tocar num objetivo no Desejo (05/11/2026): abre o módulo da área já na aba
   // Objetivos com aquele plano aberto. Consumido uma vez pelo módulo e limpo em seguida.
-  const [destinoObjetivo, setDestinoObjetivo] = useState(null); // { moduleId, id } | null
-  const abrirObjetivo=(moduleId,id)=>{ setDestinoObjetivo({moduleId,id}); setActiveModule(moduleId); };
+  const [destinoObjetivo, setDestinoObjetivo] = useState(null); // { moduleId, id, editar } | null
+  const abrirObjetivo=(moduleId,id,editar=false)=>{ setDestinoObjetivo({moduleId,id,editar}); setActiveModule(moduleId); };
   // Sair do módulo também destrava (a conversa de criação ficou para trás).
   useEffect(()=>{ setCoachSkillTravada(null); },[activeModule]);
   const [coachLoading,  setCoachLoading]  = useState(false);
@@ -959,7 +959,7 @@ export default function App() {
           YesodModule.jsx — então ficam acima de tudo sem depender do zIndex deste wrapper. ── */}
       {activeModule==="yesod"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="yesod"?destinoObjetivo.id:null} limparDestino={()=>setDestinoObjetivo(null)}/>
+          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="yesod"?destinoObjetivo.id:null} editarDestino={!!destinoObjetivo?.editar} limparDestino={()=>setDestinoObjetivo(null)}/>
         </div>
       )}
       {activeModule==="hod"&&(
@@ -974,7 +974,7 @@ export default function App() {
       )}
       {activeModule==="geburah"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} limparDestino={()=>setDestinoObjetivo(null)}/>
+          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} editarDestino={!!destinoObjetivo?.editar} limparDestino={()=>setDestinoObjetivo(null)}/>
         </div>
       )}
       {activeModule==="chesed"&&(
@@ -1258,12 +1258,10 @@ export default function App() {
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
               {pendingCoachAction?.action?.plano&&(
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
+                  metas={pendingCoachAction.action.macrosPrevia?<MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>:null}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>
-              )}
-              {pendingCoachAction?.action?.macrosPrevia&&(
-                <MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>
               )}
               {pendingCoachAction&&(
                 <div style={{display:"flex",gap:8}}>

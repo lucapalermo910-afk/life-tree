@@ -65,23 +65,23 @@ function linhaStatus(o) {
 export function ObjetivosTab() {
   const C = useContext(ThemeCtx);
   const g = useGeburah();
-  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo, objetivoInicial } = g;
+  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo, objetivoInicial, editarInicial, setMetas } = g;
   const trendKg = sortedPes && sortedPes.length >= 2 ? sortedPes[sortedPes.length - 1].peso - sortedPes[sortedPes.length - 2].peso : null;
 
   const [aberto, setAberto] = useState(objetivoInicial || null);
+  const [editando, setEditando] = useState(editarInicial ? objetivoInicial : null);
+  const mudar = (id, campos) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, ...campos })));
+  // Metas de dieta ajustadas à mão também viram as metas diárias da aba Nutrição.
+  const mudarMacro = (o, k, v) => {
+    mudar(o.id, { macros: { ...o.macros, [k]: v, ajustado: true } });
+    if (setMetas) setMetas((p) => ({ ...p, [k]: v }));
+  };
   // Vindo do Desejo: rola até o objetivo aberto.
   useEffect(() => { if (objetivoInicial) document.getElementById("obj-" + objetivoInicial)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [objetivoInicial]);
 
   const toggleStep = (id, stepId) =>
     setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: { ...o.plano, steps: o.plano.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) } })));
   const updatePlano = (id, updater) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, plano: updater(o.plano) })));
-  // Renomear (06/11/2026): nomes antigos vinham com a frase SMART inteira. O nome anterior vira
-  // a descrição quando o objetivo ainda não tem uma, para não perder os detalhes.
-  const renomear = (o) => {
-    const novo = window.prompt("Nome do objetivo (curto, ex: Bater 75 kg):", o.title);
-    if (!novo || !novo.trim() || novo.trim() === o.title) return;
-    setObjetivos((p) => p.map((x) => (x.id !== o.id ? x : { ...x, title: novo.trim(), descricao: x.descricao || x.title })));
-  };
   const apagar = (o) => {
     if (!window.confirm("Apagar o objetivo '" + o.title + "' e o plano dele?")) return;
     setObjetivos((p) => p.filter((x) => x.id !== o.id));
@@ -106,13 +106,18 @@ export function ObjetivosTab() {
 
       {objetivos.map((o) => (
         <div key={o.id} id={"obj-" + o.id} style={{ borderTop: "1px solid " + C.b1, padding: "9px 0", scrollMarginTop: 70 }}>
-          <GoalCard C={C} accent={ACCENT} label={o.title} pct={pctDe(o)} statLine={linhaStatus(o)} onClick={() => setAberto(aberto === o.id ? null : o.id)} onEdit={() => renomear(o)} onDelete={() => apagar(o)} />
+          <GoalCard C={C} accent={ACCENT} label={o.title} pct={pctDe(o)} statLine={linhaStatus(o)} onClick={() => { setAberto(aberto === o.id ? null : o.id); setEditando(null); }}
+            onEdit={() => { setAberto(o.id); setEditando(o.id); }} onDelete={() => apagar(o)} />
           {aberto === o.id && (
             <div style={{ marginTop: 10 }}>
               {o.plano
-                ? <PlanoCard C={C} plano={o.plano} descricao={o.descricao || null} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)} />
+                ? <PlanoCard C={C} plano={o.plano} accent={ACCENT} onToggleStep={(sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
+                    nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
+                    descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
+                    prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
+                    metas={o.macros ? (ed) => <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} onChange={(k, v) => mudarMacro(o, k, v)} /> : null}
+                    editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
-              {o.macros && <div style={{ marginTop: 10 }}><MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} /></div>}
               {o.plano?.habitoSugerido && (
                 <div style={{ fontSize: 10.5, color: GREEN, marginTop: 8 }}>Hábito sugerido: {o.plano.habitoSugerido}</div>
               )}

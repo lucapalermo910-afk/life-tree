@@ -16,7 +16,7 @@ import { ObjetivosTab } from "./geburah/ObjetivosTab.jsx";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
-export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, limparDestino }) {
+export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, editarDestino, limparDestino }) {
   // Correto: const local, não variável global mutável (bug corrigido em 12/08/2026 —
   // ver [[04 Bugs Conhecidos]] → "Tema global mutável (C)"). Sheet/FI/FTA/FS/Card/Bar
   // (agora em geburah/theme.js) recebem esse valor via ThemeCtx.
@@ -25,6 +25,7 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
   // Vindo do Desejo com um objetivo escolhido: abre direto na aba Objetivos (05/11/2026).
   const [tab,  setTab]  = useState(destinoObjetivo ? "objetivos" : "geb");
   const [objetivoInicial] = useState(destinoObjetivo || null);
+  const [editarInicial] = useState(!!editarDestino);
   useEffect(() => { if (destinoObjetivo && limparDestino) limparDestino(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [page, setPage] = useState(null); // {type, ...}
   const [sh,   setSh]   = useState(null);
@@ -332,7 +333,7 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
     alimentos, setAlimentos, receitas, setReceitas, logDieta, setLogDieta, todayLog, calcMacro, calHoje, protHoje, carbHoje, gordHoje,
     agua, setAgua, aguaHoje, aguaPct, metas, setMetas, tdee,
     medidasCorp, setMedidasCorp, pesoHoje, navyEstimate, pesosMeta, setPesosMeta, pesoMeta, pesoScore, perdaTotal, faltaPerder, diasRest,
-    sortedPes, pesagens, setPesagens, objetivos, setObjetivos, askCoach, abrirDesejo, objetivoInicial,
+    sortedPes, pesagens, setPesagens, objetivos, setObjetivos, askCoach, abrirDesejo, objetivoInicial, editarInicial,
     planSem, setPlanSem,
     gebScore, treinoScore, dietaScore, streak, treinos7d,
   };
