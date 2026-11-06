@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 
 // Kit de UI compartilhado — Sheet/FI/FTA/FS/Card/Bar/Btn/Badge, consolidados em 21/08/2026
@@ -179,76 +179,32 @@ function PlusIcon({ color = "currentColor", size = 11 }) {
   );
 }
 
-// Pressionar e segurar (06/11/2026, pedido do usuário): substitui os botões de lápis/lixeira.
-// Toque curto mantém a ação normal (abrir, marcar); segurar ~0,5 s abre o menu de ações.
-// No computador, o botão direito faz o mesmo. O toque que disparou o menu não vira clique.
-export function Pressionavel({ onLong, children, style = {}, ms = 500, ...resto }) {
-  const timer = useRef(null), inicio = useRef(null), disparou = useRef(false);
-  if (!onLong) return <div style={style} {...resto}>{children}</div>;
-  const cancelar = () => { clearTimeout(timer.current); timer.current = null; };
-  return (
-    <div {...resto}
-      style={{ userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none", ...style }}
-      onPointerDown={(e) => {
-        if (e.button > 0) return;
-        disparou.current = false; inicio.current = [e.clientX, e.clientY]; cancelar();
-        timer.current = setTimeout(() => { disparou.current = true; timer.current = null; navigator.vibrate?.(15); onLong(); }, ms);
-      }}
-      onPointerMove={(e) => { if (timer.current && Math.hypot(e.clientX - inicio.current[0], e.clientY - inicio.current[1]) > 10) cancelar(); }}
-      onPointerUp={cancelar} onPointerLeave={cancelar} onPointerCancel={cancelar}
-      onClickCapture={(e) => { if (disparou.current) { e.stopPropagation(); e.preventDefault(); disparou.current = false; } }}
-      onContextMenu={(e) => { e.preventDefault(); if (!disparou.current) { cancelar(); disparou.current = false; onLong(); } }}>
-      {children}
-    </div>
-  );
-}
-
-// Menu de ações que sobe de baixo da tela. `acoes` = [{ rotulo, fn, perigo }].
-export function MenuAcoes({ C, titulo, acoes, onFechar, accent = "#818cf8" }) {
-  return createPortal(
-    <div onClick={onFechar} role="dialog" aria-label={titulo}
-      style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-      <div onClick={(e) => e.stopPropagation()}
-        style={{ width: "100%", maxWidth: 480, background: C.card, borderRadius: "18px 18px 0 0", padding: "14px 16px calc(16px + env(safe-area-inset-bottom))", boxSizing: "border-box" }}>
-        <div style={{ fontSize: 11, fontWeight: 800, color: C.muted, letterSpacing: 0.5, marginBottom: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{titulo}</div>
-        {acoes.map((a) => (
-          <button key={a.rotulo} onClick={() => { onFechar(); a.fn(); }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "13px 12px", marginBottom: 6, borderRadius: 12, cursor: "pointer",
-              border: "1px solid " + C.b1, background: C.surface || C.card, fontSize: 14, fontWeight: 700, fontFamily: "inherit",
-              color: a.perigo ? "#ef4444" : C.text }}>
-            {a.rotulo}
-          </button>
-        ))}
-        <button onClick={onFechar} style={{ display: "block", width: "100%", padding: "12px", marginTop: 4, borderRadius: 12, cursor: "pointer", border: "none",
-          background: "transparent", fontSize: 13, fontWeight: 800, color: accent, fontFamily: "inherit" }}>Cancelar</button>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
 // Card de resumo do objetivo — % + gauge, clique abre o detalhe. Visual copiado 1:1 do card
 // da Meta de Independência Financeira do Yesod (padrão que o usuário pediu explicitamente
 // pra generalizar, 29/08/2026) — `statLine` é livre pra caber tanto o caso com métrica real
 // ("R$X de R$Y") quanto o caso sem métrica (% vem dos passos do plano concluídos).
-// onEdit/onDelete: sem botões visíveis (06/11/2026) — segurar o cartão abre o menu.
-export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick, onEdit, onDelete }) {
+// onDelete (06/11/2026, pedido do usuário): × discreto no canto; o toque no cartão abre o
+// plano, e no plano cada item se edita com um toque. `onEdit` não é mais usado.
+export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick, onDelete }) {
   const p = Math.max(0, Math.min(100, pct || 0));
-  const [menu, setMenu] = useState(false);
-  const acoes = [onEdit && { rotulo: "Editar nome, prazo e objetivo", fn: onEdit }, onDelete && { rotulo: "Apagar objetivo", fn: onDelete, perigo: true }].filter(Boolean);
   return (
-    <>
-      <Pressionavel onLong={acoes.length ? () => setMenu(true) : null} onClick={onClick} aria-label={label}
-        style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
-        <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
-        <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
-        {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
-        <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
-        </div>
-      </Pressionavel>
-      {menu && <MenuAcoes C={C} titulo={label} acoes={acoes} accent={accent} onFechar={() => setMenu(false)} />}
-    </>
+    <div onClick={onClick} aria-label={label}
+      style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>{label.toUpperCase()}</div>
+        {onDelete && (
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} aria-label={"Apagar objetivo " + label}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, margin: -4, opacity: 0.6, flexShrink: 0 }}>
+            <XIcon color={C.muted} size={14} />
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
+      {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
+      <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
+      </div>
+    </div>
   );
 }
 
@@ -256,12 +212,12 @@ export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick,
 // visível que parece texto estático até o usuário tocar nele, com um × pra apagar a linha.
 // Linha editável (06/11/2026): era um <input> de uma linha só, e textos longos do Coach
 // ficavam cortados. Agora é uma textarea que cresce com o conteúdo.
-function EditableRow({ C, value, onChange, onRemove, strike, dim }) {
+function EditableRow({ C, value, onChange, onRemove, strike, dim, autoFocus }) {
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
       <textarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)} autoFocus={autoFocus}
         rows={Math.max(1, Math.ceil((value || "").length / 38))}
         style={{
           flex: 1, minWidth: 0, resize: "none", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent",
@@ -269,9 +225,11 @@ function EditableRow({ C, value, onChange, onRemove, strike, dim }) {
           color: dim ? C.muted : C.text, textDecoration: strike ? "line-through" : "none", fieldSizing: "content",
         }}
       />
-      <button onClick={onRemove} aria-label="Remover linha" style={{ background: "none", border: "none", cursor: "pointer", padding: 6, opacity: 0.6, flexShrink: 0 }}>
-        <XIcon color={C.muted} size={12} />
-      </button>
+      {onRemove && (
+        <button onClick={onRemove} aria-label="Remover linha" style={{ background: "none", border: "none", cursor: "pointer", padding: 6, opacity: 0.6, flexShrink: 0 }}>
+          <XIcon color={C.muted} size={12} />
+        </button>
+      )}
     </div>
   );
 }
@@ -301,18 +259,17 @@ function partesDoPasso(t) {
 // uma lista já persistida (objetivo salvo) — ver usos em App.jsx/yesod/ObjetivosTab.jsx.
 // Leitura por padrão: texto completo, com quebra de linha, período do passo em destaque,
 // impactos empilhados. `somenteLeitura` desliga a edição (ex: espelho no Kether).
-// Edição (06/11/2026, pedido do usuário): sem botão "Editar" nem modo "plano inteiro".
-// Segurar um item abre o menu dele, e só aquele item entra em edição:
-//   "cabecalho" (nome, prazo, objetivo) · "meta:<chave>" · "passo:<id>" · "imp:<tipo>:<i>".
+// Edição (06/11/2026, pedido do usuário): tocar num item já abre a edição só dele, com
+// ✓ (concluir) e × (apagar) no canto. Sem botão "Editar", lápis ou menu.
+//   chaves: "cabecalho" (nome, prazo, objetivo) · "meta:<chave>" · "passo:<id>" · "imp:<tipo>:<i>".
 // `metas`: lista [{ chave, titulo, render(editando), onApagar }] (ou um nó, só leitura).
-// `editando`/`onEditando` (booleanos): quem chama pode abrir o cabeçalho em edição (ex: o
-// "Editar" do GoalCard) e fica sabendo quando algum item está em edição.
+// `editando`/`onEditando` (booleanos): quem chama pode abrir o cabeçalho em edição (ex:
+// "Editar" vindo do Desejo) e fica sabendo quando algum item está em edição.
 export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
   nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando }) {
   const [chave, setChaveInt] = useState(editandoExt ? "cabecalho" : null);
-  const [menu, setMenu] = useState(null);
   const setChave = (k) => { setChaveInt(k); if (onEditando) onEditando(!!k); };
-  // Quem chama abriu/fechou a edição (ex: "Editar" no GoalCard): ajusta durante o render.
+  // Quem chama abriu/fechou a edição: ajusta durante o render.
   const [extAnterior, setExtAnterior] = useState(editandoExt);
   if (editandoExt !== extAnterior) {
     setExtAnterior(editandoExt);
@@ -320,30 +277,40 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
     else if (editandoExt === false) setChaveInt(null);
   }
   const podeEditar = !somenteLeitura;
-  const segurar = (fn) => (podeEditar ? fn : null);
+  const tocar = (k) => (podeEditar ? { onClick: () => setChave(k), style: { cursor: "pointer" } } : {});
 
   const editStep = (id, title) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, title } : s)) }));
   const removeStep = (id) => { onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) })); setChave(null); };
-  const addStepDepois = (id) => {
+  const addStep = () => {
     const novo = { id: "st" + Date.now(), title: "", done: false };
-    onUpdate((p) => { const i = p.steps.findIndex((s) => s.id === id); const st = [...p.steps]; st.splice(i < 0 ? st.length : i + 1, 0, novo); return { ...p, steps: st }; });
+    onUpdate((p) => ({ ...p, steps: [...p.steps, novo] }));
     setChave("passo:" + novo.id);
   };
   const editImpacto = (kind, i, text) => onUpdate((p) => ({ ...p, [kind]: p[kind].map((t, idx) => (idx === i ? text : t)) }));
   const removeImpacto = (kind, i) => { onUpdate((p) => ({ ...p, [kind]: p[kind].filter((_, idx) => idx !== i) })); setChave(null); };
-  const addImpactoDepois = (kind, i) => { onUpdate((p) => { const l = [...p[kind]]; l.splice(i + 1, 0, ""); return { ...p, [kind]: l }; }); setChave("imp:" + kind + ":" + (i + 1)); };
+  const addImpacto = (kind) => { const n = plano[kind].length; onUpdate((p) => ({ ...p, [kind]: [...p[kind], ""] })); setChave("imp:" + kind + ":" + n); };
 
   const titulo = (texto, cor = C.muted) => (
     <div style={{ fontSize: 10, color: cor, fontWeight: 800, letterSpacing: 1, margin: "0 0 8px" }}>{texto}</div>
   );
-  const concluir = (
-    <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
-      <button onClick={() => setChave(null)} style={{ background: accent, border: "none", borderRadius: 99, padding: "6px 16px", color: "#fff", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>Concluir</button>
+  const icone = (rotulo, fn, el, cor) => (
+    <button onClick={(e) => { e.stopPropagation(); fn(); }} aria-label={rotulo}
+      style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: cor, cursor: "pointer", padding: 0,
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{el}</button>
+  );
+  // Caixa de edição: conteúdo + ✓ (concluir) e, se houver, × (apagar) no canto.
+  const caixa = (conteudo, onApagar, rotuloApagar = "Apagar") => (
+    <div style={{ border: "1.5px solid " + accent + "66", borderRadius: 12, padding: 10, background: accent + "08" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 6 }}>
+        {onApagar && icone(rotuloApagar, onApagar, <XIcon color="#ef4444" size={12} />, "#ef444418")}
+        {icone("Concluir", () => setChave(null), <CheckIcon color="#fff" size={12} />, accent)}
+      </div>
+      {conteudo}
     </div>
   );
-  const caixaEdicao = { border: "1.5px solid " + accent + "66", borderRadius: 12, padding: 10, background: accent + "08" };
   const campoTexto = { width: "100%", boxSizing: "border-box", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent", outline: "none",
     padding: "8px 10px", fontSize: 14, fontFamily: "inherit", color: C.text };
+  const adicionar = (label, fn) => podeEditar && <AddRowBtn C={C} onClick={fn} label={label} accent={accent} />;
 
   const temCabecalho = podeEditar && (onNome || onPrazo || onDescricao);
   const listaMetas = Array.isArray(metas) ? metas.filter(Boolean) : null;
@@ -352,53 +319,50 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
     <div style={{ marginTop: 16 }}>
       {titulo(rotulo, cor)}
       {plano[kind].map((t, i) => chave === "imp:" + kind + ":" + i ? (
-        <div key={i} style={{ ...caixaEdicao, marginBottom: 8 }}>
-          <EditableRow C={C} value={t} onChange={(v) => editImpacto(kind, i, v)} onRemove={() => removeImpacto(kind, i)} />
-          {concluir}
+        <div key={i} style={{ marginBottom: 8 }}>
+          {caixa(<EditableRow C={C} value={t} onChange={(v) => editImpacto(kind, i, v)} autoFocus />, () => removeImpacto(kind, i))}
         </div>
       ) : (
-        <Pressionavel key={i} onLong={segurar(() => setMenu({ titulo: rotulo, acoes: [
-          { rotulo: "Editar", fn: () => setChave("imp:" + kind + ":" + i) },
-          { rotulo: "Adicionar abaixo", fn: () => addImpactoDepois(kind, i) },
-          { rotulo: "Apagar", fn: () => removeImpacto(kind, i), perigo: true },
-        ] }))} style={{ display: "flex", gap: 8, marginBottom: 8, fontSize: 13, lineHeight: 1.45, color: C.text }}>
+        <div key={i} {...tocar("imp:" + kind + ":" + i)}
+          style={{ display: "flex", gap: 8, marginBottom: 8, fontSize: 13, lineHeight: 1.45, color: C.text, cursor: podeEditar ? "pointer" : "default" }}>
           <span style={{ color: cor, fontWeight: 900, flexShrink: 0, width: 14, textAlign: "center" }}>{marca}</span>
           <span style={{ overflowWrap: "anywhere" }}>{t || <em style={{ color: C.muted }}>vazio</em>}</span>
-        </Pressionavel>
+        </div>
       ))}
+      {adicionar("Adicionar", () => addImpacto(kind))}
     </div>
   );
 
   return (
     <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 14, padding: 16 }}>
       {chave === "cabecalho" ? (
-        <div style={{ ...caixaEdicao, marginBottom: 16 }}>
-          {onNome && (<div style={{ marginBottom: 12 }}>{titulo("NOME")}
-            <input value={nome || ""} onChange={(e) => onNome(e.target.value)} placeholder="Nome curto, ex: Bater 75 kg" style={{ ...campoTexto, fontWeight: 700 }} /></div>)}
-          {onPrazo && (<div style={{ marginBottom: 12 }}>{titulo("PRAZO")}
-            <input type="date" value={prazo || ""} onChange={(e) => onPrazo(e.target.value || null)} style={{ ...campoTexto, width: "auto" }} /></div>)}
-          {onDescricao && (<div>{titulo("O OBJETIVO")}
-            <textarea value={descricao || ""} onChange={(e) => onDescricao(e.target.value)} rows={2} placeholder="Resultado + data, ex: Chegar a 75 kg em 28/02/2027"
-              style={{ ...campoTexto, fontSize: 13, lineHeight: 1.45, resize: "none", fieldSizing: "content" }} /></div>)}
-          {concluir}
+        <div style={{ marginBottom: 16 }}>
+          {caixa(
+            <>
+              {onNome && (<div style={{ marginBottom: 12 }}>{titulo("NOME")}
+                <input value={nome || ""} onChange={(e) => onNome(e.target.value)} placeholder="Nome curto, ex: Bater 75 kg" style={{ ...campoTexto, fontWeight: 700 }} /></div>)}
+              {onPrazo && (<div style={{ marginBottom: 12 }}>{titulo("PRAZO")}
+                <input type="date" value={prazo || ""} onChange={(e) => onPrazo(e.target.value || null)} style={{ ...campoTexto, width: "auto" }} /></div>)}
+              {onDescricao && (<div>{titulo("O OBJETIVO")}
+                <textarea value={descricao || ""} onChange={(e) => onDescricao(e.target.value)} rows={2} placeholder="Resultado + data, ex: Chegar a 75 kg em 28/02/2027"
+                  style={{ ...campoTexto, fontSize: 13, lineHeight: 1.45, resize: "none", fieldSizing: "content" }} /></div>)}
+            </>
+          )}
         </div>
-      ) : descricao && (
-        <Pressionavel onLong={segurar(temCabecalho ? () => setChave("cabecalho") : null)}
-          style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid " + C.b1 }}>
+      ) : (descricao || temCabecalho) && (
+        <div {...(temCabecalho ? tocar("cabecalho") : {})}
+          style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid " + C.b1, cursor: temCabecalho ? "pointer" : "default" }}>
           {titulo("O OBJETIVO")}
-          <div style={{ fontSize: 13, lineHeight: 1.5, color: C.text, overflowWrap: "anywhere" }}>{descricao}</div>
-        </Pressionavel>
+          <div style={{ fontSize: 13, lineHeight: 1.5, color: descricao ? C.text : C.muted, overflowWrap: "anywhere" }}>{descricao || "Toque para escrever: resultado + data"}</div>
+        </div>
       )}
 
       {listaMetas ? listaMetas.length > 0 && (
         <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
           {listaMetas.map((m) => chave === "meta:" + m.chave ? (
-            <div key={m.chave} style={caixaEdicao}>{m.render(true)}{concluir}</div>
+            <div key={m.chave}>{caixa(m.render(true), m.onApagar || null, "Apagar " + m.titulo.toLowerCase())}</div>
           ) : (
-            <Pressionavel key={m.chave} onLong={segurar(() => setMenu({ titulo: m.titulo, acoes: [
-              { rotulo: "Editar", fn: () => setChave("meta:" + m.chave) },
-              ...(m.onApagar ? [{ rotulo: "Apagar", fn: m.onApagar, perigo: true }] : []),
-            ] }))}>{m.render(false)}</Pressionavel>
+            <div key={m.chave} {...tocar("meta:" + m.chave)} aria-label={m.titulo}>{m.render(false)}</div>
           ))}
         </div>
       ) : metas && (
@@ -428,34 +392,22 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
             </div>
             <div style={{ flex: 1, minWidth: 0, paddingBottom: ultimo ? 0 : 14 }}>
               {emEdicao ? (
-                <div style={caixaEdicao}>
-                  <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} onRemove={() => removeStep(s.id)} strike={s.done} dim={s.done} />
-                  {concluir}
-                </div>
+                caixa(<EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} strike={s.done} dim={s.done} autoFocus />, () => removeStep(s.id), "Apagar passo " + (i + 1))
               ) : (
-                <Pressionavel aria-label={"Passo " + (i + 1)} onLong={segurar(() => setMenu({ titulo: "Passo " + (i + 1), acoes: [
-                  { rotulo: "Editar", fn: () => setChave("passo:" + s.id) },
-                  { rotulo: "Adicionar passo abaixo", fn: () => addStepDepois(s.id) },
-                  { rotulo: "Apagar", fn: () => removeStep(s.id), perigo: true },
-                ] }))}>
+                <div aria-label={"Passo " + (i + 1)} {...tocar("passo:" + s.id)}>
                   {periodo && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>{periodo}</div>}
                   <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done ? "line-through" : "none",
                     overflowWrap: "anywhere", marginTop: periodo ? 0 : 4 }}>{texto || <em style={{ color: C.muted }}>vazio</em>}</div>
-                </Pressionavel>
+                </div>
               )}
             </div>
           </div>
         );
       })}
-      {podeEditar && plano.steps.length === 0 && <AddRowBtn C={C} onClick={() => addStepDepois(null)} label="Adicionar passo" accent={accent} />}
+      {adicionar("Adicionar passo", addStep)}
 
       {impactos("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
       {impactos("impactoNegativo", "PONTOS DE ATENÇÃO", "#ef4444", "!")}
-
-      {podeEditar && (
-        <div style={{ fontSize: 10, color: C.muted, textAlign: "center", marginTop: 14 }}>Segure um item para editar ou apagar.</div>
-      )}
-      {menu && <MenuAcoes C={C} titulo={menu.titulo} acoes={menu.acoes} accent={accent} onFechar={() => setMenu(null)} />}
     </div>
   );
 }

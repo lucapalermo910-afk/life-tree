@@ -76,15 +76,13 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - Todo prompt do Coach recebe a data de hoje (já feito em `sendToCoach`).
 
 **Visual**
-- **Editar e apagar = segurar o item** (`Pressionavel` + `MenuAcoes` em `shared/ui.jsx`).
-  Sem lápis, lixeira ou botão "Editar" visíveis. Toque curto faz a ação normal (abrir,
-  marcar passo); segurar ~0,5 s (ou botão direito no computador) abre um menu de baixo da
-  tela. Vale para: cartão do objetivo (`GoalCard`: "Editar nome, prazo e objetivo" /
-  "Apagar objetivo"), "O objetivo", **cada quadro de meta** (Editar / Apagar), **cada passo**
-  (Editar / Adicionar passo abaixo / Apagar) e cada impacto. Só o item escolhido entra em
-  edição, com "Concluir" embaixo dele. O plano termina com "Segure um item para editar ou
-  apagar.". Apagar objetivo ou quadro de meta pede confirmação. No Desejo, "Editar" leva ao
-  módulo de destino com o cabeçalho em edição (`abrirObjetivo(modulo, id, true)`).
+- **Editar = tocar no item; apagar = ×** (pedido do usuário, 06/11/2026 — "UX mais limpa").
+  Sem lápis, lixeira, botão "Editar" ou menu de segurar. Cartão do objetivo (`GoalCard`):
+  toque abre o plano; × discreto no canto apaga (com confirmação). Dentro do `PlanoCard`,
+  tocar em "O objetivo" (edita nome, prazo e objetivo), em **cada quadro de meta**, em **cada
+  passo** ou em cada impacto abre a edição só daquele item, numa caixa com ✓ (concluir) e
+  × (apagar) no canto. O círculo do passo continua só marcando. "+ Adicionar passo" e
+  "+ Adicionar" ficam no fim de cada lista. No Desejo, o toque leva ao módulo de destino.
 - Metas vão para o `PlanoCard` como lista: `metas=[{ chave, titulo, render(editando), onApagar }]`.
 - Título dos quadros de meta sem "(calculadas pelo app)"; só "(ajustadas por você)" quando for o caso.
 - Ordem do plano: **O objetivo → metas da área → passo a passo → impactos**. Em Saúde, as
@@ -102,7 +100,7 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
   para poder recalcular depois.
 - Plano = `PlanoCard` em **modo leitura por padrão**: "O objetivo" no topo, passos numerados
   em linha do tempo com o período ("20/11 a 31/12/2026:") em destaque e o texto completo,
-  com quebra de linha; impactos empilhados (+ positivo, ! atenção). Edição só segurando o
+  com quebra de linha; impactos empilhados (+ positivo, ! atenção). Edição tocando no
   item. Nunca `<input>` de uma linha para texto do Coach.
 - Respostas do Coach: negrito em Markdown vira negrito (`textoCoach`); respostas longas
   ou com plano abrem a conversa em tela cheia.
