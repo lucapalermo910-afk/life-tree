@@ -15,6 +15,7 @@ import { Ico } from "./icons.jsx";
 import { fmt1, fmtKg } from "./helpers.js";
 import { GoalCard, PlanoCard } from "../shared/ui.jsx";
 import { MacrosCard } from "../shared/MacrosCard.jsx";
+import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -65,16 +66,25 @@ function linhaStatus(o) {
 export function ObjetivosTab() {
   const C = useContext(ThemeCtx);
   const g = useGeburah();
-  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo, objetivoInicial, editarInicial, setMetas } = g;
+  const { pesoHoje, pesoMeta, navyEstimate, sortedPes, objetivos, setObjetivos, abrirDesejo, objetivoInicial, editarInicial, setMetas, perfil } = g;
   const trendKg = sortedPes && sortedPes.length >= 2 ? sortedPes[sortedPes.length - 1].peso - sortedPes[sortedPes.length - 2].peso : null;
 
   const [aberto, setAberto] = useState(objetivoInicial || null);
   const [editando, setEditando] = useState(editarInicial ? objetivoInicial : null);
   const mudar = (id, campos) => setObjetivos((p) => p.map((o) => (o.id !== id ? o : { ...o, ...campos })));
-  // Metas de dieta ajustadas à mão também viram as metas diárias da aba Nutrição.
+  // Ajustar uma meta recalcula todas (shared/macros.js) e o resultado vira as metas diárias
+  // da aba Nutrição. Perda semanal e calorias são alavancas excludentes: mexer numa solta a outra.
   const mudarMacro = (o, k, v) => {
-    mudar(o.id, { macros: { ...o.macros, [k]: v, ajustado: true } });
-    if (setMetas) setMetas((p) => ({ ...p, [k]: v }));
+    const dieta = { ...dietaDoObjetivo(o, perfil) };
+    const ajustes = { ...(o.ajustes || {}) };
+    if (k === "kgSemana") { ajustes.kgSemana = v || undefined; delete ajustes.cal; }
+    else if (k === "cal") { ajustes.cal = v || undefined; delete ajustes.kgSemana; }
+    else if (k === "prot") ajustes.prot = v || undefined;
+    else dieta[k] = v;
+    const m = calcularMacros(dieta, ajustes);
+    if (!m.ok) { mudar(o.id, { dieta, ajustes }); return; }
+    mudar(o.id, { dieta, ajustes, macros: m });
+    if (setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
   };
   // Vindo do Desejo: rola até o objetivo aberto.
   useEffect(() => { if (objetivoInicial) document.getElementById("obj-" + objetivoInicial)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [objetivoInicial]);
@@ -115,7 +125,7 @@ export function ObjetivosTab() {
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
-                    metas={o.macros ? (ed) => <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} onChange={(k, v) => mudarMacro(o, k, v)} /> : null}
+                    metas={o.macros ? (ed) => <MacrosCard C={C} m={o.macros} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaDoObjetivo(o, perfil)} onChange={(k, v) => mudarMacro(o, k, v)} /> : null}
                     editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />
                 : <div style={{ fontSize: 11, color: C.muted }}>Este objetivo não tem plano.</div>}
               {o.plano?.habitoSugerido && (
