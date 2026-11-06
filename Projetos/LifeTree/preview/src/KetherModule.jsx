@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useCoachDataSync } from "./shared/coachSync.js";
+import { useCoachDataSync, notifyCoachDataUpdated } from "./shared/coachSync.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { HOD_ACTION_HANDLERS } from "./shared/hodActions.js";
 import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
@@ -71,22 +71,26 @@ const GOAL_ADAPTERS = {
     // plano/metrica (29/08/2026, motor genérico de objetivo+plano — ver plano salvo)
     // incluídos além de {id,title,xp,done} de sempre — Kether só espelha (read-only, sem
     // onUpdate), edição continua só no módulo de origem.
+    chave: "lifetree_fin_ygoals",
     read: () => readOtherModule("lifetree_fin_ygoals", []).map(g => ({ id: "yesod_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: g.metrica || null })),
     toggle: item => YESOD_ACTION_HANDLERS.toggle_ygoal({ match: item.title }),
   },
   hod: {
     label: "Profissional", color: "#f97316",
-    read: () => readOtherModule("lifetree_hod_carGoals", []).map(g => ({ id: "hod_" + g.id, title: g.title, xp: g.xp, done: g.done })),
+    chave: "lifetree_hod_carGoals",
+    read: () => readOtherModule("lifetree_hod_carGoals", []).map(g => ({ id: "hod_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done })),
     toggle: item => HOD_ACTION_HANDLERS.toggle_car_goal({ match: item.title }),
   },
   tiphareth: {
     label: "Autocuidado", color: "#eab308",
-    read: () => readOtherModule("lifetree_tiph_goals", []).map(g => ({ id: "tiph_" + g.id, title: g.title, xp: g.xp, done: g.done })),
+    chave: "lifetree_tiph_goals",
+    read: () => readOtherModule("lifetree_tiph_goals", []).map(g => ({ id: "tiph_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done })),
     toggle: item => TIPHARETH_ACTION_HANDLERS.toggle_goal({ match: item.title }),
   },
   // 05/11/2026 — objetivos de saúde com plano (geburah/ObjetivosTab.jsx, lifetree_geb_objetivos).
   geburah: {
     label: "Saúde", color: "#ef4444",
+    chave: "lifetree_geb_objetivos",
     read: () => readOtherModule("lifetree_geb_objetivos", []).map(g => ({ id: "geb_" + g.id, rawId: g.id, title: g.title, xp: g.xp, done: g.done, plano: g.plano || null, metrica: null })),
     toggle: item => GEBURAH_ACTION_HANDLERS.toggle_objective({ match: item.title }),
   },
@@ -197,6 +201,23 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
     const desejo = { id: "w" + uid(), title: wishTitle.trim(), createdAt: new Date().toISOString().slice(0, 10), metasDerivadas: draftMetas };
     saveDesejos([desejo, ...desejos]);
     setWishTitle(""); setDraftMetas([]); setNovo(false);
+  };
+
+  // Apagar objetivo de qualquer área a partir do Desejo (06/11/2026, pedido do usuário: "não
+  // dá pra deletar objetivos"). Escreve direto na chave do módulo de origem e avisa o módulo
+  // pelo mesmo evento que as ações do Coach usam (coachSync.js), pra ele recarregar se estiver
+  // montado. Pede confirmação: o plano e os passos vão junto.
+  const apagarObjetivo = item => {
+    const ad = GOAL_ADAPTERS[item.moduleId];
+    if (!ad?.chave || item.rawId == null) return;
+    if (!window.confirm("Apagar o objetivo \"" + item.title + "\"" + (item.plano ? " e o plano dele" : "") + "? Não dá para desfazer.")) return;
+    try {
+      const lista = readOtherModule(ad.chave, []);
+      localStorage.setItem(ad.chave, JSON.stringify(lista.filter(g => g.id !== item.rawId)));
+    } catch { return; }
+    notifyCoachDataUpdated(item.moduleId);
+    setExpandedMetaId(null);
+    refresh();
   };
 
   const metas = Object.entries(GOAL_ADAPTERS).flatMap(([moduleId, ad]) =>
@@ -413,7 +434,13 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
           // que read-only (sem onUpdate/onToggleStep de verdade): Kether nunca edita nem
           // recalcula, só espelha o que já foi salvo lá.
           <div key={item.id} style={{ marginBottom: 10 }}>
-            <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
+            <div style={{ marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</span>
+              <button onClick={() => apagarObjetivo(item)} aria-label={"Apagar objetivo " + item.title}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 4px", display: "flex", alignItems: "center", gap: 4, color: C.muted, fontSize: 10, fontWeight: 700 }}>
+                <Ico n="x" size={11} color={C.muted}/> Apagar
+              </button>
+            </div>
             <GoalCard C={C} accent={item.color} label={item.title}
               pct={item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
               statLine={item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
@@ -440,6 +467,10 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
               <div style={{ fontSize: 12, fontWeight: 600, color: item.done ? C.muted : C.text, textDecoration: item.done ? "line-through" : "none" }}>{item.title}</div>
               <div style={{ fontSize: 9, color: item.color }}>{item.moduleLabel}</div>
             </div>
+            <button onClick={() => apagarObjetivo(item)} aria-label={"Apagar objetivo " + item.title}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 8, display: "flex", flexShrink: 0 }}>
+              <Ico n="x" size={13} color={C.muted}/>
+            </button>
           </div>
         ))}
 
