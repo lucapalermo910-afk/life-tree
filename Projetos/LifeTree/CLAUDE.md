@@ -55,7 +55,7 @@ Autocuidado, Conhecimento, Relacionamentos). Ao levar o plano pelo Coach para um
 nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente variações.
 
 **Criação e roteamento**
-- Objetivo nasce pelo **Desejo (Kether)**, no botão **"+"** (`BotaoMais`: 20 px visível, toque de 32 px), ou pelo Coach dentro do
+- Objetivo nasce pelo **Desejo (Kether)**, no botão **"+"** (`BotaoMais`: mesmo estilo do "+ Desejo" — fundo claro e borda da cor de destaque — só com o ícone), ou pelo Coach dentro do
   módulo. Onde quer que seja criado, mora no módulo de origem e **aparece no Desejo** (lido
   pelos `GOAL_ADAPTERS`). A aba Objetivos dos módulos tem o mesmo botão "+", que leva ao Desejo
   (`abrirDesejo`). O plano não se edita no Desejo: o toque leva ao módulo.
