@@ -7,7 +7,7 @@
 // netzachActions.js/chokmahActions.js/binahActions.js) — todos seguem o mesmo
 // mecanismo de refresh via evento (coachSync.js).
 
-import { marcosDoObjetivo, limitesDasFases, execucaoDoPlano } from "./planejamento.js";
+import { simularObjetivo, limitesDasFases, execucaoDoPlano } from "./planejamento.js";
 import { dietaDoObjetivo } from "./macros.js";
 
 function readJSON(key, fallback) {
@@ -427,20 +427,23 @@ export function buildTipharethContext() {
 function resumoObjetivoSaude(o, perfil) {
   const inicio = o.criado || new Date().toISOString().slice(0, 10);
   const dieta = o.macros ? dietaDoObjetivo(o, perfil) : null;
-  const marco = marcosDoObjetivo({ dieta, macros: o.macros, inicio, prazo: o.prazo });
+  const sim = simularObjetivo(o, perfil), m = sim?.atual || o.macros;
   const lim = limitesDasFases(o.plano?.steps || [], inicio, o.prazo);
   const ex = execucaoDoPlano(o.plano);
   return {
     id: o.id, titulo: o.title, descricao: o.descricao || null, prazo: o.prazo || null, criado: o.criado || null,
     execucao: ex.total ? ex.feitas + " de " + ex.total + " tarefas" : "sem tarefas",
     resultados: o.krs || null,
-    dieta: dieta ? { peso_kg: dieta.peso_kg, peso_meta_kg: dieta.peso_meta_kg, treinos_semana: dieta.treinos_semana, ajustes: o.ajustes || null,
-      calorias: o.macros.cal, proteina_g: o.macros.prot, ritmo_kg_semana: o.macros.kgSemana, semanas_ate_meta: o.macros.semanas } : null,
+    // Valores calculados pela simulação dia a dia (basal cai com o peso; treino e cardio por
+    // minutos). Use-os para explicar — nunca recalcule à mão.
+    dieta: dieta && m ? { peso_inicial_kg: dieta.peso_kg, peso_meta_kg: dieta.peso_meta_kg, duracao_treino_min: m.duracaoTreino, ajustes: o.ajustes || null,
+      calorias_hoje: m.cal, proteina_g: m.prot, gasto_hoje_kcal: m.gasto, gasto_partes: { dia_a_dia: m.base, treino: m.kcalTreinoDia, cardio: m.kcalCardioDia },
+      ritmo_kg_semana_hoje: m.kgSemana, data_estimada_meta: sim?.chegada || null, peso_no_prazo_kg: sim?.pesoNoPrazo ?? null } : null,
     etapas: (o.plano?.steps || []).map((s, i) => {
       const m = String(s.title || "").match(/^([^:]{3,40}):\s*([\s\S]*)$/);
       const periodo = m ? m[1].trim() : null;
       return { etapa: i + 1, periodo, titulo: m ? m[2].trim() : s.title, fim: lim[i]?.fim || null, semana: s.semana || null, revisao: s.revisao || null,
-        marco_calculado: marco && periodo ? marco(periodo) : null,
+        marco_calculado: sim?.marcos[i] || null, calorias_da_etapa: sim?.etapas[i]?.cal || null,
         tarefas: (s.tarefas || []).map(t => ({ id: t.id, texto: t.texto, ate: t.ate, feita: !!t.done })) };
     }),
     rotina: o.plano?.rotina || (o.plano?.habitoSugerido ? [o.plano.habitoSugerido] : []),
@@ -1010,7 +1013,7 @@ ROTINA DE TREINO E EXERCÍCIO (grupos musculares válidos: Peito, Costas, Ombros
 25. {"action":"create_exercise","nome":"...","grupo":"...","equip":"... (opcional)","inst":"... (opcional, instruções)"}
 
 OBJETIVO COM PLANO
-26. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":[{"periodo":"06/11 a 30/11/2026","titulo":"Adaptação","semana":{"treinos_semana":3,"cardio_min_semana":60,"divisao":"ABC"},"tarefas":[{"texto":"Pesar e medir a cintura","ate":"2026-11-08"},{"texto":"Fixar 3 horários de treino na agenda","ate":"2026-11-08"}],"revisao":"Se o peso ficar mais de 1 kg acima do marco, ajustar o ritmo da dieta"},{"periodo":"01/12 a 31/01/2027","titulo":"Progressão", ...}],"rotina":["Treinar conforme o programa da semana","Registrar a alimentação todo dia","Pesar 1x por semana, mesmo dia e horário"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."]},"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","peso_meta_kg":75}}
+26. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":[{"periodo":"06/11 a 30/11/2026","titulo":"Adaptação","semana":{"treinos_semana":3,"cardio_min_semana":60,"divisao":"ABC"},"tarefas":[{"texto":"Pesar e medir a cintura","ate":"2026-11-08"},{"texto":"Fixar 3 horários de treino na agenda","ate":"2026-11-08"}],"revisao":"Se o peso ficar mais de 1 kg acima do marco, ajustar o ritmo da dieta"},{"periodo":"01/12 a 31/01/2027","titulo":"Progressão", ...}],"rotina":["Treinar conforme o programa da semana","Registrar a alimentação todo dia","Pesar 1x por semana, mesmo dia e horário"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."]},"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","peso_meta_kg":75,"duracao_treino_min":60}}
    "dieta" e "resultados" são opcionais. A meta de treino vai em "semana" DENTRO de cada fase (não mande bloco "treino" separado). "dieta": inclua quando o objetivo envolver peso, gordura ou massa muscular (os treinos por semana da dieta vêm da fase atual).
 
 EDITAR E APAGAR OBJETIVO (o resumo traz em "objetivos" o plano completo: id, etapas numeradas, tarefas com id, metas e marcos calculados)
@@ -1039,7 +1042,7 @@ PROTOCOLO "OBJETIVO COM PLANO" (toda vez que o usuário disser "quero criar o ob
 7. 2-3 itens de impacto positivo e 2-3 de impacto negativo honestos (riscos e custos reais, não clichês).
 8. Só depois que o usuário confirmar o objetivo, e numa resposta seguinte, ofereça transformar o primeiro marco em rotina de treino (create_routine) — proposta separada, sem insistir.
 9. METAS DE TREINO: vão em "semana" de cada fase (passo 4). Escolha a divisão pela frequência (ex: 2-3x → "A" ou "AB"; 4x → "AB" ou "ABCD"; 5-6x → "ABC" ou "ABCDE") e pelo nível informado. O app mostra a meta da fase atual e a sequência da semana; não repita esses números no texto.
-10. METAS DE DIETA: quando o objetivo envolver peso, gordura ou massa muscular, inclua o bloco "dieta" com peso atual, altura, idade, sexo e peso-meta. Se faltar idade ou sexo (veja "perfil"), pergunte junto no passo 2. O APP calcula calorias e macros a partir desse bloco e mostra ao usuário antes de confirmar: NÃO escreva números de calorias, proteína, carboidrato ou gordura no texto (você erraria a conta e eles divergiriam do cálculo). No texto, diga só que as metas de dieta calculadas aparecem abaixo do plano e explique em 1-2 frases a lógica (déficit moderado, proteína alta para preservar massa magra, carboidrato para sustentar o treino). Não monte cardápio nem dieta restritiva. Se o usuário usar medicação que afeta apetite ou peso (ex: Monjaro, Ozempic), diga para confirmar as metas com o médico ou nutricionista que acompanha.
+10. METAS DE DIETA: quando o objetivo envolver peso, gordura ou massa muscular, inclua o bloco "dieta" com peso atual, altura, idade, sexo, peso-meta e a duração média de cada treino em minutos ("duracao_treino_min"; pergunte se não souber). O app estima o gasto do dia a dia, dos treinos e do cardio e simula a perda dia a dia com o basal caindo junto com o peso; a data estimada e os marcos vêm dessa simulação. Se faltar idade ou sexo (veja "perfil"), pergunte junto no passo 2. O APP calcula calorias e macros a partir desse bloco e mostra ao usuário antes de confirmar: NÃO escreva números de calorias, proteína, carboidrato ou gordura no texto (você erraria a conta e eles divergiriam do cálculo). No texto, diga só que as metas de dieta calculadas aparecem abaixo do plano e explique em 1-2 frases a lógica (déficit moderado, proteína alta para preservar massa magra, carboidrato para sustentar o treino). Não monte cardápio nem dieta restritiva. Se o usuário usar medicação que afeta apetite ou peso (ex: Monjaro, Ozempic), diga para confirmar as metas com o médico ou nutricionista que acompanha.
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar/ajustar algo, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação

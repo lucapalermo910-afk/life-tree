@@ -156,6 +156,22 @@ como você, capaz de fazer toda e qualquer modificação, exclusão ou input")**
 - Textos de interface em português, curtos. Sem quadros de "protótipo"/"teste" em telas
   que o usuário já usa.
 
+**Estimativa realista de peso e calorias (07/11/2026, pedido do usuário: "estimar tudo o
+mais próximo do comportamento real possível, considerando a queda do metabolismo basal")**
+- Camada 1 (feita) — **plano**: gasto EXPLÍCITO (`gastoDiario` em `shared/macros.js`): basal
+  Mifflin × 1,2 (dia a dia) + treino (sessões × `duracao_treino_min` × MET 5 líquido) + cardio
+  (minutos × MET 5 líquido). Nada de multiplicador por nº de treinos. **Simulação dia a dia**
+  (`simularPlano`/`simularObjetivo` em `shared/planejamento.js`): calorias replanejadas no
+  início de cada etapa com o peso esperado e o treino/cardio dela; o peso cai pelo déficit do
+  dia com o gasto recalculado pelo peso do dia (÷ 7.700). Data estimada da meta, marcos e
+  "no prazo: X kg" saem daí. O GeburahModule sincroniza as metas da Nutrição com a etapa atual.
+- Camada 2 (próxima) — **aterrissado**: quando dieta (cardápio/plano alimentar) e rotina de
+  treino estiverem definidas nas outras abas da Saúde, recalcular com esses dados concretos.
+- Camada 3 (depois) — **real × estimado**: o dado principal é a **tendência das pesagens**
+  (média móvel), não o diário alimentar, que costuma subestimar o consumo; comida e treino
+  registrados explicam a diferença. Recalibrar o gasto pelo ritmo real.
+- Nunca mostrar só a linha reta; números de energia sempre vindos dessas funções.
+
 **Exportar e backup (06/11/2026)**
 - Todo `PlanoCard` de objetivo salvo recebe `onExportar`: botão "↗ Exportar plano (.md)" no
   fim, que gera o Markdown (`shared/exportar.js` → `planoParaMarkdown`) e abre o Compartilhar

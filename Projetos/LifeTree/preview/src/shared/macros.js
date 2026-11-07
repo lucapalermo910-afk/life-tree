@@ -6,7 +6,14 @@
 //
 // Premissas (todas ajustáveis aqui, num lugar só):
 // - Gasto basal: Mifflin-St Jeor (mesma fórmula do calcTDEE do GeburahModule).
-// - Fator de atividade pela frequência de treino do plano.
+// - Gasto total EXPLÍCITO (07/11/2026, pedido do usuário: "estimar tudo o mais próximo do
+//   comportamento real"): basal × 1,2 (dia a dia sem treino) + gasto líquido dos treinos
+//   (sessões × duração × MET 5 da musculação) + gasto líquido do cardio (minutos × MET 5,
+//   moderado). Líquido = (MET − 1), para não contar duas vezes o basal daquele tempo.
+//   Antes era um multiplicador por nº de treinos (1,55 → 1,725), que dava ~2.100 kcal/semana
+//   a mais por UM treino a mais e ignorava o cardio.
+// - A data da meta e os marcos saem da simulação dia a dia em shared/planejamento.js
+//   (simularPlano), com o basal caindo junto com o peso.
 // - Perda: déficit de ~0,7% do peso por semana (7700 kcal por kg de gordura), limitado a 25%
 //   do gasto total, e nunca abaixo do gasto basal nem de 1500 (homem) / 1200 (mulher) kcal.
 // - Proteína: 1,8 g por kg do peso-meta (protege a massa magra no déficit; com IMC alto,
@@ -16,6 +23,19 @@
 
 export const FATOR_POR_TREINOS = (n) => (n <= 0 ? 1.2 : n <= 2 ? 1.375 : n <= 4 ? 1.55 : n <= 6 ? 1.725 : 1.9);
 
+export const ATIVIDADE_BASE = 1.2, MET_MUSCULACAO = 5, MET_CARDIO = 5, DURACAO_TREINO_PADRAO = 60;
+const kcalLiquidoMin = (met, peso) => ((met - 1) * 3.5 * peso) / 200;
+export const tmbDe = ({ peso, altura, anos, masc }) => 10 * peso + 6.25 * altura - 5 * anos + (masc ? 5 : -161);
+// Gasto diário (kcal) com o peso do dia — usado no cálculo das metas e na simulação.
+export function gastoDiario(peso, { altura_cm, idade, sexo, treinos_semana, cardio_min_semana, duracao_treino_min }) {
+  const masc = String(sexo || "").toUpperCase().startsWith("M");
+  const tmb = tmbDe({ peso, altura: Number(altura_cm), anos: Number(idade), masc });
+  const dur = Number(duracao_treino_min) > 0 ? Number(duracao_treino_min) : DURACAO_TREINO_PADRAO;
+  const treino = ((Number(treinos_semana) || 0) * dur * kcalLiquidoMin(MET_MUSCULACAO, peso)) / 7;
+  const cardio = ((Number(cardio_min_semana) || 0) * kcalLiquidoMin(MET_CARDIO, peso)) / 7;
+  return { tmb, base: tmb * ATIVIDADE_BASE, treino, cardio, total: tmb * ATIVIDADE_BASE + treino + cardio, duracao: dur };
+}
+
 const r5 = (x) => Math.round(x / 5) * 5;
 
 // `ajustes` (06/11/2026, pedido do usuário: "ao editar as metas o quadro precisa recalcular"):
@@ -24,16 +44,15 @@ const r5 = (x) => Math.round(x / 5) * 5;
 // - prot: proteína (g) fixada à mão → o carboidrato absorve a diferença
 // Só um de kgSemana/cal vale por vez (quem chama limpa o outro). O piso de segurança
 // continua valendo: se a perda pedida exigir comer abaixo dele, o cartão avisa.
-export function calcularMacros({ peso_kg, altura_cm, idade, sexo, treinos_semana, peso_meta_kg }, ajustes = {}) {
+export function calcularMacros(dietaIn, ajustes = {}) {
+  const { peso_kg, altura_cm, idade, sexo, treinos_semana, peso_meta_kg } = dietaIn;
   const peso = Number(peso_kg), altura = Number(altura_cm), anos = Number(idade);
-  const treinos = Number(treinos_semana) || 0;
   const masc = String(sexo || "").toUpperCase().startsWith("M");
   if (!(peso > 30 && altura > 120 && anos >= 16)) return { ok: false, faltando: "peso, altura e idade (16 anos ou mais)" };
   const meta = Number(peso_meta_kg) > 30 ? Number(peso_meta_kg) : peso;
 
-  const tmb = 10 * peso + 6.25 * altura - 5 * anos + (masc ? 5 : -161);
-  const fator = FATOR_POR_TREINOS(treinos);
-  const gasto = tmb * fator;
+  const g = gastoDiario(peso, dietaIn);
+  const tmb = g.tmb, fator = ATIVIDADE_BASE, gasto = g.total;
 
   const objetivo = meta < peso - 0.5 ? "perder" : meta > peso + 0.5 ? "ganhar" : "manter";
   const piso = Math.max(tmb, masc ? 1500 : 1200);
@@ -61,6 +80,8 @@ export function calcularMacros({ peso_kg, altura_cm, idade, sexo, treinos_semana
   return {
     ok: true, objetivo,
     tmb: Math.round(tmb), fator, gasto: Math.round(gasto),
+    base: Math.round(g.base), kcalTreinoDia: Math.round(g.treino), kcalCardioDia: Math.round(g.cardio), duracaoTreino: g.duracao,
+    treinos_semana: Number(treinos_semana) || 0, cardio_min_semana: Number(dietaIn.cardio_min_semana) || 0,
     cal: calorias, prot, carb, gord,
     kgSemana: Math.round(kgSemana * 100) / 100, semanas,
     limitadoPeloPiso,

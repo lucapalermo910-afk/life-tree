@@ -13,6 +13,7 @@ import { NutriTab, AddAlimentoSheet, AddRefeicaoSheet, AddReceitaSheet, EditRece
 import { PlanejamentoTab, PlanRefeicaoSheet } from "./geburah/PlanejamentoTab.jsx";
 import { MedidasTab, RegistrarPesoSheet, EditMetaPesoSheet, AddMedidasSheet } from "./geburah/MedidasTab.jsx";
 import { ObjetivosTab } from "./geburah/ObjetivosTab.jsx";
+import { simularObjetivo } from "./shared/planejamento.js";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
@@ -62,6 +63,16 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
   // Objetivos com plano (04/11/2026) — criados pelo Coach (create_objective), editados na aba Objetivos.
   const [objetivos, setObjetivos] = usePersisted("objetivos", [], coachSyncTick);
   const [planSem,   setPlanSem]   = usePersisted("planSem",  {}); // {YYYY-MM-DD_refeicao: [alimentoId,...]}
+
+  // Metas de dieta seguem o plano (07/11/2026): a simulação replaneja as calorias a cada
+  // etapa (peso esperado + treino/cardio da etapa). Ao abrir o módulo — e na virada de etapa —
+  // as metas diárias da Nutrição e o objetivo ficam com os valores de hoje.
+  useEffect(()=>{
+    const o=objetivos.find(x=>x.macros&&!x.done); if(!o) return;
+    const m=simularObjetivo(o,perfil)?.atual; if(!m?.ok) return;
+    if(metas.cal!==m.cal||metas.prot!==m.prot||metas.carb!==m.carb||metas.gord!==m.gord) setMetas(p=>({...p,cal:m.cal,prot:m.prot,carb:m.carb,gord:m.gord}));
+    if(o.macros.cal!==m.cal||o.macros.chegada!==m.chegada) setObjetivos(p=>p.map(x=>x.id===o.id?{...x,macros:m}:x));
+  },[objetivos,perfil,metas]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── MIGRAÇÃO: biblioteca de exercícios (09/08/2026) ──────────────────────────
   // `exercicios` só recebe D_EX_BASE/D_EX_MUSC/D_EX_ARTES como default na 1ª carga
