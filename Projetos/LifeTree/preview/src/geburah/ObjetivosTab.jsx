@@ -147,8 +147,8 @@ export function ObjetivosTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0 10px" }}>
         <div style={{ fontSize: 13, fontWeight: 800 }}>Objetivos</div>
         {abrirDesejo && (
-          <Btn sm full={false} color={ACCENT} onClick={abrirDesejo} aria-label="Novo objetivo" title="Novo objetivo">
-            <Ico n="plus" size={14} />
+          <Btn sm full={false} color={ACCENT} onClick={abrirDesejo} aria-label="Novo objetivo" title="Novo objetivo" style={{ width: 26, height: 26, padding: 0, borderRadius: 8 }}>
+            <Ico n="plus" size={13} />
           </Btn>
         )}
       </div>
