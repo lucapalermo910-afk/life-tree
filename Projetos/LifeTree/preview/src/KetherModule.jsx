@@ -380,8 +380,8 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>OBJETIVOS</div>
           {!criandoObj && (
             <button onClick={() => setCriandoObj(true)} aria-label="Novo objetivo" title="Novo objetivo"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, background: ACCENT, border: "none", borderRadius: 10, cursor: "pointer", padding: 0 }}>
-              <Ico n="plus" size={16} color="#04222a" sw={2.4}/>
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, background: ACCENT, border: "none", borderRadius: 8, cursor: "pointer", padding: 0 }}>
+              <Ico n="plus" size={13} color="#04222a" sw={2.4}/>
             </button>
           )}
         </div>
