@@ -1266,6 +1266,7 @@ export default function App() {
               {pendingCoachAction?.action?.plano&&(
                 <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
                   tituloPassos={pendingCoachAction.skillId==="geburah"?"LINHA DO TEMPO":undefined}
+                  rotuloPasso={pendingCoachAction.skillId==="geburah"?"Etapa":null}
                   renderDetalhe={pendingCoachAction.skillId==="geburah"?(s,i)=>{
                     const a=pendingCoachAction.action;
                     const marco=marcosDoObjetivo({dieta:a.dieta,macros:a.macrosPrevia,inicio:hojeLocal(),prazo:a.prazo});
@@ -1276,7 +1277,7 @@ export default function App() {
                     (pendingCoachAction.action.treino||pendingCoachAction.action.plano.steps.some(s=>s.semana))&&{chave:"treino",titulo:"Metas de treino",render:()=>{
                       const a=pendingCoachAction.action, f=a.plano.steps.findIndex(s=>s.semana);
                       return <TreinoCard C={C} t={f>=0?a.plano.steps[f].semana:normalizarTreino(a.treino)} accent={coachAccent} prazo={a.prazo} inicio={hojeLocal()}
-                        subtitulo={f>=0?"Fase "+(f+1):null} totais={totaisDasFases(a.plano.steps,hojeLocal(),a.prazo)}/>;
+                        subtitulo={f>=0?"Etapa "+(f+1):null} totais={totaisDasFases(a.plano.steps,hojeLocal(),a.prazo)}/>;
                     }},
                     pendingCoachAction.action.macrosPrevia&&{chave:"dieta",titulo:"Metas de dieta",render:()=><MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>},
                   ]}

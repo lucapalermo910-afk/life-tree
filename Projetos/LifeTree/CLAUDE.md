@@ -55,8 +55,10 @@ Autocuidado, Conhecimento, Relacionamentos). Ao levar o plano pelo Coach para um
 nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente variações.
 
 **Criação e roteamento**
-- Objetivo é criado **só no Desejo (Kether)**, pelo "+ Objetivo". Os módulos não criam:
-  a aba Objetivos deles tem o botão **"+ Novo"**, que leva ao Desejo (`abrirDesejo`).
+- Objetivo nasce pelo **Desejo (Kether)**, no botão **"+ Novo"**, ou pelo Coach dentro do
+  módulo. Onde quer que seja criado, mora no módulo de origem e **aparece no Desejo** (lido
+  pelos `GOAL_ADAPTERS`). A aba Objetivos dos módulos tem "+ Novo", que leva ao Desejo
+  (`abrirDesejo`). O plano não se edita no Desejo: o toque leva ao módulo.
 - Sem etiquetas de área na criação: a área é sugerida pelo texto (`shared/areaObjetivo.js`)
   e aparece como "Vai para: X (sugerido) · Trocar". Área sem plano pelo Coach = "em breve".
 - A skill do Coach escolhida no Desejo fica **travada** até confirmar ou cancelar
@@ -92,7 +94,11 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
   dieta usa os treinos da fase atual. Totais até o prazo somam fase a fase. Tocar na fase
   abre o editor (período/nome, meta da semana, tarefas com data, revisão). O círculo da fase
   não marca: fica verde quando todas as tarefas da fase estão feitas.
-- **Tarefas → Controle**: o Malkuth lista "TAREFAS DOS OBJETIVOS" (pendentes primeiro, por
+- **Etapas**: na tela, as fases se chamam **etapas** ("ETAPA 1 · 06/11 a 30/11/2026",
+  "+ Adicionar etapa", `rotuloPasso="Etapa"`), inclusive no Controle e no quadro de treino.
+  Etapa sem tarefas mostra "Sem tarefas. Toque na etapa para adicionar…".
+- **Tarefas: criadas no módulo de origem** (editor da etapa), **marcadas no Controle**. O
+  Malkuth lista "TAREFAS DOS OBJETIVOS" (pendentes primeiro, por
   data, atrasadas em destaque) e marca via `GEBURAH_ACTION_HANDLERS.toggle_tarefa_objetivo`.
 - **Gauge do objetivo = % de tarefas feitas** (`execucaoDoPlano`), igual na Saúde, no Desejo e
   no Controle, com "N de M tarefas · faltam N dias".

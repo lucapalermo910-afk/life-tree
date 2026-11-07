@@ -275,14 +275,14 @@ function partesDoPasso(t) {
 // `metas`: lista [{ chave, titulo, render(editando), onApagar }] (ou um nó, só leitura).
 // Planejamento (06/11/2026): `tituloPassos` (ex: "LINHA DO TEMPO"), `renderDetalhe(passo, i)` →
 // conteúdo extra da fase (meta da semana, tarefas, revisão, marco), `renderEditor(passo, patch)`
-// → editor próprio da fase, `passoFeito(passo)` → concluído derivado (ex: todas as tarefas
+// → editor próprio da fase, `rotuloPasso` (ex: "Etapa" → "ETAPA 1 · 06/11 a 30/11/2026"), `passoFeito(passo)` → concluído derivado (ex: todas as tarefas
 // feitas no Controle). Sem `onToggleStep`, o círculo só mostra o estado. `plano.rotina` =
 // lista de hábitos, se existir.
 // `editando`/`onEditando` (booleanos): quem chama pode abrir o cabeçalho em edição (ex:
 // "Editar" vindo do Desejo) e fica sabendo quando algum item está em edição.
 export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
   nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando,
-  tituloPassos = "PASSO A PASSO", renderDetalhe = null, renderEditor = null, passoFeito = null }) {
+  tituloPassos = "PASSO A PASSO", rotuloPasso = null, renderDetalhe = null, renderEditor = null, passoFeito = null }) {
   const [chave, setChaveInt] = useState(editandoExt ? "cabecalho" : null);
   const setChave = (k) => { setChaveInt(k); if (onEditando) onEditando(!!k); };
   // Quem chama abriu/fechou a edição: ajusta durante o render.
@@ -397,7 +397,7 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
               <button
                 onClick={onToggleStep ? () => onToggleStep(s.id) : undefined} disabled={!onToggleStep}
-                aria-label={onToggleStep ? (feito ? "Desmarcar" : "Marcar") + " passo " + (i + 1) : "Fase " + (i + 1) + (feito ? " concluída" : "")}
+                aria-label={onToggleStep ? (feito ? "Desmarcar" : "Marcar") + " passo " + (i + 1) : (rotuloPasso || "Passo") + " " + (i + 1) + (feito ? " concluída" : "")}
                 style={{
                   width: 26, height: 26, borderRadius: 99, flexShrink: 0, cursor: onToggleStep ? "pointer" : "default", padding: 0,
                   border: "2px solid " + (feito ? "#10b981" : accent), background: feito ? "#10b981" : "transparent",
@@ -414,7 +414,9 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
                   : <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} strike={s.done} dim={s.done} autoFocus />, () => removeStep(s.id), "Apagar passo " + (i + 1))
               ) : (
                 <div aria-label={"Passo " + (i + 1)} {...tocar("passo:" + s.id)}>
-                  {periodo && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>{periodo}</div>}
+                  {(periodo || rotuloPasso) && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>
+                    {rotuloPasso ? rotuloPasso.toUpperCase() + " " + (i + 1) + (periodo ? " · " : "") : ""}{periodo}
+                  </div>}
                   <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done && !passoFeito ? "line-through" : "none", fontWeight: renderDetalhe ? 700 : 400,
                     overflowWrap: "anywhere", marginTop: periodo ? 0 : 4 }}>{texto || <em style={{ color: C.muted }}>vazio</em>}</div>
                   {renderDetalhe && renderDetalhe(s, i)}
@@ -424,7 +426,7 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
           </div>
         );
       })}
-      {adicionar("Adicionar passo", addStep)}
+      {adicionar("Adicionar " + (rotuloPasso ? rotuloPasso.toLowerCase() : "passo"), addStep)}
 
       {Array.isArray(plano.rotina) && lista("rotina", "ROTINA", accent, "↻")}
       {lista("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
