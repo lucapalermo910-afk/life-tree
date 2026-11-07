@@ -379,7 +379,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>OBJETIVOS</div>
           {!criandoObj && (
-            <BotaoMais onClick={() => setCriandoObj(true)} accent={ACCENT} cor="#04222a" />
+            <BotaoMais onClick={() => setCriandoObj(true)} accent={ACCENT} />
           )}
         </div>
         {criandoObj && (
