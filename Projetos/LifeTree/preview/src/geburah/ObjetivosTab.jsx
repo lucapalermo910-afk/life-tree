@@ -21,6 +21,7 @@ import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.
 import { ResultadosCard } from "../shared/ResultadosCard.jsx";
 import { normalizarResultados, marcosDoObjetivo, comRotina, treinoAtual, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
 import { FaseDetalhe, FaseEditor } from "../shared/FaseSaude.jsx";
+import { planoParaMarkdown, compartilharArquivo, nomeArquivo } from "../shared/exportar.js";
 
 function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
   return (
@@ -124,6 +125,16 @@ export function ObjetivosTab() {
     const o = objetivos.find((x) => x.id === id);
     if (o) gravarComDieta(o, { plano: updater(comRotina(o.plano)) });
   };
+  const exportar = (o) => {
+    const inicio = o.criado || hojeLocal();
+    const md = planoParaMarkdown(o, {
+      area: "Saúde", krs: normalizarResultados(o.krs), dieta: dietaVigente(o), macros: macrosVigentes(o), treino: treinoVigente(o),
+      totais: totaisDasFases(o.plano?.steps, inicio, o.prazo),
+      marco: marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio, prazo: o.prazo }),
+      fimDaEtapa: (i) => limitesDasFases(o.plano.steps, inicio, o.prazo)[i]?.fim,
+    });
+    compartilharArquivo(nomeArquivo(o.title, "md"), md);
+  };
   const apagar = (o) => {
     if (!window.confirm("Apagar o objetivo '" + o.title + "' e o plano dele?")) return;
     setObjetivos((p) => p.filter((x) => x.id !== o.id));
@@ -157,7 +168,7 @@ export function ObjetivosTab() {
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
-                    tituloPassos="LINHA DO TEMPO" rotuloPasso="Etapa"
+                    tituloPassos="LINHA DO TEMPO" rotuloPasso="Etapa" onExportar={() => exportar(o)}
                     renderDetalhe={(s, i) => {
                       const marco = marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio: o.criado || hojeLocal(), prazo: o.prazo });
                       return <FaseDetalhe C={C} s={s} accent={ACCENT} marco={marco && marco(periodoDe(s.title))} fim={limitesDasFases(o.plano.steps, o.criado || hojeLocal(), o.prazo)[i]?.fim} />;

@@ -5,6 +5,7 @@ import { Ico } from "./icons.jsx";
 import { fmt } from "./constants.js";
 import { YesodCtx } from "./context.js";
 import { YESOD_ACTION_HANDLERS } from "../shared/yesodActions.js";
+import { planoParaMarkdown, compartilharArquivo, nomeArquivo } from "../shared/exportar.js";
 import {
   readIfPlan,
   criarIfPlan as criarIfPlanShared,
@@ -69,7 +70,8 @@ function GoalRow({ g, C, net, expanded, editando, onEditar, onToggleExpand, onTo
           <PlanoCard C={C} plano={g.plano} descricao={g.descricao||null} accent={ACCENT} onToggleStep={stepId => onToggleStep(g.id, stepId)} onUpdate={updater => onUpdatePlano(g.id, updater)}
             nome={g.title} onNome={v => setYGoals(p => p.map(x => x.id === g.id ? { ...x, title: v } : x))}
             onDescricao={v => setYGoals(p => p.map(x => x.id === g.id ? { ...x, descricao: v } : x))}
-            editando={editando} onEditando={onEditar} />
+            editando={editando} onEditando={onEditar}
+            onExportar={() => compartilharArquivo(nomeArquivo(g.title, "md"), planoParaMarkdown(g, { area: "Finanças" }))} />
         </div>
       )}
     </div>

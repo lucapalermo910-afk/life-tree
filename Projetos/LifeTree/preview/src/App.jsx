@@ -19,6 +19,7 @@ import { normalizarTreino, hojeLocal } from "./shared/treino.js";
 import { ResultadosCard } from "./shared/ResultadosCard.jsx";
 import { normalizarResultados, marcosDoObjetivo, comRotina, normalizarFase, limitesDasFases, totaisDasFases } from "./shared/planejamento.js";
 import { FaseDetalhe } from "./shared/FaseSaude.jsx";
+import { lerModulos, restaurarModulos, compartilharArquivo } from "./shared/exportar.js";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -890,7 +891,9 @@ export default function App() {
     setPendingCoachAction(null);
   };
 
-  const buildBackup=()=>JSON.stringify({areas,diary,widgetConfig,finScore,dark,_v:4,_ts:new Date().toISOString()},null,2);
+  // Backup v5 (06/11/2026): leva também TODOS os dados dos módulos (chaves lifetree_*:
+  // objetivos e planos, metas, perfil, pesagens, finanças…). Até a v4 ficavam de fora.
+  const buildBackup=()=>JSON.stringify({areas,diary,widgetConfig,finScore,dark,modulos:lerModulos(),_v:5,_ts:new Date().toISOString()},null,2);
 
   const doExport=()=>{
     const txt=buildBackup();
@@ -898,11 +901,24 @@ export default function App() {
       navigator.clipboard.writeText(txt).then(()=>{setCopiedBackup(true);setTimeout(()=>setCopiedBackup(false),2500);});
     }
   };
+  const doExportArquivo=()=>compartilharArquivo("lifetree-backup-"+new Date().toISOString().slice(0,10)+".json",buildBackup(),"application/json");
+  const abrirArquivoBackup=(e)=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    f.text().then(t=>setImportText(t)); e.target.value="";
+  };
 
   const doImport=()=>{
     setImportError("");
     try{
       const d=JSON.parse(importText);
+      // Backup v5: grava os dados dos módulos e recarrega, para cada módulo ler do zero.
+      if(d.modulos){
+        if(!window.confirm("Restaurar o backup de "+(d._ts?new Date(d._ts).toLocaleString("pt-BR"):"data desconhecida")+"? Os dados atuais dos módulos serão substituídos pelos do backup.")) return;
+        restaurarModulos(d.modulos);
+        toast_("Backup restaurado! Recarregando…","#34d399");
+        setTimeout(()=>window.location.reload(),700);
+        return;
+      }
       if(d.areas)     setAreas(d.areas);
       if(d.diary)     setDiary(d.diary);
       if(d.widgetConfig) setWidgetConfig(d.widgetConfig);
@@ -1389,24 +1405,32 @@ export default function App() {
             <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:.8,marginBottom:8}}>EXPORTAR DADOS</div>
             <div style={{background:C.bg,border:"1px solid "+C.b1,borderRadius:10,padding:12,marginBottom:10,
               fontSize:9,color:C.dim,fontFamily:"monospace",lineHeight:1.6}}>
-              {`áreas: ${areas.length} · diário: ${diary.length} entradas · finScore: ${finScore}%`}
+              {`áreas: ${areas.length} · diário: ${diary.length} entradas · finScore: ${finScore}%`}<br/>
+              {`objetivos de saúde: ${(()=>{try{return JSON.parse(localStorage.getItem("lifetree_geb_objetivos")||"[]").length}catch{return 0}})()} · dados de módulos: ${Object.keys(lerModulos()).length} itens`}
             </div>
-            <PBtn color="#10b981" onClick={doExport}>
-              <Icon name="copy" size={13} color="#fff"/>
-              <span style={{marginLeft:4}}>{copiedBackup?"✓ Copiado!":"Copiar JSON"}</span>
+            <PBtn color="#10b981" onClick={doExportArquivo}>
+              <Icon name="download" size={13} color="#fff"/>
+              <span style={{marginLeft:4}}>Salvar arquivo de backup</span>
             </PBtn>
+            <button onClick={doExport} style={{display:"block",width:"100%",marginTop:8,padding:"8px",borderRadius:9,border:"1px solid "+C.b1,background:"transparent",color:C.muted,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              {copiedBackup?"✓ Copiado!":"Copiar como texto"}
+            </button>
             <div style={{fontSize:9,color:C.muted,marginTop:6,textAlign:"center",lineHeight:1.5}}>
-              Cole num Google Keep ou bloco de notas para guardar o backup
+              Inclui objetivos, planos, metas e os dados de todos os módulos. Guarde o arquivo no Drive ou mande para você mesmo.
             </div>
           </div>
 
           <div style={{marginBottom:18,borderTop:"1px solid "+C.b1,paddingTop:14}}>
             <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:.8,marginBottom:8}}>RESTAURAR BACKUP</div>
             <textarea value={importText} onChange={e=>setImportText(e.target.value)}
-              placeholder="Cole aqui o JSON do backup..."
+              placeholder="Cole aqui o texto do backup, ou abra o arquivo abaixo..."
               style={{width:"100%",minHeight:90,background:C.bg,border:"1px solid "+C.b2,borderRadius:9,
                 padding:"9px 12px",color:C.text,fontSize:11,outline:"none",resize:"vertical",
                 fontFamily:"monospace",boxSizing:"border-box",display:"block"}}/>
+            <label style={{display:"block",marginTop:6,fontSize:11,fontWeight:700,color:C.muted,cursor:"pointer",textAlign:"center"}}>
+              Abrir arquivo de backup (.json)
+              <input type="file" accept=".json,application/json" onChange={abrirArquivoBackup} style={{display:"none"}} aria-label="Abrir arquivo de backup"/>
+            </label>
             {importError&&<div style={{fontSize:10,color:"#ef4444",marginTop:5}}>{importError}</div>}
             <PBtn color="#818cf8" onClick={doImport} style={{marginTop:8}}>
               <Icon name="upload" size={13} color="#fff"/>
