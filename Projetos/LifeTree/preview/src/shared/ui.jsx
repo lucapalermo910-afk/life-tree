@@ -443,3 +443,17 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
     </div>
   );
 }
+
+// Botão "+" de novo objetivo (07/11/2026, pedido do usuário): quadrado de 20 px visível,
+// mas a área de toque tem 32 px (o resto é transparente) para não errar no celular.
+export function BotaoMais({ onClick, accent = "#818cf8", cor = "#fff", label = "Novo objetivo" }) {
+  return (
+    <button onClick={onClick} aria-label={label} title={label}
+      style={{ width: 32, height: 32, margin: -6, padding: 0, border: "none", background: "transparent", cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      <span style={{ width: 20, height: 20, borderRadius: 6, background: accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke={cor} strokeWidth="2.2" strokeLinecap="round" /></svg>
+      </span>
+    </button>
+  );
+}
