@@ -19,7 +19,7 @@ import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
 import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.js";
 import { ResultadosCard } from "../shared/ResultadosCard.jsx";
-import { normalizarResultados, marcosDoObjetivo, comRotina, treinoAtual, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
+import { normalizarResultados, marcosDoObjetivo, comRotina, treinoAtual, ajustarPrazo, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
 import { FaseDetalhe, FaseEditor } from "../shared/FaseSaude.jsx";
 import { planoParaMarkdown, compartilharArquivo, nomeArquivo } from "../shared/exportar.js";
 
@@ -167,7 +167,7 @@ export function ObjetivosTab() {
                 ? <PlanoCard C={C} plano={comRotina(o.plano)} accent={ACCENT} onToggleStep={o.plano.steps.some((s) => s.tarefas) ? null : (sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
-                    prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
+                    prazo={o.prazo || null} onPrazo={(v) => gravarComDieta(o, ajustarPrazo(o, v))}
                     tituloPassos="LINHA DO TEMPO" rotuloPasso="Etapa" onExportar={() => exportar(o)}
                     renderDetalhe={(s, i) => {
                       const marco = marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio: o.criado || hojeLocal(), prazo: o.prazo });

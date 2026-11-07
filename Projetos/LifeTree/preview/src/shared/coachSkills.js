@@ -7,6 +7,9 @@
 // netzachActions.js/chokmahActions.js/binahActions.js) — todos seguem o mesmo
 // mecanismo de refresh via evento (coachSync.js).
 
+import { marcosDoObjetivo, limitesDasFases, execucaoDoPlano } from "./planejamento.js";
+import { dietaDoObjetivo } from "./macros.js";
+
 function readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -421,6 +424,30 @@ export function buildTipharethContext() {
 }
 
 // Geburah (Saúde/Treino) — lifetree_geb_*
+function resumoObjetivoSaude(o, perfil) {
+  const inicio = o.criado || new Date().toISOString().slice(0, 10);
+  const dieta = o.macros ? dietaDoObjetivo(o, perfil) : null;
+  const marco = marcosDoObjetivo({ dieta, macros: o.macros, inicio, prazo: o.prazo });
+  const lim = limitesDasFases(o.plano?.steps || [], inicio, o.prazo);
+  const ex = execucaoDoPlano(o.plano);
+  return {
+    id: o.id, titulo: o.title, descricao: o.descricao || null, prazo: o.prazo || null, criado: o.criado || null,
+    execucao: ex.total ? ex.feitas + " de " + ex.total + " tarefas" : "sem tarefas",
+    resultados: o.krs || null,
+    dieta: dieta ? { peso_kg: dieta.peso_kg, peso_meta_kg: dieta.peso_meta_kg, treinos_semana: dieta.treinos_semana, ajustes: o.ajustes || null,
+      calorias: o.macros.cal, proteina_g: o.macros.prot, ritmo_kg_semana: o.macros.kgSemana, semanas_ate_meta: o.macros.semanas } : null,
+    etapas: (o.plano?.steps || []).map((s, i) => {
+      const m = String(s.title || "").match(/^([^:]{3,40}):\s*([\s\S]*)$/);
+      const periodo = m ? m[1].trim() : null;
+      return { etapa: i + 1, periodo, titulo: m ? m[2].trim() : s.title, fim: lim[i]?.fim || null, semana: s.semana || null, revisao: s.revisao || null,
+        marco_calculado: marco && periodo ? marco(periodo) : null,
+        tarefas: (s.tarefas || []).map(t => ({ id: t.id, texto: t.texto, ate: t.ate, feita: !!t.done })) };
+    }),
+    rotina: o.plano?.rotina || (o.plano?.habitoSugerido ? [o.plano.habitoSugerido] : []),
+    impactoPositivo: o.plano?.impactoPositivo || [], impactoNegativo: o.plano?.impactoNegativo || [],
+  };
+}
+
 export function buildGeburahContext() {
   const pesosMeta = readJSON("lifetree_geb_pesosMeta", {});
   const pesagens = readJSON("lifetree_geb_pesagens", []);
@@ -487,7 +514,9 @@ export function buildGeburahContext() {
     // de perguntar de novo, e só pergunta o que falta.
     perfil: { altura_cm: perfil.altura || null, idade: perfil.idade || null, sexo: perfil.sexo || null, nivel_atividade: perfil.atividade || null },
     treinos_ultimos_30_dias: logTreino.filter(l => (new Date() - new Date(l.data)) / 86400000 <= 30).length,
-    objetivos: objetivos.map(o => ({ titulo: o.title, prazo: o.prazo || null, passos_feitos: o.plano ? o.plano.steps.filter(s => s.done).length : 0, passos_total: o.plano ? o.plano.steps.length : 0 })),
+    // Plano completo (07/11/2026): o Coach precisa enxergar etapas, tarefas (com id) e metas
+    // para editar com update_objective. Marco = peso calculado pelo app no fim da etapa.
+    objetivos: objetivos.map(o => resumoObjetivoSaude(o, perfil)),
   };
 }
 
@@ -984,6 +1013,14 @@ OBJETIVO COM PLANO
 26. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":[{"periodo":"06/11 a 30/11/2026","titulo":"Adaptação","semana":{"treinos_semana":3,"cardio_min_semana":60,"divisao":"ABC"},"tarefas":[{"texto":"Pesar e medir a cintura","ate":"2026-11-08"},{"texto":"Fixar 3 horários de treino na agenda","ate":"2026-11-08"}],"revisao":"Se o peso ficar mais de 1 kg acima do marco, ajustar o ritmo da dieta"},{"periodo":"01/12 a 31/01/2027","titulo":"Progressão", ...}],"rotina":["Treinar conforme o programa da semana","Registrar a alimentação todo dia","Pesar 1x por semana, mesmo dia e horário"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."]},"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","peso_meta_kg":75}}
    "dieta" e "resultados" são opcionais. A meta de treino vai em "semana" DENTRO de cada fase (não mande bloco "treino" separado). "dieta": inclua quando o objetivo envolver peso, gordura ou massa muscular (os treinos por semana da dieta vêm da fase atual).
 
+EDITAR E APAGAR OBJETIVO (o resumo traz em "objetivos" o plano completo: id, etapas numeradas, tarefas com id, metas e marcos calculados)
+27. {"action":"update_objective","objetivo":"id do resumo","titulo":"...","descricao":"...","prazo":"YYYY-MM-DD","etapas":[{"op":"editar","etapa":4,"periodo":"01/02 a 31/03/2027","titulo":"...","semana":{"treinos_semana":5,"cardio_min_semana":210,"divisao":"ABCD"},"revisao":"..."},{"op":"incluir","depois_de":4,"periodo":"...","titulo":"...","semana":{...},"tarefas":[{"texto":"...","ate":"YYYY-MM-DD"}],"revisao":"..."},{"op":"apagar","etapa":2}],"tarefas":[{"op":"incluir","etapa":1,"texto":"...","ate":"YYYY-MM-DD"},{"op":"editar","id":"tf...","texto":"...","ate":"YYYY-MM-DD","feita":true},{"op":"apagar","id":"tf..."}],"rotina":["lista completa nova"],"impactoPositivo":["lista completa"],"impactoNegativo":["lista completa"],"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_meta_kg":75},"ajustes":{"kgSemana":0.7}}
+   Mande SÓ os campos que mudam; tudo numa ação só, mesmo que sejam muitas mudanças. Números de "etapa" e "depois_de" são os do resumo ANTES da mudança. Tarefas por "id" do resumo. "rotina"/"impactos" substituem a lista inteira. "ajustes": kgSemana (perda por semana), cal ou prot fixados pelo usuário; o app recalcula o resto.
+   PRAZO: ao mudar "prazo", o APP já faz a última etapa terminar no novo prazo e troca a data antiga em "descricao" — não precisa mandar etapa nem descricao só por isso.
+   Antes do <ACTION>, liste em texto curto exatamente o que vai mudar (o usuário confirma ou cancela). Nunca escreva pesos no texto das etapas (o marco é calculado pelo app).
+28. {"action":"delete_objective","objetivo":"id do resumo"} — apaga o objetivo inteiro. Só quando o usuário pedir explicitamente; diga o nome antes.
+   Pedido para mudar/apagar/incluir QUALQUER coisa de um objetivo (nome, prazo, etapa, tarefa, meta de treino, dieta, rotina, impactos, resultados-chave) = use 27/28. Nunca responda que não consegue editar o plano.
+
 PROTOCOLO "OBJETIVO COM PLANO" (toda vez que o usuário disser "quero criar o objetivo..." — inclusive quando vier do botão "+ Objetivo" da aba Objetivos — siga este protocolo em vez de propor create_objective de cara):
 1. Mostre em 1-2 frases o status que JÁ existe no resumo (peso_hoje, peso_meta, ultimas_medidas, treinos_ultimos_30_dias, perfil) — não pergunte o que já está lá.
 2. Pergunte só o que falta, em UMA mensagem curta e numerada: rotina (quais dias e horários livres, quantos minutos por sessão), onde treina (casa, academia, rua), nível atual de condicionamento, lesões ou restrições de saúde, e o prazo desejado. Se peso ou altura não estiverem no resumo e forem relevantes, pergunte também.
@@ -1198,7 +1235,35 @@ export function detectModuleFromText(text) {
 // saúde, a 2ª mensagem (as respostas sobre rotina, sem palavra-chave) caía no hub e perdia o
 // protocolo de objetivo com plano. Agora, nesses módulos, a conversa continua na última skill
 // usada até o texto apontar claramente pra outra.
+// Pedido sobre um objetivo que já existe (07/11/2026): vai para o Coach do módulo dono
+// dele, mesmo falando do Desejo ou do Controle — só ele tem as ações de editar o plano.
+const semAcento = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+export function moduloDoObjetivoCitado(text, activeModule = null) {
+  const t = semAcento(text).replace(/(\d)\s+(kg|km)/g, "$1$2");
+  const donos = [["geburah", readJSON("lifetree_geb_objetivos", [])], ["yesod", readJSON("lifetree_fin_ygoals", []).filter(g => g.plano)]];
+  let melhor = null, nota = 0;
+  for (const [mod, lista] of donos) for (const o of lista) {
+    const palavras = semAcento(o.title).replace(/(\d)\s+(kg|km)/g, "$1$2").split(/[^a-z0-9]+/).filter(w => w.length >= 3 || /\d/.test(w));
+    if (!palavras.length) continue;
+    const n = palavras.filter(w => t.includes(w)).length / palavras.length;
+    if (n > nota) { nota = n; melhor = mod; }
+  }
+  if (nota >= 0.5) return melhor;
+  // Palavra genérica ("objetivo", "etapa"…) só decide fora de um módulo com Coach próprio
+  // (Desejo, Controle, árvore) — dentro de Finanças, "plano" é plano financeiro.
+  // Dentro de um módulo com objetivos, falar de etapa/tarefa/objetivo fica nele, mesmo que a
+  // frase tenha palavra de outro módulo ("rotina de sono"); fora, só decide se houver 1 dono.
+  if (/\b(objetivo|etapas?|tarefas?|prazo|plano)\b/.test(t)) {
+    const com = donos.filter(([, l]) => l.length).map(([m]) => m);
+    if (com.includes(activeModule)) return activeModule;
+    if (!(activeModule && COACH_SKILLS[activeModule]) && com.length === 1) return com[0];
+  }
+  return null;
+}
+
 export function pickSkillId(activeModule, text, lastSkillId) {
+  const doObjetivo = moduloDoObjetivoCitado(text, activeModule);
+  if (doObjetivo) return doObjetivo;
   const detected = detectModuleFromText(text);
   if (detected && detected !== activeModule) return detected;
   if (activeModule && COACH_SKILLS[activeModule]) return activeModule;

@@ -109,6 +109,21 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - Piloto na Saúde; levar às outras áreas depois do piloto. (`GoalCard` com `pct={null}`
   continua disponível para objetivo sem tarefas, mas a Saúde usa o gauge.)
 
+**Coach edita tudo do objetivo (07/11/2026, pedido do usuário: "o Coach precisa funcionar
+como você, capaz de fazer toda e qualquer modificação, exclusão ou input")**
+- O resumo do Coach traz o **plano completo** de cada objetivo (id, etapas numeradas, tarefas
+  com id, metas, marcos calculados, rotina, impactos) — `resumoObjetivoSaude` em coachSkills.
+- Ações `update_objective` (qualquer combinação: nome, prazo, objetivo, etapas incluir/editar/
+  apagar, tarefas incluir/editar/marcar/apagar, rotina, impactos, resultados-chave, dieta,
+  ajustes) e `delete_objective`, sempre com confirmação. Recalcula treino da etapa atual,
+  dieta e metas da Nutrição. O prompt proíbe responder "não consigo editar o plano".
+- Rota (`moduloDoObjetivoCitado`): pedido que cita um objetivo existente vai para o Coach do
+  módulo dono, mesmo do Desejo/Controle; dentro do módulo dono, falar de objetivo/etapa/
+  tarefa não troca de Coach por palavra de outro módulo.
+- Área nova com plano: dar ao Coach dela o mesmo resumo completo e as mesmas duas ações.
+- **Trocar o prazo** (na tela ou pelo Coach) passa por `ajustarPrazo`: a última etapa passa a
+  terminar no novo prazo e a data antiga em "O objetivo" vira a nova.
+
 **Visual**
 - **Editar = tocar no item; apagar = ×** (pedido do usuário, 06/11/2026 — "UX mais limpa").
   Sem lápis, lixeira, botão "Editar" ou menu de segurar. Cartão do objetivo (`GoalCard`):
