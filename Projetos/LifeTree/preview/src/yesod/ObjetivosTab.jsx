@@ -264,7 +264,7 @@ export function ObjetivosTab({ C }) {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:13,fontWeight:800}}>Objetivos</div>
               {/* 05/11/2026: objetivos são criados só no Desejo/Kether e aparecem aqui (pedido do usuário). */}
-              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo} aria-label="Novo objetivo" title="Novo objetivo"><Ico n="plus" size={14}/></Btn>}
+              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo} aria-label="Novo objetivo" title="Novo objetivo" style={{width:26,height:26,padding:0,borderRadius:8}}><Ico n="plus" size={13}/></Btn>}
             </div>
             {/* Sem meta de IF configurada: nenhum card/prompt aqui — só a lista de objetivos
                 abaixo (achado 30/08/2026, pedido explícito do usuário: "não tenha nada na aba,
