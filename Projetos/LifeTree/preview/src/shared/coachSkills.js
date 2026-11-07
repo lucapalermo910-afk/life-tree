@@ -7,6 +7,9 @@
 // netzachActions.js/chokmahActions.js/binahActions.js) — todos seguem o mesmo
 // mecanismo de refresh via evento (coachSync.js).
 
+import { marcosDoObjetivo, limitesDasFases, execucaoDoPlano } from "./planejamento.js";
+import { dietaDoObjetivo } from "./macros.js";
+
 function readJSON(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -421,6 +424,30 @@ export function buildTipharethContext() {
 }
 
 // Geburah (Saúde/Treino) — lifetree_geb_*
+function resumoObjetivoSaude(o, perfil) {
+  const inicio = o.criado || new Date().toISOString().slice(0, 10);
+  const dieta = o.macros ? dietaDoObjetivo(o, perfil) : null;
+  const marco = marcosDoObjetivo({ dieta, macros: o.macros, inicio, prazo: o.prazo });
+  const lim = limitesDasFases(o.plano?.steps || [], inicio, o.prazo);
+  const ex = execucaoDoPlano(o.plano);
+  return {
+    id: o.id, titulo: o.title, descricao: o.descricao || null, prazo: o.prazo || null, criado: o.criado || null,
+    execucao: ex.total ? ex.feitas + " de " + ex.total + " tarefas" : "sem tarefas",
+    resultados: o.krs || null,
+    dieta: dieta ? { peso_kg: dieta.peso_kg, peso_meta_kg: dieta.peso_meta_kg, treinos_semana: dieta.treinos_semana, ajustes: o.ajustes || null,
+      calorias: o.macros.cal, proteina_g: o.macros.prot, ritmo_kg_semana: o.macros.kgSemana, semanas_ate_meta: o.macros.semanas } : null,
+    etapas: (o.plano?.steps || []).map((s, i) => {
+      const m = String(s.title || "").match(/^([^:]{3,40}):\s*([\s\S]*)$/);
+      const periodo = m ? m[1].trim() : null;
+      return { etapa: i + 1, periodo, titulo: m ? m[2].trim() : s.title, fim: lim[i]?.fim || null, semana: s.semana || null, revisao: s.revisao || null,
+        marco_calculado: marco && periodo ? marco(periodo) : null,
+        tarefas: (s.tarefas || []).map(t => ({ id: t.id, texto: t.texto, ate: t.ate, feita: !!t.done })) };
+    }),
+    rotina: o.plano?.rotina || (o.plano?.habitoSugerido ? [o.plano.habitoSugerido] : []),
+    impactoPositivo: o.plano?.impactoPositivo || [], impactoNegativo: o.plano?.impactoNegativo || [],
+  };
+}
+
 export function buildGeburahContext() {
   const pesosMeta = readJSON("lifetree_geb_pesosMeta", {});
   const pesagens = readJSON("lifetree_geb_pesagens", []);
@@ -487,7 +514,9 @@ export function buildGeburahContext() {
     // de perguntar de novo, e só pergunta o que falta.
     perfil: { altura_cm: perfil.altura || null, idade: perfil.idade || null, sexo: perfil.sexo || null, nivel_atividade: perfil.atividade || null },
     treinos_ultimos_30_dias: logTreino.filter(l => (new Date() - new Date(l.data)) / 86400000 <= 30).length,
-    objetivos: objetivos.map(o => ({ titulo: o.title, prazo: o.prazo || null, passos_feitos: o.plano ? o.plano.steps.filter(s => s.done).length : 0, passos_total: o.plano ? o.plano.steps.length : 0 })),
+    // Plano completo (07/11/2026): o Coach precisa enxergar etapas, tarefas (com id) e metas
+    // para editar com update_objective. Marco = peso calculado pelo app no fim da etapa.
+    objetivos: objetivos.map(o => resumoObjetivoSaude(o, perfil)),
   };
 }
 
@@ -710,12 +739,12 @@ HÁBITOS (checklist com XP, aba Yesod) E METAS FINANCEIRAS (checklist com XP, ab
 37. {"action":"create_ygoal","title":"...","xp":100} — meta simples, sem plano (uso legado; prefira create_objective abaixo pra qualquer objetivo novo)
 38. {"action":"toggle_ygoal","match":"..."}
 39. {"action":"delete_ygoal","match":"..."}
-62. {"action":"create_objective","titulo":"...","xp":100,"metrica":{"id":"patrimonio_liquido","valor":50000}|null,"plano":{"steps":["passo 1 bem específico","passo 2","passo 3"],"impactoPositivo":["...","...","..."],"impactoNegativo":["...","...","..."],"habitoSugerido":"..."|null}} — ver protocolo "OBJETIVO COM PLANO AUTOMÁTICO" abaixo, é o fluxo padrão pra qualquer objetivo novo (não só financeiro)
+62. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","xp":100,"metrica":{"id":"patrimonio_liquido","valor":50000}|null,"plano":{"steps":["passo 1 bem específico","passo 2","passo 3"],"impactoPositivo":["...","...","..."],"impactoNegativo":["...","...","..."],"habitoSugerido":"..."|null}} — ver protocolo "OBJETIVO COM PLANO AUTOMÁTICO" abaixo, é o fluxo padrão pra qualquer objetivo novo (não só financeiro)
 
 OBJETIVO COM PLANO AUTOMÁTICO (toda vez que o usuário disser algo como "quero criar o objetivo: X" — inclusive quando isso vem automaticamente do botão "+ Objetivo" da aba Objetivos — siga este protocolo em vez de propor create_objective de cara):
 1. Comece MOSTRANDO o status atual relevante que já está no resumo pro tipo desse objetivo (ex: patrimônio líquido, dívidas ativas, capacidade de poupança) — nunca pergunte de novo o que já está nos dados acima.
 2. Em texto normal, SEM incluir <ACTION> ainda, pergunte só o que realmente falta saber pra montar um plano viável pra ESSE objetivo específico — pode ser nenhuma pergunta, uma, ou várias ao longo da conversa; nunca pergunte o óbvio nem o que já dá pra inferir dos dados do resumo.
-3. Só feche com <ACTION>create_objective</ACTION> depois de ter o necessário — o plano precisa ter pelo menos 3 passos concretos e específicos pro objetivo dito (nunca genéricos tipo "economize mais"), 2-3 itens de impacto positivo e 2-3 de impacto negativo honestos (riscos/desafios reais, não clichês de autoajuda).
+3. "titulo" é o NOME CURTO do objetivo, como o usuário falaria (até ~30 caracteres, ex: "Bater 75 kg", "Quitar o cartão"), e "descricao" é UMA LINHA só com o resultado e a data (ex: "Chegar a 75 kg em 28/02/2027", "Quitar o cartão até 31/03/2027"). Frequência, horários, valores mensais e outras condições NÃO entram na descrição: vão nos passos e nos quadros de metas. Só feche com <ACTION>create_objective</ACTION> depois de ter o necessário — o plano precisa ter pelo menos 3 passos concretos e específicos pro objetivo dito (nunca genéricos tipo "economize mais"), 2-3 itens de impacto positivo e 2-3 de impacto negativo honestos (riscos/desafios reais, não clichês de autoajuda).
 4. "metrica":{"id":"patrimonio_liquido","valor":N} quando o objetivo for sobre acumular patrimônio/juntar um valor específico (extraia o valor do que o usuário disse, ou pergunte se não ficou claro) — nesse caso o progresso do objetivo é calculado automaticamente (patrimônio atual ÷ valor), não pelos passos. Pra qualquer outro tipo de objetivo, "metrica":null (progresso vem dos passos do plano marcados como concluídos).
 5. Só depois que o usuário confirmar o objetivo (você vai ver a mensagem de sucesso na conversa), e SÓ numa resposta seguinte (nunca junto do create_objective), ofereça sugerir 1 hábito de apoio ligado ao plano via create_yhabit — proposta separada, com a mesma confirmação de sempre; não insista se o usuário recusar.
 
@@ -981,19 +1010,36 @@ ROTINA DE TREINO E EXERCÍCIO (grupos musculares válidos: Peito, Costas, Ombros
 25. {"action":"create_exercise","nome":"...","grupo":"...","equip":"... (opcional)","inst":"... (opcional, instruções)"}
 
 OBJETIVO COM PLANO
-26. {"action":"create_objective","titulo":"objetivo SMART","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":["marco 1","marco 2","marco 3"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."],"habitoSugerido":"..."|null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","treinos_semana":3,"peso_meta_kg":75}}
-   "dieta" é opcional: inclua quando o objetivo envolver peso, gordura ou massa muscular.
+26. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":[{"periodo":"06/11 a 30/11/2026","titulo":"Adaptação","semana":{"treinos_semana":3,"cardio_min_semana":60,"divisao":"ABC"},"tarefas":[{"texto":"Pesar e medir a cintura","ate":"2026-11-08"},{"texto":"Fixar 3 horários de treino na agenda","ate":"2026-11-08"}],"revisao":"Se o peso ficar mais de 1 kg acima do marco, ajustar o ritmo da dieta"},{"periodo":"01/12 a 31/01/2027","titulo":"Progressão", ...}],"rotina":["Treinar conforme o programa da semana","Registrar a alimentação todo dia","Pesar 1x por semana, mesmo dia e horário"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."]},"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","peso_meta_kg":75}}
+   "dieta" e "resultados" são opcionais. A meta de treino vai em "semana" DENTRO de cada fase (não mande bloco "treino" separado). "dieta": inclua quando o objetivo envolver peso, gordura ou massa muscular (os treinos por semana da dieta vêm da fase atual).
+
+EDITAR E APAGAR OBJETIVO (o resumo traz em "objetivos" o plano completo: id, etapas numeradas, tarefas com id, metas e marcos calculados)
+27. {"action":"update_objective","objetivo":"id do resumo","titulo":"...","descricao":"...","prazo":"YYYY-MM-DD","etapas":[{"op":"editar","etapa":4,"periodo":"01/02 a 31/03/2027","titulo":"...","semana":{"treinos_semana":5,"cardio_min_semana":210,"divisao":"ABCD"},"revisao":"..."},{"op":"incluir","depois_de":4,"periodo":"...","titulo":"...","semana":{...},"tarefas":[{"texto":"...","ate":"YYYY-MM-DD"}],"revisao":"..."},{"op":"apagar","etapa":2}],"tarefas":[{"op":"incluir","etapa":1,"texto":"...","ate":"YYYY-MM-DD"},{"op":"editar","id":"tf...","texto":"...","ate":"YYYY-MM-DD","feita":true},{"op":"apagar","id":"tf..."}],"rotina":["lista completa nova"],"impactoPositivo":["lista completa"],"impactoNegativo":["lista completa"],"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_meta_kg":75},"ajustes":{"kgSemana":0.7}}
+   Mande SÓ os campos que mudam; tudo numa ação só, mesmo que sejam muitas mudanças. Números de "etapa" e "depois_de" são os do resumo ANTES da mudança. Tarefas por "id" do resumo. "rotina"/"impactos" substituem a lista inteira. "ajustes": kgSemana (perda por semana), cal ou prot fixados pelo usuário; o app recalcula o resto.
+   PRAZO: ao mudar "prazo", o APP já faz a última etapa terminar no novo prazo e troca a data antiga em "descricao" — não precisa mandar etapa nem descricao só por isso.
+   Antes do <ACTION>, liste em texto curto exatamente o que vai mudar (o usuário confirma ou cancela). Nunca escreva pesos no texto das etapas (o marco é calculado pelo app).
+28. {"action":"delete_objective","objetivo":"id do resumo"} — apaga o objetivo inteiro. Só quando o usuário pedir explicitamente; diga o nome antes.
+   Pedido para mudar/apagar/incluir QUALQUER coisa de um objetivo (nome, prazo, etapa, tarefa, meta de treino, dieta, rotina, impactos, resultados-chave) = use 27/28. Nunca responda que não consegue editar o plano.
 
 PROTOCOLO "OBJETIVO COM PLANO" (toda vez que o usuário disser "quero criar o objetivo..." — inclusive quando vier do botão "+ Objetivo" da aba Objetivos — siga este protocolo em vez de propor create_objective de cara):
 1. Mostre em 1-2 frases o status que JÁ existe no resumo (peso_hoje, peso_meta, ultimas_medidas, treinos_ultimos_30_dias, perfil) — não pergunte o que já está lá.
 2. Pergunte só o que falta, em UMA mensagem curta e numerada: rotina (quais dias e horários livres, quantos minutos por sessão), onde treina (casa, academia, rua), nível atual de condicionamento, lesões ou restrições de saúde, e o prazo desejado. Se peso ou altura não estiverem no resumo e forem relevantes, pergunte também.
-3. Com as respostas, transforme o objetivo em SMART: específico, mensurável (número), alcançável para a rotina informada, relevante e com prazo (data). Use esse texto como "titulo" e a data como "prazo".
-4. "steps": 3 a 6 marcos intermediários com data ou semana (ex: "Semanas 1-4: treinar 3x/semana, 30 min, sem faltar mais de 1 sessão"), em progressão (criar o hábito → aumentar carga/volume → consolidar). Nunca genéricos tipo "treinar mais".
+3. Com as respostas, transforme o objetivo em SMART: específico, mensurável (número), alcançável para a rotina informada, relevante e com prazo (data). Use esse texto como "descricao", a data como "prazo" e um nome curto como "titulo". "titulo" é o NOME CURTO do objetivo, como o usuário falaria (até ~30 caracteres, ex: "Bater 75 kg", "Quitar o cartão"), e "descricao" é UMA LINHA só com o resultado e a data (ex: "Chegar a 75 kg em 28/02/2027", "Quitar o cartão até 31/03/2027"). Frequência, horários, valores mensais e outras condições NÃO entram na descrição: vão nos passos e nos quadros de metas.
+4. "steps" = LINHA DO TEMPO EXECUTÁVEL (na tela e no texto ao usuário chame de "etapas": Etapa 1, Etapa 2…): 3 a 6 etapas em sequência, de hoje até o prazo, sem buracos, a última terminando no prazo. Cada fase é um objeto:
+   - "periodo": "DD/MM a DD/MM/AAAA"; "titulo": nome curto da fase (ex: "Adaptação", "Progressão", "Consolidação").
+   - "semana": a meta de treino da fase (treinos_semana, cardio_min_semana, divisao), em PROGRESSÃO de uma fase para a outra (ex: 3 → 4 treinos, 60 → 90 → 120 min de cardio), dentro do que a rotina informada comporta.
+   - "tarefas": 2 a 5 AÇÕES PONTUAIS com data ("ate": "AAAA-MM-DD", dentro da fase), no imperativo, que alguém consegue marcar como feitas (ex: "Pesar e medir a cintura", "Montar os treinos A, B e C com o professor", "Montar o cardápio base com a proteína do dia", "Trocar a divisão para AB"). NÃO são hábitos repetidos (esses vão em "rotina") nem metas vagas ("focar na dieta"). Elas aparecem no Controle para o usuário marcar.
+   - "revisao": UMA regra de decisão para o fim da fase (ex: "Se o peso ficar mais de 1 kg acima do marco, reduzir 150 kcal").
+   NÃO escreva pesos-alvo nas fases: o APP calcula o marco de peso no fim de cada fase pelo ritmo da dieta e mostra junto.
+   FORMATO OBRIGATÓRIO: cada item de "steps" é um OBJETO com periodo, titulo, semana, tarefas e revisao — nunca uma string solta, mesmo que mensagens antigas da conversa tenham usado outro formato. Sem tarefas, as etapas não aparecem no Controle.
+4b. "rotina": 3 a 5 hábitos recorrentes curtos que sustentam o plano (ex: treinar conforme o programa, registrar a alimentação, bater a proteína do dia, pesar 1x por semana, horário de sono). Sem números de calorias ou macros.
+4c. "resultados" (resultados-chave = como saber que deu certo): "treino_pct" e "dieta_pct" = % mínima de treinos feitos e de dias dentro da dieta (85 é um bom padrão; menos se a rotina for apertada). "gordura_pct" só se o resumo tiver medidas corporais e o objetivo for composição; senão null. O peso-alvo já vem do bloco "dieta".
 5. Seja conservador: frequência e duração que caibam na rotina informada (melhor 3 sessões que se cumprem do que 5 que quebram), perda de peso de no máximo ~0,5-1% do peso por semana, sem dietas extremas, jejuns longos ou suplementos.
 6. Se o usuário relatar lesão, dor, doença, gravidez ou uso de medicação relevante, não monte treino para isso: recomende avaliação com médico ou educador físico antes e ofereça um plano só de hábitos leves (ex: caminhada) ou aguardar.
 7. 2-3 itens de impacto positivo e 2-3 de impacto negativo honestos (riscos e custos reais, não clichês).
 8. Só depois que o usuário confirmar o objetivo, e numa resposta seguinte, ofereça transformar o primeiro marco em rotina de treino (create_routine) — proposta separada, sem insistir.
-9. METAS DE DIETA: quando o objetivo envolver peso, gordura ou massa muscular, inclua o bloco "dieta" com peso atual, altura, idade, sexo, treinos por semana do plano e peso-meta. Se faltar idade ou sexo (veja "perfil"), pergunte junto no passo 2. O APP calcula calorias e macros a partir desse bloco e mostra ao usuário antes de confirmar: NÃO escreva números de calorias, proteína, carboidrato ou gordura no texto (você erraria a conta e eles divergiriam do cálculo). No texto, diga só que as metas de dieta calculadas aparecem abaixo do plano e explique em 1-2 frases a lógica (déficit moderado, proteína alta para preservar massa magra, carboidrato para sustentar o treino). Não monte cardápio nem dieta restritiva. Se o usuário usar medicação que afeta apetite ou peso (ex: Monjaro, Ozempic), diga para confirmar as metas com o médico ou nutricionista que acompanha.
+9. METAS DE TREINO: vão em "semana" de cada fase (passo 4). Escolha a divisão pela frequência (ex: 2-3x → "A" ou "AB"; 4x → "AB" ou "ABCD"; 5-6x → "ABC" ou "ABCDE") e pelo nível informado. O app mostra a meta da fase atual e a sequência da semana; não repita esses números no texto.
+10. METAS DE DIETA: quando o objetivo envolver peso, gordura ou massa muscular, inclua o bloco "dieta" com peso atual, altura, idade, sexo e peso-meta. Se faltar idade ou sexo (veja "perfil"), pergunte junto no passo 2. O APP calcula calorias e macros a partir desse bloco e mostra ao usuário antes de confirmar: NÃO escreva números de calorias, proteína, carboidrato ou gordura no texto (você erraria a conta e eles divergiriam do cálculo). No texto, diga só que as metas de dieta calculadas aparecem abaixo do plano e explique em 1-2 frases a lógica (déficit moderado, proteína alta para preservar massa magra, carboidrato para sustentar o treino). Não monte cardápio nem dieta restritiva. Se o usuário usar medicação que afeta apetite ou peso (ex: Monjaro, Ozempic), diga para confirmar as metas com o médico ou nutricionista que acompanha.
 
 REGRAS GERAIS:
 - Quando o usuário pedir pra registrar/ajustar algo, PROPONHA a ação (inclua o <ACTION>) — ela só executa depois que o usuário confirmar explicitamente no botão que aparece; nunca diga que já foi feito, diga o que você vai fazer e peça confirmação
@@ -1189,7 +1235,35 @@ export function detectModuleFromText(text) {
 // saúde, a 2ª mensagem (as respostas sobre rotina, sem palavra-chave) caía no hub e perdia o
 // protocolo de objetivo com plano. Agora, nesses módulos, a conversa continua na última skill
 // usada até o texto apontar claramente pra outra.
+// Pedido sobre um objetivo que já existe (07/11/2026): vai para o Coach do módulo dono
+// dele, mesmo falando do Desejo ou do Controle — só ele tem as ações de editar o plano.
+const semAcento = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+export function moduloDoObjetivoCitado(text, activeModule = null) {
+  const t = semAcento(text).replace(/(\d)\s+(kg|km)/g, "$1$2");
+  const donos = [["geburah", readJSON("lifetree_geb_objetivos", [])], ["yesod", readJSON("lifetree_fin_ygoals", []).filter(g => g.plano)]];
+  let melhor = null, nota = 0;
+  for (const [mod, lista] of donos) for (const o of lista) {
+    const palavras = semAcento(o.title).replace(/(\d)\s+(kg|km)/g, "$1$2").split(/[^a-z0-9]+/).filter(w => w.length >= 3 || /\d/.test(w));
+    if (!palavras.length) continue;
+    const n = palavras.filter(w => t.includes(w)).length / palavras.length;
+    if (n > nota) { nota = n; melhor = mod; }
+  }
+  if (nota >= 0.5) return melhor;
+  // Palavra genérica ("objetivo", "etapa"…) só decide fora de um módulo com Coach próprio
+  // (Desejo, Controle, árvore) — dentro de Finanças, "plano" é plano financeiro.
+  // Dentro de um módulo com objetivos, falar de etapa/tarefa/objetivo fica nele, mesmo que a
+  // frase tenha palavra de outro módulo ("rotina de sono"); fora, só decide se houver 1 dono.
+  if (/\b(objetivo|etapas?|tarefas?|prazo|plano)\b/.test(t)) {
+    const com = donos.filter(([, l]) => l.length).map(([m]) => m);
+    if (com.includes(activeModule)) return activeModule;
+    if (!(activeModule && COACH_SKILLS[activeModule]) && com.length === 1) return com[0];
+  }
+  return null;
+}
+
 export function pickSkillId(activeModule, text, lastSkillId) {
+  const doObjetivo = moduloDoObjetivoCitado(text, activeModule);
+  if (doObjetivo) return doObjetivo;
   const detected = detectModuleFromText(text);
   if (detected && detected !== activeModule) return detected;
   if (activeModule && COACH_SKILLS[activeModule]) return activeModule;

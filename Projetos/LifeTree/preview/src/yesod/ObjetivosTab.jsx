@@ -5,6 +5,7 @@ import { Ico } from "./icons.jsx";
 import { fmt } from "./constants.js";
 import { YesodCtx } from "./context.js";
 import { YESOD_ACTION_HANDLERS } from "../shared/yesodActions.js";
+import { planoParaMarkdown, compartilharArquivo, nomeArquivo } from "../shared/exportar.js";
 import {
   readIfPlan,
   criarIfPlan as criarIfPlanShared,
@@ -44,7 +45,7 @@ function BackBtn({label, C, back}){return(<button onClick={back} style={{backgro
 // vira GoalCard (%+gauge) com clique expandindo o PlanoCard editável embaixo; sem plano
 // (meta antiga, formato legado pré-29/08/2026, ou create_ygoal puro), mantém o checkbox
 // simples de sempre — sem quebrar o que já existia.
-function GoalRow({ g, C, net, expanded, onToggleExpand, onToggleStep, onUpdatePlano, setFinXp, setYGoals }) {
+function GoalRow({ g, C, net, expanded, editando, onEditar, onToggleExpand, onToggleStep, onUpdatePlano, setFinXp, setYGoals }) {
   if (!g.plano) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid " + C.b1 }}>
@@ -61,13 +62,16 @@ function GoalRow({ g, C, net, expanded, onToggleExpand, onToggleStep, onUpdatePl
   const statLine = g.metrica?.id === "patrimonio_liquido" ? fmt(net) + " de " + fmt(g.metrica.valor) : g.plano.steps.filter(s => s.done).length + " de " + g.plano.steps.length + " passos concluídos";
   return (
     <div style={{ borderTop: "1px solid " + C.b1, padding: "9px 0" }}>
-      <GoalCard C={C} accent={ACCENT} label={g.title} pct={pct} statLine={statLine} onClick={() => onToggleExpand(g.id)} />
+      <GoalCard C={C} accent={ACCENT} label={g.title} pct={pct} statLine={statLine} onClick={() => onToggleExpand(g.id)}
+        onEdit={() => onEditar(true)}
+        onDelete={() => { if (window.confirm("Apagar o objetivo '" + g.title + "' e o plano dele?")) setYGoals(p => p.filter(x => x.id !== g.id)); }} />
       {expanded && (
         <div style={{ marginTop: 10 }}>
-          <PlanoCard C={C} plano={g.plano} accent={ACCENT} onToggleStep={stepId => onToggleStep(g.id, stepId)} onUpdate={updater => onUpdatePlano(g.id, updater)} />
-          <button onClick={() => setYGoals(p => p.filter(x => x.id !== g.id))} style={{ marginTop: 8, background: "none", border: "1px solid " + C.b1, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: C.muted, fontSize: 10.5, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
-            <Ico n="x" size={11} color={C.muted} /> Apagar objetivo
-          </button>
+          <PlanoCard C={C} plano={g.plano} descricao={g.descricao||null} accent={ACCENT} onToggleStep={stepId => onToggleStep(g.id, stepId)} onUpdate={updater => onUpdatePlano(g.id, updater)}
+            nome={g.title} onNome={v => setYGoals(p => p.map(x => x.id === g.id ? { ...x, title: v } : x))}
+            onDescricao={v => setYGoals(p => p.map(x => x.id === g.id ? { ...x, descricao: v } : x))}
+            editando={editando} onEditando={onEditar}
+            onExportar={() => compartilharArquivo(nomeArquivo(g.title, "md"), planoParaMarkdown(g, { area: "Finanças" }))} />
         </div>
       )}
     </div>
@@ -163,7 +167,7 @@ function IfPlanCard({ C, ifPlan, setIfPlan, yGoals, yHabits }) {
 export function ObjetivosTab({ C }) {
   const ctx = useContext(YesodCtx);
   const {
-    abrirDesejo, objetivoInicial, back, cashflowMonth, getMonthStr, guard, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk, monthLabel2, nav, net,
+    abrirDesejo, objetivoInicial, editarInicial, back, cashflowMonth, getMonthStr, guard, ifConfigured, ifGoal, ifMonthly, ifProjection, ifRisk, monthLabel2, nav, net,
     openSh, page, setFinXp, setIfBaseline, setIfGoal, setIfMonthly, setYGoals, yGoals, yHabits,
   } = ctx;
   // Plano da Meta de IF (metas secundárias + ações) — até 30/08/2026 só dava pra editar/apagar
@@ -180,6 +184,7 @@ export function ObjetivosTab({ C }) {
   // de coleta de informação e o plano em si acontecem lá, não numa tela dedicada. O objetivo
   // só é salvo quando o usuário confirmar a ação que o Coach propuser (create_objective).
   const [expandedId, setExpandedId] = useState(objetivoInicial || null);
+  const [editandoId, setEditandoId] = useState(editarInicial ? objetivoInicial : null);
   // Vindo do Desejo: rola até o objetivo aberto.
   useEffect(() => { if (objetivoInicial) document.getElementById("obj-" + objetivoInicial)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [objetivoInicial]);
   // Apagar a Meta de IF inteira — até 30/08/2026 só dava pra fazer isso mexendo direto no
@@ -259,7 +264,7 @@ export function ObjetivosTab({ C }) {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
               <div style={{fontSize:13,fontWeight:800}}>Objetivos</div>
               {/* 05/11/2026: objetivos são criados só no Desejo/Kether e aparecem aqui (pedido do usuário). */}
-              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo}><Ico n="plus" size={11}/> Criar no Desejo</Btn>}
+              {abrirDesejo&&<Btn sm full={false} color={ACCENT} onClick={abrirDesejo}><Ico n="plus" size={11}/> Novo</Btn>}
             </div>
             {/* Sem meta de IF configurada: nenhum card/prompt aqui — só a lista de objetivos
                 abaixo (achado 30/08/2026, pedido explícito do usuário: "não tenha nada na aba,
@@ -276,7 +281,8 @@ export function ObjetivosTab({ C }) {
             {yGoals.length===0&&<div style={{textAlign:"center",padding:24,color:C.muted,fontSize:11.5}}>Nenhum objetivo de finanças ainda. Os objetivos são criados no Desejo, onde o Coach monta o plano com você, e aparecem aqui.</div>}
             {yGoals.map(g=>(
               <div key={g.id} id={"obj-"+g.id} style={{scrollMarginTop:70}}><GoalRow g={g} C={C} net={net} expanded={expandedId===g.id}
-                onToggleExpand={id=>setExpandedId(p=>p===id?null:id)} onToggleStep={toggleStep} onUpdatePlano={updatePlano}
+                editando={editandoId===g.id} onEditar={v=>{ if(v) setExpandedId(g.id); setEditandoId(v?g.id:null); }}
+                onToggleExpand={id=>{ setExpandedId(p=>p===id?null:id); setEditandoId(null); }} onToggleStep={toggleStep} onUpdatePlano={updatePlano}
                 setFinXp={setFinXp} setYGoals={setYGoals}/></div>
             ))}
           </div>);

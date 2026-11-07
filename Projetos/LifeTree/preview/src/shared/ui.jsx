@@ -183,41 +183,67 @@ function PlusIcon({ color = "currentColor", size = 11 }) {
 // da Meta de Independência Financeira do Yesod (padrão que o usuário pediu explicitamente
 // pra generalizar, 29/08/2026) — `statLine` é livre pra caber tanto o caso com métrica real
 // ("R$X de R$Y") quanto o caso sem métrica (% vem dos passos do plano concluídos).
-export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick }) {
+// onDelete (06/11/2026, pedido do usuário): × discreto no canto; o toque no cartão abre o
+// plano, e no plano cada item se edita com um toque. `onEdit` não é mais usado.
+export function GoalCard({ C, accent = "#818cf8", label, pct, statLine, onClick, onDelete, rotulo = null, titulo = null }) {
   const p = Math.max(0, Math.min(100, pct || 0));
   return (
-    <div onClick={onClick} style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
-      <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>{label.toUpperCase()}</div>
-      <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
-      {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
-      <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
+    <div onClick={onClick} aria-label={label}
+      style={{ cursor: onClick ? "pointer" : "default", background: "linear-gradient(135deg," + accent + "22," + accent + "06)", border: "1px solid " + accent + "44", borderRadius: 16, padding: 18 }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>{(rotulo || label).toUpperCase()}</div>
+        {onDelete && (
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} aria-label={"Apagar objetivo " + label}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, margin: -4, opacity: 0.6, flexShrink: 0 }}>
+            <XIcon color={C.muted} size={14} />
+          </button>
+        )}
       </div>
+      {pct == null ? (
+        // Só planejamento (06/11/2026): sem percentual até o acompanhamento ser ligado.
+        <>
+          <div style={{ fontSize: 20, fontWeight: 900, color: C.text, margin: "2px 0 4px", lineHeight: 1.25 }}>{titulo || label}</div>
+          {statLine && <div style={{ fontSize: 12, color: C.muted }}>{statLine}</div>}
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 28, fontWeight: 900, color: accent, marginBottom: 2 }}>{p}%</div>
+          {statLine && <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{statLine}</div>}
+          <div style={{ height: 10, background: C.b1, borderRadius: 99, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: p + "%", background: "linear-gradient(90deg," + accent + ",#06b6d4)", borderRadius: 99 }} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 // Linha de texto editável inline (passo do plano ou item de impacto) — input sem borda
 // visível que parece texto estático até o usuário tocar nele, com um × pra apagar a linha.
-function EditableRow({ C, value, onChange, onRemove, strike, dim }) {
+// Linha editável (06/11/2026): era um <input> de uma linha só, e textos longos do Coach
+// ficavam cortados. Agora é uma textarea que cresce com o conteúdo.
+export function EditableRow({ C, value, onChange, onRemove, strike, dim, autoFocus }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      <input
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+      <textarea
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(e.target.value)} autoFocus={autoFocus}
+        rows={Math.max(1, Math.ceil((value || "").length / 38))}
         style={{
-          flex: 1, border: "none", background: "transparent", outline: "none", padding: 0,
-          fontSize: 11, fontFamily: "inherit", color: dim ? C.muted : C.text,
-          textDecoration: strike ? "line-through" : "none",
+          flex: 1, minWidth: 0, resize: "none", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent",
+          outline: "none", padding: "6px 8px", fontSize: 13, lineHeight: 1.45, fontFamily: "inherit",
+          color: dim ? C.muted : C.text, textDecoration: strike ? "line-through" : "none", fieldSizing: "content",
         }}
       />
-      <button onClick={onRemove} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, opacity: 0.5, flexShrink: 0 }}>
-        <XIcon color={C.muted} size={11} />
-      </button>
+      {onRemove && (
+        <button onClick={onRemove} aria-label="Remover linha" style={{ background: "none", border: "none", cursor: "pointer", padding: 6, opacity: 0.6, flexShrink: 0 }}>
+          <XIcon color={C.muted} size={12} />
+        </button>
+      )}
     </div>
   );
 }
-function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
+export function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
   return (
     <button onClick={onClick} style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 0", display: "flex", alignItems: "center", gap: 4, color: accent, fontSize: 10, fontWeight: 700 }}>
       <PlusIcon color={accent} size={10} /> {label}
@@ -229,61 +255,191 @@ function AddRowBtn({ C, onClick, label, accent = "#818cf8" }) {
 // `onUpdate` recebe um updater (prev => next), mesma assinatura de um setState — quem chama
 // decide se aplica direto (plano ainda em confirmação, ex: `pendingCoachAction`) ou dentro de
 // uma lista já persistida (objetivo salvo) — ver usos em App.jsx/yesod/ObjetivosTab.jsx.
-export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8" }) {
+// Separa "06/11 a 19/11/2026: adaptação com 4 sessões" em período + texto, pra mostrar o
+// período em destaque. Só quando o trecho antes dos ":" é curto (parece um rótulo).
+function partesDoPasso(t) {
+  const m = String(t || "").match(/^([^:]{2,40}):\s+([\s\S]+)$/);
+  const maiuscula = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  return m ? { periodo: m[1].trim(), texto: maiuscula(m[2].trim()) } : { periodo: null, texto: String(t || "") };
+}
+
+// Plano gerado pelo Coach — descrição, metas, passo a passo e impactos.
+// `onUpdate` recebe um updater (prev => next), mesma assinatura de um setState — quem chama
+// decide se aplica direto (plano ainda em confirmação, ex: `pendingCoachAction`) ou dentro de
+// uma lista já persistida (objetivo salvo) — ver usos em App.jsx/yesod/ObjetivosTab.jsx.
+// Leitura por padrão: texto completo, com quebra de linha, período do passo em destaque,
+// impactos empilhados. `somenteLeitura` desliga a edição (ex: espelho no Kether).
+// Edição (06/11/2026, pedido do usuário): tocar num item já abre a edição só dele, com
+// ✓ (concluir) e × (apagar) no canto. Sem botão "Editar", lápis ou menu.
+//   chaves: "cabecalho" (nome, prazo, objetivo) · "meta:<chave>" · "passo:<id>" · "imp:<tipo>:<i>".
+// `metas`: lista [{ chave, titulo, render(editando), onApagar }] (ou um nó, só leitura).
+// `onExportar`: mostra "Exportar plano (.md)" no fim (06/11/2026, shared/exportar.js).
+// Planejamento (06/11/2026): `tituloPassos` (ex: "LINHA DO TEMPO"), `renderDetalhe(passo, i)` →
+// conteúdo extra da fase (meta da semana, tarefas, revisão, marco), `renderEditor(passo, patch)`
+// → editor próprio da fase, `rotuloPasso` (ex: "Etapa" → "ETAPA 1 · 06/11 a 30/11/2026"), `passoFeito(passo)` → concluído derivado (ex: todas as tarefas
+// feitas no Controle). Sem `onToggleStep`, o círculo só mostra o estado. `plano.rotina` =
+// lista de hábitos, se existir.
+// `editando`/`onEditando` (booleanos): quem chama pode abrir o cabeçalho em edição (ex:
+// "Editar" vindo do Desejo) e fica sabendo quando algum item está em edição.
+export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
+  nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando,
+  onExportar = null, tituloPassos = "PASSO A PASSO", rotuloPasso = null, renderDetalhe = null, renderEditor = null, passoFeito = null }) {
+  const [chave, setChaveInt] = useState(editandoExt ? "cabecalho" : null);
+  const setChave = (k) => { setChaveInt(k); if (onEditando) onEditando(!!k); };
+  // Quem chama abriu/fechou a edição: ajusta durante o render.
+  const [extAnterior, setExtAnterior] = useState(editandoExt);
+  if (editandoExt !== extAnterior) {
+    setExtAnterior(editandoExt);
+    if (editandoExt) setChaveInt((k) => k || "cabecalho");
+    else if (editandoExt === false) setChaveInt(null);
+  }
+  const podeEditar = !somenteLeitura;
+  const tocar = (k) => (podeEditar ? { onClick: () => setChave(k), style: { cursor: "pointer" } } : {});
+
   const editStep = (id, title) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, title } : s)) }));
-  const removeStep = (id) => onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) }));
-  const addStep = () => onUpdate((p) => ({ ...p, steps: [...p.steps, { id: "st" + Date.now(), title: "", done: false }] }));
-
+  const patchStep = (id, patch) => onUpdate((p) => ({ ...p, steps: p.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
+  const removeStep = (id) => { onUpdate((p) => ({ ...p, steps: p.steps.filter((s) => s.id !== id) })); setChave(null); };
+  const addStep = () => {
+    const novo = { id: "st" + Date.now(), title: "", done: false };
+    onUpdate((p) => ({ ...p, steps: [...p.steps, novo] }));
+    setChave("passo:" + novo.id);
+  };
   const editImpacto = (kind, i, text) => onUpdate((p) => ({ ...p, [kind]: p[kind].map((t, idx) => (idx === i ? text : t)) }));
-  const removeImpacto = (kind, i) => onUpdate((p) => ({ ...p, [kind]: p[kind].filter((_, idx) => idx !== i) }));
-  const addImpacto = (kind) => onUpdate((p) => ({ ...p, [kind]: [...p[kind], ""] }));
+  const removeImpacto = (kind, i) => { onUpdate((p) => ({ ...p, [kind]: p[kind].filter((_, idx) => idx !== i) })); setChave(null); };
+  const addImpacto = (kind) => { const n = plano[kind].length; onUpdate((p) => ({ ...p, [kind]: [...p[kind], ""] })); setChave("imp:" + kind + ":" + n); };
 
-  return (
-    <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 12, padding: 14 }}>
-      <div style={{ fontSize: 9, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PASSO A PASSO</div>
-      {plano.steps.map((s) => (
-        <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0" }}>
-          <button
-            onClick={() => onToggleStep(s.id)}
-            style={{
-              width: 18, height: 18, borderRadius: 5, flexShrink: 0, cursor: "pointer", padding: 0,
-              border: "1.5px solid " + (s.done ? "#10b981" : C.b2), background: s.done ? "#10b981" : "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            {s.done && <CheckIcon color="#fff" size={10} />}
-          </button>
-          <div style={{ flex: 1 }}>
-            <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} onRemove={() => removeStep(s.id)} strike={s.done} dim={s.done} />
-          </div>
+  const titulo = (texto, cor = C.muted) => (
+    <div style={{ fontSize: 10, color: cor, fontWeight: 800, letterSpacing: 1, margin: "0 0 8px" }}>{texto}</div>
+  );
+  const icone = (rotulo, fn, el, cor) => (
+    <button onClick={(e) => { e.stopPropagation(); fn(); }} aria-label={rotulo}
+      style={{ width: 28, height: 28, borderRadius: 99, border: "none", background: cor, cursor: "pointer", padding: 0,
+        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{el}</button>
+  );
+  // Caixa de edição: conteúdo + ✓ (concluir) e, se houver, × (apagar) no canto.
+  const caixa = (conteudo, onApagar, rotuloApagar = "Apagar") => (
+    <div style={{ border: "1.5px solid " + accent + "66", borderRadius: 12, padding: 10, background: accent + "08" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 6 }}>
+        {onApagar && icone(rotuloApagar, onApagar, <XIcon color="#ef4444" size={12} />, "#ef444418")}
+        {icone("Concluir", () => setChave(null), <CheckIcon color="#fff" size={12} />, accent)}
+      </div>
+      {conteudo}
+    </div>
+  );
+  const campoTexto = { width: "100%", boxSizing: "border-box", border: "1px solid " + C.b1, borderRadius: 8, background: C.surface || "transparent", outline: "none",
+    padding: "8px 10px", fontSize: 14, fontFamily: "inherit", color: C.text };
+  const adicionar = (label, fn) => podeEditar && <AddRowBtn C={C} onClick={fn} label={label} accent={accent} />;
+
+  const temCabecalho = podeEditar && (onNome || onPrazo || onDescricao);
+  const listaMetas = Array.isArray(metas) ? metas.filter(Boolean) : null;
+
+  const lista = (kind, rotulo, cor, marca) => (
+    <div style={{ marginTop: 16 }}>
+      {titulo(rotulo, cor)}
+      {plano[kind].map((t, i) => chave === "imp:" + kind + ":" + i ? (
+        <div key={i} style={{ marginBottom: 8 }}>
+          {caixa(<EditableRow C={C} value={t} onChange={(v) => editImpacto(kind, i, v)} autoFocus />, () => removeImpacto(kind, i))}
+        </div>
+      ) : (
+        <div key={i} {...tocar("imp:" + kind + ":" + i)}
+          style={{ display: "flex", gap: 8, marginBottom: 8, fontSize: 13, lineHeight: 1.45, color: C.text, cursor: podeEditar ? "pointer" : "default" }}>
+          <span style={{ color: cor, fontWeight: 900, flexShrink: 0, width: 14, textAlign: "center" }}>{marca}</span>
+          <span style={{ overflowWrap: "anywhere" }}>{t || <em style={{ color: C.muted }}>vazio</em>}</span>
         </div>
       ))}
-      <AddRowBtn C={C} onClick={addStep} label="Adicionar passo" accent={accent} />
+      {adicionar("Adicionar", () => addImpacto(kind))}
+    </div>
+  );
 
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9, color: "#10b981", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>IMPACTO POSITIVO</div>
-          {plano.impactoPositivo.map((t, i) => (
-            <div key={i} style={{ marginBottom: 5 }}>
-              <EditableRow C={C} value={t} onChange={(v) => editImpacto("impactoPositivo", i, v)} onRemove={() => removeImpacto("impactoPositivo", i)} />
-            </div>
-          ))}
-          <AddRowBtn C={C} onClick={() => addImpacto("impactoPositivo")} label="Adicionar" accent={accent} />
+  return (
+    <div style={{ background: C.card, border: "1px solid " + C.b1, borderRadius: 14, padding: 16 }}>
+      {chave === "cabecalho" ? (
+        <div style={{ marginBottom: 16 }}>
+          {caixa(
+            <>
+              {onNome && (<div style={{ marginBottom: 12 }}>{titulo("NOME")}
+                <input value={nome || ""} onChange={(e) => onNome(e.target.value)} placeholder="Nome curto, ex: Bater 75 kg" style={{ ...campoTexto, fontWeight: 700 }} /></div>)}
+              {onPrazo && (<div style={{ marginBottom: 12 }}>{titulo("PRAZO")}
+                <input type="date" value={prazo || ""} onChange={(e) => onPrazo(e.target.value || null)} style={{ ...campoTexto, width: "auto" }} /></div>)}
+              {onDescricao && (<div>{titulo("O OBJETIVO")}
+                <textarea value={descricao || ""} onChange={(e) => onDescricao(e.target.value)} rows={2} placeholder="Resultado + data, ex: Chegar a 75 kg em 28/02/2027"
+                  style={{ ...campoTexto, fontSize: 13, lineHeight: 1.45, resize: "none", fieldSizing: "content" }} /></div>)}
+            </>
+          )}
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 9, color: "#ef4444", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PONTOS DE ATENÇÃO</div>
-          {plano.impactoNegativo.map((t, i) => (
-            <div key={i} style={{ marginBottom: 5 }}>
-              <EditableRow C={C} value={t} onChange={(v) => editImpacto("impactoNegativo", i, v)} onRemove={() => removeImpacto("impactoNegativo", i)} />
-            </div>
-          ))}
-          <AddRowBtn C={C} onClick={() => addImpacto("impactoNegativo")} label="Adicionar" accent={accent} />
+      ) : (descricao || temCabecalho) && (
+        <div {...(temCabecalho ? tocar("cabecalho") : {})}
+          style={{ marginBottom: 16, paddingBottom: 14, borderBottom: "1px solid " + C.b1, cursor: temCabecalho ? "pointer" : "default" }}>
+          {titulo("O OBJETIVO")}
+          <div style={{ fontSize: 13, lineHeight: 1.5, color: descricao ? C.text : C.muted, overflowWrap: "anywhere" }}>{descricao || "Toque para escrever: resultado + data"}</div>
         </div>
-      </div>
+      )}
 
-      <div style={{ fontSize: 9, color: C.muted, textAlign: "center", marginTop: 10 }}>
-        Toque em qualquer passo ou impacto pra editar o texto — × remove a linha.
-      </div>
+      {listaMetas ? listaMetas.length > 0 && (
+        <div style={{ display: "grid", gap: 10, marginBottom: 16 }}>
+          {listaMetas.map((m) => chave === "meta:" + m.chave ? (
+            <div key={m.chave}>{caixa(m.render(true), m.onApagar || null, "Apagar " + m.titulo.toLowerCase())}</div>
+          ) : (
+            <div key={m.chave} {...tocar("meta:" + m.chave)} aria-label={m.titulo}>{m.render(false)}</div>
+          ))}
+        </div>
+      ) : metas && (
+        <div style={{ marginBottom: 16 }}>{typeof metas === "function" ? metas(false) : metas}</div>
+      )}
+
+      {titulo(tituloPassos)}
+      {plano.steps.map((s, i) => {
+        const { periodo, texto } = partesDoPasso(s.title);
+        const ultimo = i === plano.steps.length - 1;
+        const emEdicao = chave === "passo:" + s.id;
+        const feito = passoFeito ? passoFeito(s) : s.done;
+        return (
+          <div key={s.id} style={{ display: "flex", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+              <button
+                onClick={onToggleStep ? () => onToggleStep(s.id) : undefined} disabled={!onToggleStep}
+                aria-label={onToggleStep ? (feito ? "Desmarcar" : "Marcar") + " passo " + (i + 1) : (rotuloPasso || "Passo") + " " + (i + 1) + (feito ? " concluída" : "")}
+                style={{
+                  width: 26, height: 26, borderRadius: 99, flexShrink: 0, cursor: onToggleStep ? "pointer" : "default", padding: 0,
+                  border: "2px solid " + (feito ? "#10b981" : accent), background: feito ? "#10b981" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center", color: accent, fontSize: 11, fontWeight: 900,
+                }}
+              >
+                {feito ? <CheckIcon color="#fff" size={12} /> : i + 1}
+              </button>
+              {!ultimo && <div style={{ width: 2, flex: 1, minHeight: 12, background: C.b1, margin: "3px 0" }} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0, paddingBottom: ultimo ? 0 : 14 }}>
+              {emEdicao ? (
+                caixa(renderEditor ? renderEditor(s, (patch) => patchStep(s.id, patch))
+                  : <EditableRow C={C} value={s.title} onChange={(v) => editStep(s.id, v)} strike={s.done} dim={s.done} autoFocus />, () => removeStep(s.id), "Apagar passo " + (i + 1))
+              ) : (
+                <div aria-label={"Passo " + (i + 1)} {...tocar("passo:" + s.id)}>
+                  {(periodo || rotuloPasso) && <div style={{ fontSize: 11, fontWeight: 800, color: s.done ? C.muted : accent, marginTop: 4, marginBottom: 2 }}>
+                    {rotuloPasso ? rotuloPasso.toUpperCase() + " " + (i + 1) + (periodo ? " · " : "") : ""}{periodo}
+                  </div>}
+                  <div style={{ fontSize: 13, lineHeight: 1.5, color: s.done ? C.muted : C.text, textDecoration: s.done && !passoFeito ? "line-through" : "none", fontWeight: renderDetalhe ? 700 : 400,
+                    overflowWrap: "anywhere", marginTop: periodo ? 0 : 4 }}>{texto || <em style={{ color: C.muted }}>vazio</em>}</div>
+                  {renderDetalhe && renderDetalhe(s, i)}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {adicionar("Adicionar " + (rotuloPasso ? rotuloPasso.toLowerCase() : "passo"), addStep)}
+
+      {Array.isArray(plano.rotina) && lista("rotina", "ROTINA", accent, "↻")}
+      {lista("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
+      {lista("impactoNegativo", "PONTOS DE ATENÇÃO", "#ef4444", "!")}
+
+      {onExportar && (
+        <button onClick={onExportar} aria-label="Exportar plano"
+          style={{ display: "block", width: "100%", marginTop: 18, padding: "10px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+            border: "1px solid " + accent + "55", background: "transparent", color: accent, fontSize: 12, fontWeight: 800 }}>
+          ↗ Exportar plano (.md)
+        </button>
+      )}
     </div>
   );
 }

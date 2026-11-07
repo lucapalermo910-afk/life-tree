@@ -14,6 +14,12 @@ import KetherModule from "./KetherModule.jsx";
 import { callCoachAPI, motivoErroCoach } from "./shared/coachClient.js";
 import { calcularMacros } from "./shared/macros.js";
 import { MacrosCard } from "./shared/MacrosCard.jsx";
+import { TreinoCard } from "./shared/TreinoCard.jsx";
+import { normalizarTreino, hojeLocal } from "./shared/treino.js";
+import { ResultadosCard } from "./shared/ResultadosCard.jsx";
+import { normalizarResultados, marcosDoObjetivo, comRotina, normalizarFase, limitesDasFases, totaisDasFases } from "./shared/planejamento.js";
+import { FaseDetalhe } from "./shared/FaseSaude.jsx";
+import { lerModulos, restaurarModulos, compartilharArquivo } from "./shared/exportar.js";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
 import { YESOD_ACTION_HANDLERS } from "./shared/yesodActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
@@ -533,8 +539,8 @@ export default function App() {
   const [coachSkillTravada, setCoachSkillTravada] = useState(null);
   // Destino ao tocar num objetivo no Desejo (05/11/2026): abre o módulo da área já na aba
   // Objetivos com aquele plano aberto. Consumido uma vez pelo módulo e limpo em seguida.
-  const [destinoObjetivo, setDestinoObjetivo] = useState(null); // { moduleId, id } | null
-  const abrirObjetivo=(moduleId,id)=>{ setDestinoObjetivo({moduleId,id}); setActiveModule(moduleId); };
+  const [destinoObjetivo, setDestinoObjetivo] = useState(null); // { moduleId, id, editar } | null
+  const abrirObjetivo=(moduleId,id,editar=false)=>{ setDestinoObjetivo({moduleId,id,editar}); setActiveModule(moduleId); };
   // Sair do módulo também destrava (a conversa de criação ficou para trás).
   useEffect(()=>{ setCoachSkillTravada(null); },[activeModule]);
   const [coachLoading,  setCoachLoading]  = useState(false);
@@ -698,7 +704,12 @@ export default function App() {
     setLastCoachSkillId(skillId);
     const skill=getSkill(skillId);
     const skillCtx=skill.buildContext(universalCtx);
-    const systemPrompt=skill.systemPrompt(skillCtx);
+    // Data de hoje (06/11/2026): o Coach não sabia que dia era e errava prazos ("até o fim do
+    // ano", "em 12 semanas"). Vai em todo prompt, no fuso do aparelho.
+    const agoraCoach=new Date();
+    const dataHoje=agoraCoach.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});
+    const isoHoje=agoraCoach.getFullYear()+"-"+String(agoraCoach.getMonth()+1).padStart(2,"0")+"-"+String(agoraCoach.getDate()).padStart(2,"0");
+    const systemPrompt="DATA DE HOJE: "+dataHoje+" ("+isoHoje+"). Use esta data para calcular prazos, semanas restantes e datas no formato YYYY-MM-DD. Unidades: kg = quilos, km = quilômetros.\n\n"+skill.systemPrompt(skillCtx);
 
     try{
       // 05/11/2026 — respostas cortadas e "Erro ao processar resposta":
@@ -742,13 +753,15 @@ export default function App() {
           // precisa de um id por passo pra editar/apagar linha, mesma exigência do handler
           // que persiste depois de confirmado (achado ao testar com Coach simulado, 30/08/2026).
           if(action.plano){
-            action.plano={
+            action.plano=comRotina({
               ...action.plano,
-              steps:(action.plano.steps||[]).map(s=>({id:"st"+Math.random().toString(36).slice(2,8),title:typeof s==="string"?s:s.title,done:false})),
-            };
+              steps:(action.plano.steps||[]).map(normalizarFase),
+            });
           }
           // Metas de dieta: calculadas em código (shared/macros.js), nunca pelo modelo.
           if(action.dieta&&skillId==="geburah"){
+            const w1=action.plano?.steps?.find(s=>s.semana)?.semana;
+            if(action.treino||w1) action.dieta={...action.dieta,treinos_semana:(w1||normalizarTreino(action.treino)).treinos_semana};
             const m=calcularMacros(action.dieta);
             action.macrosPrevia=m.ok?m:null;
           }
@@ -878,7 +891,9 @@ export default function App() {
     setPendingCoachAction(null);
   };
 
-  const buildBackup=()=>JSON.stringify({areas,diary,widgetConfig,finScore,dark,_v:4,_ts:new Date().toISOString()},null,2);
+  // Backup v5 (06/11/2026): leva também TODOS os dados dos módulos (chaves lifetree_*:
+  // objetivos e planos, metas, perfil, pesagens, finanças…). Até a v4 ficavam de fora.
+  const buildBackup=()=>JSON.stringify({areas,diary,widgetConfig,finScore,dark,modulos:lerModulos(),_v:5,_ts:new Date().toISOString()},null,2);
 
   const doExport=()=>{
     const txt=buildBackup();
@@ -886,11 +901,24 @@ export default function App() {
       navigator.clipboard.writeText(txt).then(()=>{setCopiedBackup(true);setTimeout(()=>setCopiedBackup(false),2500);});
     }
   };
+  const doExportArquivo=()=>compartilharArquivo("lifetree-backup-"+new Date().toISOString().slice(0,10)+".json",buildBackup(),"application/json");
+  const abrirArquivoBackup=(e)=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    f.text().then(t=>setImportText(t)); e.target.value="";
+  };
 
   const doImport=()=>{
     setImportError("");
     try{
       const d=JSON.parse(importText);
+      // Backup v5: grava os dados dos módulos e recarrega, para cada módulo ler do zero.
+      if(d.modulos){
+        if(!window.confirm("Restaurar o backup de "+(d._ts?new Date(d._ts).toLocaleString("pt-BR"):"data desconhecida")+"? Os dados atuais dos módulos serão substituídos pelos do backup.")) return;
+        restaurarModulos(d.modulos);
+        toast_("Backup restaurado! Recarregando…","#34d399");
+        setTimeout(()=>window.location.reload(),700);
+        return;
+      }
       if(d.areas)     setAreas(d.areas);
       if(d.diary)     setDiary(d.diary);
       if(d.widgetConfig) setWidgetConfig(d.widgetConfig);
@@ -954,7 +982,7 @@ export default function App() {
           YesodModule.jsx — então ficam acima de tudo sem depender do zIndex deste wrapper. ── */}
       {activeModule==="yesod"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="yesod"?destinoObjetivo.id:null} limparDestino={()=>setDestinoObjetivo(null)}/>
+          <YesodModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="yesod"?destinoObjetivo.id:null} editarDestino={!!destinoObjetivo?.editar} limparDestino={()=>setDestinoObjetivo(null)}/>
         </div>
       )}
       {activeModule==="hod"&&(
@@ -969,7 +997,7 @@ export default function App() {
       )}
       {activeModule==="geburah"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} limparDestino={()=>setDestinoObjetivo(null)}/>
+          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} editarDestino={!!destinoObjetivo?.editar} limparDestino={()=>setDestinoObjetivo(null)}/>
         </div>
       )}
       {activeModule==="chesed"&&(
@@ -1205,7 +1233,7 @@ export default function App() {
                 Geburah, promovido pra shared/ui.jsx em 29/08/2026, ver o plano salvo). */}
             {pendingCoachAction?.action?.plano&&(
               <div style={{marginTop:10,maxHeight:220,overflowY:"auto"}}>
-                <PlanoCard C={C} plano={pendingCoachAction.action.plano}
+                <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(s=>s.id===stepId?{...s,done:!s.done}:s)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>
@@ -1252,13 +1280,26 @@ export default function App() {
               ))}
               {coachLoading&&<div style={{color:C.muted,fontSize:13}}>Pensando…</div>}
               {pendingCoachAction?.action?.plano&&(
-                <PlanoCard C={C} plano={pendingCoachAction.action.plano}
+                <PlanoCard C={C} plano={pendingCoachAction.action.plano} descricao={pendingCoachAction.action.descricao||null}
+                  tituloPassos={pendingCoachAction.skillId==="geburah"?"LINHA DO TEMPO":undefined}
+                  rotuloPasso={pendingCoachAction.skillId==="geburah"?"Etapa":null}
+                  renderDetalhe={pendingCoachAction.skillId==="geburah"?(s,i)=>{
+                    const a=pendingCoachAction.action;
+                    const marco=marcosDoObjetivo({dieta:a.dieta,macros:a.macrosPrevia,inicio:hojeLocal(),prazo:a.prazo});
+                    return <FaseDetalhe C={C} s={s} accent={coachAccent} marco={marco&&marco(((s.title||"").match(/^([^:]{3,40}):/)||[])[1]||"")} fim={limitesDasFases(a.plano.steps,hojeLocal(),a.prazo)[i]?.fim}/>;
+                  }:null}
+                  metas={[
+                    pendingCoachAction.skillId==="geburah"&&{chave:"resultados",titulo:"Resultados-chave",render:()=><ResultadosCard C={C} r={normalizarResultados(pendingCoachAction.action.resultados)} dieta={pendingCoachAction.action.macrosPrevia?pendingCoachAction.action.dieta:null} temDieta={!!pendingCoachAction.action.macrosPrevia} accent={coachAccent}/>},
+                    (pendingCoachAction.action.treino||pendingCoachAction.action.plano.steps.some(s=>s.semana))&&{chave:"treino",titulo:"Metas de treino",render:()=>{
+                      const a=pendingCoachAction.action, f=a.plano.steps.findIndex(s=>s.semana);
+                      return <TreinoCard C={C} t={f>=0?a.plano.steps[f].semana:normalizarTreino(a.treino)} accent={coachAccent} prazo={a.prazo} inicio={hojeLocal()}
+                        subtitulo={f>=0?"Etapa "+(f+1):null} totais={totaisDasFases(a.plano.steps,hojeLocal(),a.prazo)}/>;
+                    }},
+                    pendingCoachAction.action.macrosPrevia&&{chave:"dieta",titulo:"Metas de dieta",render:()=><MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>},
+                  ]}
                   onToggleStep={stepId=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:{...p.action.plano,steps:p.action.plano.steps.map(st=>st.id===stepId?{...st,done:!st.done}:st)}}}))}
                   onUpdate={updater=>setPendingCoachAction(p=>({...p,action:{...p.action,plano:updater(p.action.plano)}}))}
                   accent={coachAccent}/>
-              )}
-              {pendingCoachAction?.action?.macrosPrevia&&(
-                <MacrosCard C={C} m={pendingCoachAction.action.macrosPrevia} prazo={pendingCoachAction.action.prazo} accent={coachAccent}/>
               )}
               {pendingCoachAction&&(
                 <div style={{display:"flex",gap:8}}>
@@ -1364,24 +1405,32 @@ export default function App() {
             <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:.8,marginBottom:8}}>EXPORTAR DADOS</div>
             <div style={{background:C.bg,border:"1px solid "+C.b1,borderRadius:10,padding:12,marginBottom:10,
               fontSize:9,color:C.dim,fontFamily:"monospace",lineHeight:1.6}}>
-              {`áreas: ${areas.length} · diário: ${diary.length} entradas · finScore: ${finScore}%`}
+              {`áreas: ${areas.length} · diário: ${diary.length} entradas · finScore: ${finScore}%`}<br/>
+              {`objetivos de saúde: ${(()=>{try{return JSON.parse(localStorage.getItem("lifetree_geb_objetivos")||"[]").length}catch{return 0}})()} · dados de módulos: ${Object.keys(lerModulos()).length} itens`}
             </div>
-            <PBtn color="#10b981" onClick={doExport}>
-              <Icon name="copy" size={13} color="#fff"/>
-              <span style={{marginLeft:4}}>{copiedBackup?"✓ Copiado!":"Copiar JSON"}</span>
+            <PBtn color="#10b981" onClick={doExportArquivo}>
+              <Icon name="download" size={13} color="#fff"/>
+              <span style={{marginLeft:4}}>Salvar arquivo de backup</span>
             </PBtn>
+            <button onClick={doExport} style={{display:"block",width:"100%",marginTop:8,padding:"8px",borderRadius:9,border:"1px solid "+C.b1,background:"transparent",color:C.muted,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+              {copiedBackup?"✓ Copiado!":"Copiar como texto"}
+            </button>
             <div style={{fontSize:9,color:C.muted,marginTop:6,textAlign:"center",lineHeight:1.5}}>
-              Cole num Google Keep ou bloco de notas para guardar o backup
+              Inclui objetivos, planos, metas e os dados de todos os módulos. Guarde o arquivo no Drive ou mande para você mesmo.
             </div>
           </div>
 
           <div style={{marginBottom:18,borderTop:"1px solid "+C.b1,paddingTop:14}}>
             <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:.8,marginBottom:8}}>RESTAURAR BACKUP</div>
             <textarea value={importText} onChange={e=>setImportText(e.target.value)}
-              placeholder="Cole aqui o JSON do backup..."
+              placeholder="Cole aqui o texto do backup, ou abra o arquivo abaixo..."
               style={{width:"100%",minHeight:90,background:C.bg,border:"1px solid "+C.b2,borderRadius:9,
                 padding:"9px 12px",color:C.text,fontSize:11,outline:"none",resize:"vertical",
                 fontFamily:"monospace",boxSizing:"border-box",display:"block"}}/>
+            <label style={{display:"block",marginTop:6,fontSize:11,fontWeight:700,color:C.muted,cursor:"pointer",textAlign:"center"}}>
+              Abrir arquivo de backup (.json)
+              <input type="file" accept=".json,application/json" onChange={abrirArquivoBackup} style={{display:"none"}} aria-label="Abrir arquivo de backup"/>
+            </label>
             {importError&&<div style={{fontSize:10,color:"#ef4444",marginTop:5}}>{importError}</div>}
             <PBtn color="#818cf8" onClick={doImport} style={{marginTop:8}}>
               <Icon name="upload" size={13} color="#fff"/>
