@@ -76,7 +76,7 @@ export function TreinoCard({ C, t, accent = "#ef4444", editando = false, onChang
           </div>
         </>
       )}
-      {ed && <div style={{ fontSize: 10, color: C.muted, marginTop: 8, lineHeight: 1.4 }}>{subtitulo ? "Muda a meta da fase atual. " : ""}Os treinos por semana também entram no cálculo das metas de dieta.</div>}
+      {ed && <div style={{ fontSize: 10, color: C.muted, marginTop: 8, lineHeight: 1.4 }}>{subtitulo ? "Muda a meta da etapa atual. " : ""}Os treinos por semana também entram no cálculo das metas de dieta.</div>}
     </div>
   );
 }

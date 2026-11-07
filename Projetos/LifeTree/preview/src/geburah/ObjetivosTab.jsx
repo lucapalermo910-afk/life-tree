@@ -157,7 +157,7 @@ export function ObjetivosTab() {
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
                     prazo={o.prazo || null} onPrazo={(v) => mudar(o.id, { prazo: v })}
-                    tituloPassos="LINHA DO TEMPO"
+                    tituloPassos="LINHA DO TEMPO" rotuloPasso="Etapa"
                     renderDetalhe={(s, i) => {
                       const marco = marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio: o.criado || hojeLocal(), prazo: o.prazo });
                       return <FaseDetalhe C={C} s={s} accent={ACCENT} marco={marco && marco(periodoDe(s.title))} fim={limitesDasFases(o.plano.steps, o.criado || hojeLocal(), o.prazo)[i]?.fim} />;
@@ -172,7 +172,7 @@ export function ObjetivosTab() {
                         render: (ed) => {
                           const t = treinoVigente(o);
                           return <TreinoCard C={C} t={t} accent={ACCENT} editando={ed} inicio={o.criado} prazo={o.prazo} onChange={(k, v) => mudarTreino(o, k, v)}
-                            subtitulo={t.fase != null ? "Fase " + (t.fase + 1) + (t.fim ? " · até " + dataBR(t.fim).slice(0, 5) : "") : null}
+                            subtitulo={t.fase != null ? "Etapa " + (t.fase + 1) + (t.fim ? " · até " + dataBR(t.fim).slice(0, 5) : "") : null}
                             totais={totaisDasFases(o.plano?.steps, o.criado || hojeLocal(), o.prazo)} />;
                         },
                         onApagar: () => { if (window.confirm("Apagar as metas de treino deste objetivo?")) mudar(o.id, { treino: null, semTreino: true }); } },

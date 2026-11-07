@@ -380,7 +380,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>OBJETIVOS</div>
           {!criandoObj && (
             <button onClick={() => setCriandoObj(true)} style={{ display: "flex", alignItems: "center", gap: 5, background: ACCENT, border: "none", borderRadius: 8, padding: "6px 12px", color: "#04222a", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
-              <Ico n="plus" size={11} color="#04222a" sw={2.2}/> Objetivo
+              <Ico n="plus" size={11} color="#04222a" sw={2.2}/> Novo
             </button>
           )}
         </div>
@@ -453,7 +453,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
             <div style={{ marginBottom: 4, fontSize: 9, color: item.color, fontWeight: 700 }}>{item.moduleLabel}</div>
             <GoalCard C={C} accent={item.color} label={item.title}
               pct={item.moduleId === "geburah" ? execucaoDoPlano(item.plano).pct : item.metrica?.id === "patrimonio_liquido" && ifStatus ? Math.max(0, Math.min(100, Math.round((ifStatus.projection.net / item.metrica.valor) * 100))) : Math.round((item.plano.steps.filter(s => s.done).length / item.plano.steps.length) * 100)}
-              statLine={item.moduleId === "geburah" ? execucaoDoPlano(item.plano).feitas + " de " + execucaoDoPlano(item.plano).total + " tarefas" : item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
+              statLine={item.moduleId === "geburah" ? (execucaoDoPlano(item.plano).total ? execucaoDoPlano(item.plano).feitas + " de " + execucaoDoPlano(item.plano).total + " tarefas" : "sem tarefas — adicione nas etapas, na Saúde") : item.metrica?.id === "patrimonio_liquido" && ifStatus ? fmt(ifStatus.projection.net) + " de " + fmt(item.metrica.valor) : item.plano.steps.filter(s => s.done).length + " de " + item.plano.steps.length + " passos concluídos"}
               onClick={() => abrirObjetivo && item.rawId && (item.moduleId === "geburah" || item.moduleId === "yesod")
                 ? abrirObjetivo(item.moduleId, item.rawId)
                 : setExpandedMetaId(p => p === item.id ? null : item.id)}

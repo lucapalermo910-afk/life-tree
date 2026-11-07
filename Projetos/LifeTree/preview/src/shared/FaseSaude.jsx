@@ -24,6 +24,9 @@ export function FaseDetalhe({ C, s, accent, marco = null, fim = null }) {
           ))}
         </>
       )}
+      {!s.tarefas?.length && (
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Sem tarefas. Toque na etapa para adicionar; elas aparecem no Controle.</div>
+      )}
       {s.revisao && (<>{rot("REVISÃO" + (fim ? " EM " + dataCurta(fim) : ""))}<div style={{ fontSize: 12.5, color: C.text, lineHeight: 1.4 }}>{s.revisao}</div></>)}
       {marco && (
         <div style={{ display: "inline-block", marginTop: 8, padding: "3px 9px", borderRadius: 99, background: accent + "14", color: accent, fontSize: 11, fontWeight: 800 }}>{marco}</div>
@@ -41,7 +44,7 @@ export function FaseEditor({ C, s, accent, onPatch }) {
   const mudarTarefa = (id, patch) => onPatch({ tarefas: tarefas.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
   return (
     <div>
-      {rot("FASE (PERÍODO: NOME)")}
+      {rot("ETAPA (PERÍODO: NOME)")}
       <EditableRow C={C} value={s.title} onChange={(v) => onPatch({ title: v })} autoFocus />
       {rot("NA SEMANA")}
       {w ? (
@@ -78,7 +81,7 @@ export function FaseEditor({ C, s, accent, onPatch }) {
         </div>
       ))}
       <AddRowBtn C={C} onClick={() => onPatch({ tarefas: [...tarefas, { id: "tf" + Math.random().toString(36).slice(2, 8), texto: "", ate: null, done: false }] })} label="Tarefa" accent={accent} />
-      {rot("REVISÃO NO FIM DA FASE")}
+      {rot("REVISÃO NO FIM DA ETAPA")}
       <EditableRow C={C} value={s.revisao || ""} onChange={(v) => onPatch({ revisao: v })} />
     </div>
   );
