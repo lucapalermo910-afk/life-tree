@@ -29,7 +29,7 @@ export const nomeArquivo = (titulo, ext) =>
 // o = objetivo salvo. extras (opcionais, calculados por quem chama): area, krs, dieta, macros,
 // treino (meta em vigor), totais, marco(periodo) → texto, fimDaEtapa(i) → ISO.
 export function planoParaMarkdown(o, extras = {}) {
-  const { area, krs, dieta, macros, treino, totais, marco, fimDaEtapa } = extras;
+  const { area, krs, dieta, macros, treino, totais, marco, marcoDaEtapa, fimDaEtapa } = extras;
   const L = [];
   L.push("# " + o.title, "");
   const meta = [area && "**Área:** " + area, o.prazo && "**Prazo:** " + dataBR(o.prazo), o.criado && "**Criado em:** " + dataBR(o.criado)].filter(Boolean);
@@ -54,6 +54,8 @@ export function planoParaMarkdown(o, extras = {}) {
     L.push("## Metas de dieta (por dia)", "");
     L.push("- Calorias: " + n(macros.cal) + " kcal", "- Proteína: " + macros.prot + " g", "- Carboidrato: " + macros.carb + " g", "- Gordura: " + macros.gord + " g");
     if (macros.kgSemana) L.push("- Ritmo: " + Number(macros.kgSemana).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + " kg por semana");
+    if (macros.base) L.push("- Gasto estimado: " + n(macros.gasto) + " kcal/dia (dia a dia " + n(macros.base) + " + treino " + n(macros.kcalTreinoDia) + " + cardio " + n(macros.kcalCardioDia) + ")");
+    if (macros.chegada) L.push("- Data estimada da meta: " + dataBR(macros.chegada) + (macros.pesoNoPrazo ? " (no prazo: " + n(macros.pesoNoPrazo) + " kg)" : ""));
     L.push("");
   }
 
@@ -73,7 +75,7 @@ export function planoParaMarkdown(o, extras = {}) {
       }
       const fim = fimDaEtapa ? fimDaEtapa(i) : null;
       if (s.revisao) L.push("**Revisão" + (fim ? " em " + dataCurta(fim) : "") + ":** " + s.revisao, "");
-      const mk = marco && periodo ? marco(periodo) : null;
+      const mk = marcoDaEtapa ? marcoDaEtapa(i) : marco && periodo ? marco(periodo) : null;
       if (mk) L.push("**" + mk + "**", "");
     });
   }
