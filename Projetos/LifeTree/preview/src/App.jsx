@@ -16,7 +16,7 @@ import { MacrosCard } from "./shared/MacrosCard.jsx";
 import { TreinoCard } from "./shared/TreinoCard.jsx";
 import { normalizarTreino, hojeLocal } from "./shared/treino.js";
 import { ResultadosCard } from "./shared/ResultadosCard.jsx";
-import { normalizarResultados, simularPlano, comRotina, normalizarFase, limitesDasFases, totaisDasFases } from "./shared/planejamento.js";
+import { normalizarResultados, simularPlano, ajustarPrazo, comRotina, normalizarFase, limitesDasFases, totaisDasFases } from "./shared/planejamento.js";
 import { FaseDetalhe } from "./shared/FaseSaude.jsx";
 import { lerModulos, restaurarModulos, compartilharArquivo } from "./shared/exportar.js";
 import { getSkill, pickSkillId } from "./shared/coachSkills.js";
@@ -761,7 +761,12 @@ export default function App() {
           if(action.dieta&&skillId==="geburah"){
             const w1=action.plano?.steps?.find(s=>s.semana)?.semana;
             if(action.treino||w1) action.dieta={...action.dieta,treinos_semana:(w1||normalizarTreino(action.treino)).treinos_semana};
-            const sim=simularPlano({dieta:action.dieta,steps:action.plano?.steps||[],inicio:hojeLocal(),prazo:action.prazo});
+            let sim=simularPlano({dieta:action.dieta,steps:action.plano?.steps||[],inicio:hojeLocal(),prazo:action.prazo});
+            // A data é resultado do plano: prazo, última etapa e frase seguem a simulação.
+            if(sim?.chegada&&sim.chegada!==action.prazo){
+              Object.assign(action,ajustarPrazo({...action,criado:hojeLocal()},sim.chegada));
+              sim=simularPlano({dieta:action.dieta,steps:action.plano?.steps||[],inicio:hojeLocal(),prazo:action.prazo});
+            }
             action.macrosPrevia=sim?.atual?.ok?sim.atual:null; action.simPrevia=sim;
           }
           setPendingCoachAction({action,skillId});

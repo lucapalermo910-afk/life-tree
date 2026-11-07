@@ -19,7 +19,7 @@ import { dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
 import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.js";
 import { ResultadosCard } from "../shared/ResultadosCard.jsx";
-import { normalizarResultados, simularObjetivo, comRotina, treinoAtual, ajustarPrazo, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
+import { normalizarResultados, simularObjetivo, alinharPrazoAoPlano, comRotina, treinoAtual, ajustarPrazo, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
 import { FaseDetalhe, FaseEditor } from "../shared/FaseSaude.jsx";
 import { planoParaMarkdown, compartilharArquivo, nomeArquivo } from "../shared/exportar.js";
 
@@ -82,14 +82,17 @@ export function ObjetivosTab() {
   const dietaVigente = (o, t = treinoVigente(o)) => (o.macros ? { ...dietaDoObjetivo(o, perfil), ...(t ? { treinos_semana: t.treinos_semana } : {}) } : null);
   // Metas de hoje e marcos vêm da simulação dia a dia (07/11/2026, shared/planejamento.js).
   const simulacao = (o) => simularObjetivo(o, perfil);
-  const macrosVigentes = (o) => (o.macros ? simulacao(o)?.atual || o.macros : null);
+  // A data oficial do plano é o prazo (alinhado à simulação com tolerância de 2 dias).
+  const macrosVigentes = (o) => { if (!o.macros) return null; const m = simulacao(o)?.atual || o.macros; return o.prazo ? { ...m, chegada: o.prazo } : m; };
   // Grava e recalcula a dieta com o treino da fase atual; as metas diárias da Nutrição seguem.
   const gravarComDieta = (o, campos) => {
     const novo = { ...o, ...campos };
     if (!novo.macros && !campos.dieta) { mudar(o.id, campos); return; }
     const dieta = { ...dietaDoObjetivo(novo, perfil) };
-    const m = simularObjetivo({ ...novo, dieta }, perfil)?.atual;
-    mudar(o.id, m?.ok ? { ...campos, dieta, macros: m } : { ...campos, dieta });
+    const al = alinharPrazoAoPlano({ ...novo, dieta }, perfil);
+    const m = simularObjetivo(al, perfil)?.atual;
+    const datas = al.prazo !== novo.prazo ? { prazo: al.prazo, descricao: al.descricao, plano: al.plano } : {};
+    mudar(o.id, m?.ok ? { ...campos, ...datas, dieta, macros: m } : { ...campos, ...datas, dieta });
     if (m.ok && setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
   };
   // Ajustar uma meta recalcula todas (shared/macros.js) e o resultado vira as metas diárias
@@ -163,7 +166,7 @@ export function ObjetivosTab() {
                 ? <PlanoCard C={C} plano={comRotina(o.plano)} accent={ACCENT} onToggleStep={o.plano.steps.some((s) => s.tarefas) ? null : (sid) => toggleStep(o.id, sid)} onUpdate={(u) => updatePlano(o.id, u)}
                     nome={o.title} onNome={(v) => mudar(o.id, { title: v })}
                     descricao={o.descricao || null} onDescricao={(v) => mudar(o.id, { descricao: v })}
-                    prazo={o.prazo || null} onPrazo={(v) => gravarComDieta(o, ajustarPrazo(o, v))}
+                    prazo={o.prazo || null} onPrazo={o.macros ? null : (v) => gravarComDieta(o, ajustarPrazo(o, v))}
                     tituloPassos="LINHA DO TEMPO" rotuloPasso="Etapa" onExportar={() => exportar(o)}
                     renderDetalhe={(s, i) => {
                       return <FaseDetalhe C={C} s={s} accent={ACCENT} marco={simulacao(o)?.marcos[i] || null} fim={limitesDasFases(o.plano.steps, o.criado || hojeLocal(), o.prazo)[i]?.fim} />;
@@ -183,7 +186,7 @@ export function ObjetivosTab() {
                         },
                         onApagar: () => { if (window.confirm("Apagar as metas de treino deste objetivo?")) mudar(o.id, { treino: null, semTreino: true }); } },
                       o.macros && { chave: "dieta", titulo: "Metas de dieta",
-                        render: (ed) => <MacrosCard C={C} m={macrosVigentes(o)} prazo={o.prazo} accent={ACCENT} editando={ed} dieta={dietaVigente(o)} onChange={(k, v) => mudarMacro(o, k, v)} />,
+                        render: (ed) => <MacrosCard C={C} m={macrosVigentes(o)} prazo={null} accent={ACCENT} editando={ed} dieta={dietaVigente(o)} onChange={(k, v) => mudarMacro(o, k, v)} />,
                         onApagar: () => { if (window.confirm("Apagar as metas de dieta deste objetivo?")) mudar(o.id, { macros: null, dieta: null, ajustes: null }); } },
                     ]}
                     editando={editando === o.id} onEditando={(v) => setEditando(v ? o.id : null)} />

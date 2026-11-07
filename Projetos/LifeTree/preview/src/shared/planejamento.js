@@ -227,3 +227,52 @@ export function simularObjetivo(o, perfil = {}) {
   const dieta = semFases && o.treino ? { ...base, treinos_semana: o.treino.treinos_semana, cardio_min_semana: o.treino.cardio_min_semana } : base;
   return simularPlano({ dieta, ajustes: o.ajustes || {}, steps: o.plano?.steps || [], inicio: o.criado, prazo: o.prazo });
 }
+
+// ── A data é resultado do plano (07/11/2026, pedido do usuário: "o objetivo é bater 70 kg;
+// a data quem dá é o Coach") ──────────────────────────────────────────────────────────
+// Em objetivo com dieta, o prazo é a data estimada pela simulação. Mudou ritmo, cardio,
+// treino ou peso-meta → a data, a última etapa e a data em "O objetivo" acompanham.
+// Tolerância de 2 dias para não ficar oscilando por arredondamento.
+export function alinharPrazoAoPlano(o, perfil = {}) {
+  // Peso-meta mudou → o número em "O objetivo" acompanha ("Chegar a 75 kg" → "Chegar a 70 kg").
+  const meta = Number(o.dieta?.peso_meta_kg);
+  const mk = String(o.descricao || "").match(/(\d+(?:[.,]\d+)?)\s?kg/);
+  if (meta && mk && Number(mk[1].replace(",", ".")) !== meta) {
+    o = { ...o, descricao: o.descricao.replace(mk[0], String(meta).replace(".", ",") + " kg") };
+  }
+  const sim = simularObjetivo(o, perfil);
+  const alvo = sim?.chegada;
+  if (!alvo) return o;
+  if (o.prazo && Math.abs(diaUTC(alvo) - diaUTC(o.prazo)) <= 2 * 86400000) return o;
+  let n = { ...o, ...ajustarPrazo(o, alvo) };
+  if (n.descricao && !/\d{1,2}\/\d{1,2}\/\d{4}/.test(n.descricao)) n.descricao = n.descricao.replace(/\s*$/, "") + " em " + br(alvo);
+  const m = simularObjetivo(n, perfil)?.atual;
+  if (m?.ok) n = { ...n, macros: m };
+  return n;
+}
+export const prazoPeloPlano = (o) => !!(o?.macros || o?.dieta);
+
+// Opções para encurtar ou alongar (o Coach oferece; o app calcula a data de cada uma).
+// Cada cenário traz as mudanças prontas para update_objective.
+export function cenariosDoObjetivo(o, perfil = {}) {
+  if (!prazoPeloPlano(o)) return [];
+  const base = dietaDoObjetivo(o, perfil), peso = Number(base.peso_kg);
+  const steps = o.plano?.steps || [];
+  const comCardio = (extra) => steps.map((s) => (s.semana ? { ...s, semana: { ...s.semana, cardio_min_semana: s.semana.cardio_min_semana + extra } } : s));
+  const etapasCardio = (extra) => steps.map((s, i) => (s.semana ? { op: "editar", etapa: i + 1, semana: { cardio_min_semana: s.semana.cardio_min_semana + extra } } : null)).filter(Boolean);
+  const opcoes = [
+    { nome: "Ritmo padrão (~0,7% do peso por semana)", ajustes: { ...(o.ajustes || {}), kgSemana: undefined }, mud: { ajustes: { kgSemana: null } } },
+    { nome: "Ritmo mais suave (~0,5% por semana)", ajustes: { kgSemana: Math.round(peso * 0.005 * 100) / 100 }, mud: { ajustes: { kgSemana: Math.round(peso * 0.005 * 100) / 100 } } },
+    { nome: "Ritmo agressivo (~1% por semana; calorias podem ficar no mínimo seguro)", ajustes: { kgSemana: Math.round(peso * 0.01 * 100) / 100 }, mud: { ajustes: { kgSemana: Math.round(peso * 0.01 * 100) / 100 } } },
+    // Com as calorias no mínimo seguro, só mais gasto encurta: cardio extra vira déficit extra.
+    { nome: "Máximo seguro: calorias no mínimo + 15 min de cardio por dia", ajustes: { kgSemana: Math.round(peso * 0.02 * 100) / 100 }, steps: comCardio(105),
+      mud: { ajustes: { kgSemana: Math.round(peso * 0.02 * 100) / 100 }, etapas: etapasCardio(105) } },
+    { nome: "Máximo seguro: calorias no mínimo + 30 min de cardio por dia", ajustes: { kgSemana: Math.round(peso * 0.02 * 100) / 100 }, steps: comCardio(210),
+      mud: { ajustes: { kgSemana: Math.round(peso * 0.02 * 100) / 100 }, etapas: etapasCardio(210) } },
+  ];
+  return opcoes.map((c) => {
+    const aj = { ...c.ajustes }; Object.keys(aj).forEach((k) => aj[k] === undefined && delete aj[k]);
+    const s = simularObjetivo({ ...o, ajustes: aj, plano: { ...o.plano, steps: c.steps || steps } }, perfil);
+    return { nome: c.nome, data_estimada: s?.chegada || null, calorias_hoje: s?.atual?.cal ?? null, no_minimo_seguro: !!s?.atual?.limitadoPeloPiso, mudancas: c.mud };
+  });
+}
