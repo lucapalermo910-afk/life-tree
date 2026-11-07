@@ -9,7 +9,7 @@
 import { notifyCoachDataUpdated } from "./coachSync.js";
 import { dietaDoObjetivo } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
-import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual, simularPlano, simularObjetivo } from "./planejamento.js";
+import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual, simularPlano, simularObjetivo, alinharPrazoAoPlano } from "./planejamento.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -444,7 +444,9 @@ export function createGeburahObjective(a) {
         sexo: String(a.dieta.sexo || perfil.sexo || "M").toUpperCase().startsWith("F") ? "F" : "M" });
     }
   }
-  writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, krs, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}), ...(treino ? { treino } : {}) }]);
+  let novo = { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, krs, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}), ...(treino ? { treino } : {}) };
+  if (macros) novo = alinharPrazoAoPlano(novo, readJSON("perfil", {}));
+  writeJSON("objetivos", [...objetivos, novo]);
   notifyGeburahUpdated();
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }
@@ -483,7 +485,9 @@ export function updateGeburahObjective(a) {
   let n = { ...o, plano: o.plano ? { ...o.plano, steps: [...(o.plano.steps || [])] } : { steps: [], impactoPositivo: [], impactoNegativo: [] } };
 
   if (a.titulo) { n.title = String(a.titulo).trim(); feito.push("nome"); }
-  if (a.prazo !== undefined) {
+  // Objetivo com dieta: a data é resultado do plano (alinharPrazoAoPlano no fim); prazo pedido
+  // à mão é ignorado — para encurtar, mude ritmo, cardio ou treino.
+  if (a.prazo !== undefined && !(o.macros || o.dieta || a.dieta)) {
     if (a.prazo && !/^\d{4}-\d{2}-\d{2}$/.test(a.prazo)) return { ok: false, message: "Prazo inválido (use AAAA-MM-DD)." };
     n = { ...n, ...ajustarPrazo(n, a.prazo || null) }; feito.push("prazo");
   }
@@ -546,6 +550,7 @@ export function updateGeburahObjective(a) {
     const perfil = readJSON("perfil", {});
     const dieta = { ...dietaDoObjetivo(n, perfil), ...(a.dieta || {}), ...(n.treino ? { treinos_semana: n.treino.treinos_semana } : {}) };
     const ajustes = a.ajustes ? { ...(n.ajustes || {}), ...a.ajustes } : n.ajustes || {};
+    Object.keys(ajustes).forEach(k => (ajustes[k] == null) && delete ajustes[k]);
     const m = simularObjetivo({ ...n, dieta, ajustes, macros: n.macros || {} }, perfil)?.atual || { ok: false };
     if (m.ok) {
       n = { ...n, dieta, ajustes, macros: m };
@@ -553,6 +558,11 @@ export function updateGeburahObjective(a) {
       if (a.dieta || a.ajustes) feito.push("dieta");
       msgMacros = " Dieta: " + m.cal + " kcal, " + m.prot + " g de proteína.";
     }
+  }
+  if (n.macros || n.dieta) {
+    const antes = n.prazo;
+    n = alinharPrazoAoPlano(n, readJSON("perfil", {}));
+    if (n.prazo !== antes) { feito.push("data estimada: " + n.prazo.split("-").reverse().join("/")); msgMacros = " Dieta: " + n.macros.cal + " kcal, " + n.macros.prot + " g de proteína."; }
   }
   if (!feito.length) return { ok: false, message: "Nada para mudar no objetivo." };
   writeJSON("objetivos", objetivos.map(x => (x.id === o.id ? n : x)));

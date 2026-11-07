@@ -7,7 +7,7 @@
 // netzachActions.js/chokmahActions.js/binahActions.js) — todos seguem o mesmo
 // mecanismo de refresh via evento (coachSync.js).
 
-import { simularObjetivo, limitesDasFases, execucaoDoPlano } from "./planejamento.js";
+import { simularObjetivo, limitesDasFases, execucaoDoPlano, cenariosDoObjetivo } from "./planejamento.js";
 import { dietaDoObjetivo } from "./macros.js";
 
 function readJSON(key, fallback) {
@@ -438,7 +438,7 @@ function resumoObjetivoSaude(o, perfil) {
     // minutos). Use-os para explicar — nunca recalcule à mão.
     dieta: dieta && m ? { peso_inicial_kg: dieta.peso_kg, peso_meta_kg: dieta.peso_meta_kg, duracao_treino_min: m.duracaoTreino, ajustes: o.ajustes || null,
       calorias_hoje: m.cal, proteina_g: m.prot, gasto_hoje_kcal: m.gasto, gasto_partes: { dia_a_dia: m.base, treino: m.kcalTreinoDia, cardio: m.kcalCardioDia },
-      ritmo_kg_semana_hoje: m.kgSemana, data_estimada_meta: sim?.chegada || null, peso_no_prazo_kg: sim?.pesoNoPrazo ?? null } : null,
+      ritmo_kg_semana_hoje: m.kgSemana, data_estimada_meta: o.prazo || sim?.chegada || null, peso_no_prazo_kg: sim?.pesoNoPrazo ?? null } : null,
     etapas: (o.plano?.steps || []).map((s, i) => {
       const m = String(s.title || "").match(/^([^:]{3,40}):\s*([\s\S]*)$/);
       const periodo = m ? m[1].trim() : null;
@@ -446,6 +446,8 @@ function resumoObjetivoSaude(o, perfil) {
         marco_calculado: sim?.marcos[i] || null, calorias_da_etapa: sim?.etapas[i]?.cal || null,
         tarefas: (s.tarefas || []).map(t => ({ id: t.id, texto: t.texto, ate: t.ate, feita: !!t.done })) };
     }),
+    // Opções com a data já calculada pelo app (para quando o usuário pedir para encurtar/alongar).
+    opcoes_de_ritmo: cenariosDoObjetivo(o, perfil),
     rotina: o.plano?.rotina || (o.plano?.habitoSugerido ? [o.plano.habitoSugerido] : []),
     impactoPositivo: o.plano?.impactoPositivo || [], impactoNegativo: o.plano?.impactoNegativo || [],
   };
@@ -1019,7 +1021,9 @@ OBJETIVO COM PLANO
 EDITAR E APAGAR OBJETIVO (o resumo traz em "objetivos" o plano completo: id, etapas numeradas, tarefas com id, metas e marcos calculados)
 27. {"action":"update_objective","objetivo":"id do resumo","titulo":"...","descricao":"...","prazo":"YYYY-MM-DD","etapas":[{"op":"editar","etapa":4,"periodo":"01/02 a 31/03/2027","titulo":"...","semana":{"treinos_semana":5,"cardio_min_semana":210,"divisao":"ABCD"},"revisao":"..."},{"op":"incluir","depois_de":4,"periodo":"...","titulo":"...","semana":{...},"tarefas":[{"texto":"...","ate":"YYYY-MM-DD"}],"revisao":"..."},{"op":"apagar","etapa":2}],"tarefas":[{"op":"incluir","etapa":1,"texto":"...","ate":"YYYY-MM-DD"},{"op":"editar","id":"tf...","texto":"...","ate":"YYYY-MM-DD","feita":true},{"op":"apagar","id":"tf..."}],"rotina":["lista completa nova"],"impactoPositivo":["lista completa"],"impactoNegativo":["lista completa"],"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_meta_kg":75},"ajustes":{"kgSemana":0.7}}
    Mande SÓ os campos que mudam; tudo numa ação só, mesmo que sejam muitas mudanças. Números de "etapa" e "depois_de" são os do resumo ANTES da mudança. Tarefas por "id" do resumo. "rotina"/"impactos" substituem a lista inteira. "ajustes": kgSemana (perda por semana), cal ou prot fixados pelo usuário; o app recalcula o resto.
-   PRAZO: ao mudar "prazo", o APP já faz a última etapa terminar no novo prazo e troca a data antiga em "descricao" — não precisa mandar etapa nem descricao só por isso.
+   DATA (objetivo com dieta/peso): a data NÃO é escolhida — é o resultado do plano. O app calcula a data estimada (simulação dia a dia) e ajusta prazo, última etapa e a data em "descricao" sozinho. Não mande "prazo" para esses objetivos.
+   ENCURTAR/ALONGAR: se o usuário pedir para encurtar ou alongar o plano, NÃO mude nada ainda: apresente 2 a 4 opções de "opcoes_de_ritmo" do resumo, cada uma com a data estimada e as calorias de hoje (diga quando ficar no mínimo seguro), e pergunte qual ele quer. Só depois da escolha mande update_objective com o "mudancas" da opção (pode combinar duas). Nunca prometa data que não esteja no resumo.
+   Objetivo sem dieta (ex: só treino): aí sim "prazo" muda a data, e o app ajusta a última etapa e a frase.
    Antes do <ACTION>, liste em texto curto exatamente o que vai mudar (o usuário confirma ou cancela). Nunca escreva pesos no texto das etapas (o marco é calculado pelo app).
 28. {"action":"delete_objective","objetivo":"id do resumo"} — apaga o objetivo inteiro. Só quando o usuário pedir explicitamente; diga o nome antes.
    Pedido para mudar/apagar/incluir QUALQUER coisa de um objetivo (nome, prazo, etapa, tarefa, meta de treino, dieta, rotina, impactos, resultados-chave) = use 27/28. Nunca responda que não consegue editar o plano.
@@ -1028,6 +1032,7 @@ PROTOCOLO "OBJETIVO COM PLANO" (toda vez que o usuário disser "quero criar o ob
 1. Mostre em 1-2 frases o status que JÁ existe no resumo (peso_hoje, peso_meta, ultimas_medidas, treinos_ultimos_30_dias, perfil) — não pergunte o que já está lá.
 2. Pergunte só o que falta, em UMA mensagem curta e numerada: rotina (quais dias e horários livres, quantos minutos por sessão), onde treina (casa, academia, rua), nível atual de condicionamento, lesões ou restrições de saúde, e o prazo desejado. Se peso ou altura não estiverem no resumo e forem relevantes, pergunte também.
 3. Com as respostas, transforme o objetivo em SMART: específico, mensurável (número), alcançável para a rotina informada, relevante e com prazo (data). Use esse texto como "descricao", a data como "prazo" e um nome curto como "titulo". "titulo" é o NOME CURTO do objetivo, como o usuário falaria (até ~30 caracteres, ex: "Bater 75 kg", "Quitar o cartão"), e "descricao" é UMA LINHA só com o resultado e a data (ex: "Chegar a 75 kg em 28/02/2027", "Quitar o cartão até 31/03/2027"). Frequência, horários, valores mensais e outras condições NÃO entram na descrição: vão nos passos e nos quadros de metas.
+3b. DATA: em objetivo de peso/composição, o "prazo" que você mandar é só um chute inicial — o app troca pela data estimada pela simulação. Não diga ao usuário uma data própria; diga que o app calculou a data com base no plano, e que dá para encurtar pedindo opções.
 4. "steps" = LINHA DO TEMPO EXECUTÁVEL (na tela e no texto ao usuário chame de "etapas": Etapa 1, Etapa 2…): 3 a 6 etapas em sequência, de hoje até o prazo, sem buracos, a última terminando no prazo. Cada fase é um objeto:
    - "periodo": "DD/MM a DD/MM/AAAA"; "titulo": nome curto da fase (ex: "Adaptação", "Progressão", "Consolidação").
    - "semana": a meta de treino da fase (treinos_semana, cardio_min_semana, divisao), em PROGRESSÃO de uma fase para a outra (ex: 3 → 4 treinos, 60 → 90 → 120 min de cardio), dentro do que a rotina informada comporta.

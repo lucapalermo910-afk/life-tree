@@ -13,7 +13,7 @@ import { NutriTab, AddAlimentoSheet, AddRefeicaoSheet, AddReceitaSheet, EditRece
 import { PlanejamentoTab, PlanRefeicaoSheet } from "./geburah/PlanejamentoTab.jsx";
 import { MedidasTab, RegistrarPesoSheet, EditMetaPesoSheet, AddMedidasSheet } from "./geburah/MedidasTab.jsx";
 import { ObjetivosTab } from "./geburah/ObjetivosTab.jsx";
-import { simularObjetivo } from "./shared/planejamento.js";
+import { simularObjetivo, alinharPrazoAoPlano } from "./shared/planejamento.js";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
@@ -69,6 +69,8 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
   // as metas diárias da Nutrição e o objetivo ficam com os valores de hoje.
   useEffect(()=>{
     const o=objetivos.find(x=>x.macros&&!x.done); if(!o) return;
+    const al=alinharPrazoAoPlano(o,perfil);
+    if(al!==o){ setObjetivos(p=>p.map(x=>x.id===o.id?al:x)); return; }  // a data acompanha o plano
     const m=simularObjetivo(o,perfil)?.atual; if(!m?.ok) return;
     if(metas.cal!==m.cal||metas.prot!==m.prot||metas.carb!==m.carb||metas.gord!==m.gord) setMetas(p=>({...p,cal:m.cal,prot:m.prot,carb:m.carb,gord:m.gord}));
     if(o.macros.cal!==m.cal||o.macros.chegada!==m.chegada) setObjetivos(p=>p.map(x=>x.id===o.id?{...x,macros:m}:x));
