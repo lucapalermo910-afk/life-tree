@@ -141,6 +141,15 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - Textos de interface em português, curtos. Sem quadros de "protótipo"/"teste" em telas
   que o usuário já usa.
 
+**Exportar e backup (06/11/2026)**
+- Todo `PlanoCard` de objetivo salvo recebe `onExportar`: botão "↗ Exportar plano (.md)" no
+  fim, que gera o Markdown (`shared/exportar.js` → `planoParaMarkdown`) e abre o Compartilhar
+  do celular (ou baixa o arquivo). Área nova com plano: passar os extras calculados da área.
+- Backup (Configurações → Backup) **v5 inclui todas as chaves `lifetree_*`** (objetivos,
+  planos, metas, perfil, dados dos módulos). Salva como arquivo .json (ou copia como texto);
+  restaurar aceita colar ou abrir o arquivo, pede confirmação e recarrega o app. Dado novo de
+  módulo deve morar numa chave `lifetree_*` para entrar no backup.
+
 **Fluxo de trabalho**
 - Mudanças vão por PR para a branch `dev` (endereço de teste
   `preview-git-dev-lucapalermo910-5080s-projects.vercel.app`). A `main` (produção,

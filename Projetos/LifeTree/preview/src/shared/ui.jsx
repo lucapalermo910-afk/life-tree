@@ -273,6 +273,7 @@ function partesDoPasso(t) {
 // ✓ (concluir) e × (apagar) no canto. Sem botão "Editar", lápis ou menu.
 //   chaves: "cabecalho" (nome, prazo, objetivo) · "meta:<chave>" · "passo:<id>" · "imp:<tipo>:<i>".
 // `metas`: lista [{ chave, titulo, render(editando), onApagar }] (ou um nó, só leitura).
+// `onExportar`: mostra "Exportar plano (.md)" no fim (06/11/2026, shared/exportar.js).
 // Planejamento (06/11/2026): `tituloPassos` (ex: "LINHA DO TEMPO"), `renderDetalhe(passo, i)` →
 // conteúdo extra da fase (meta da semana, tarefas, revisão, marco), `renderEditor(passo, patch)`
 // → editor próprio da fase, `rotuloPasso` (ex: "Etapa" → "ETAPA 1 · 06/11 a 30/11/2026"), `passoFeito(passo)` → concluído derivado (ex: todas as tarefas
@@ -282,7 +283,7 @@ function partesDoPasso(t) {
 // "Editar" vindo do Desejo) e fica sabendo quando algum item está em edição.
 export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8", descricao = null, somenteLeitura = false,
   nome = null, onNome = null, onDescricao = null, prazo = null, onPrazo = null, metas = null, editando: editandoExt, onEditando,
-  tituloPassos = "PASSO A PASSO", rotuloPasso = null, renderDetalhe = null, renderEditor = null, passoFeito = null }) {
+  onExportar = null, tituloPassos = "PASSO A PASSO", rotuloPasso = null, renderDetalhe = null, renderEditor = null, passoFeito = null }) {
   const [chave, setChaveInt] = useState(editandoExt ? "cabecalho" : null);
   const setChave = (k) => { setChaveInt(k); if (onEditando) onEditando(!!k); };
   // Quem chama abriu/fechou a edição: ajusta durante o render.
@@ -431,6 +432,14 @@ export function PlanoCard({ C, plano, onToggleStep, onUpdate, accent = "#818cf8"
       {Array.isArray(plano.rotina) && lista("rotina", "ROTINA", accent, "↻")}
       {lista("impactoPositivo", "IMPACTO POSITIVO", "#10b981", "+")}
       {lista("impactoNegativo", "PONTOS DE ATENÇÃO", "#ef4444", "!")}
+
+      {onExportar && (
+        <button onClick={onExportar} aria-label="Exportar plano"
+          style={{ display: "block", width: "100%", marginTop: 18, padding: "10px", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
+            border: "1px solid " + accent + "55", background: "transparent", color: accent, fontSize: 12, fontWeight: 800 }}>
+          ↗ Exportar plano (.md)
+        </button>
+      )}
     </div>
   );
 }
