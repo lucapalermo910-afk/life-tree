@@ -198,7 +198,7 @@ export function simularPlano({ dieta, ajustes = {}, steps = [], inicio, prazo, h
     const b = blocos[k], depois = d > b.fim;
     const sem = b.semana;
     if (!plano || (planoDesde !== k && !depois) || (depois && n % 28 === 0)) {
-      plano = calcularMacros(comSemana(w, sem), ajustes); planoDesde = depois ? planoDesde : k;
+      plano = calcularMacros(comSemana(w, sem), { ...ajustes, objetivo: perder ? "perder" : ganhar ? "ganhar" : "manter" }); planoDesde = depois ? planoDesde : k;
       if (!plano.ok) return null;
       if (!depois && b.i != null) etapas[b.i] = { inicio: d, ...plano };
     }

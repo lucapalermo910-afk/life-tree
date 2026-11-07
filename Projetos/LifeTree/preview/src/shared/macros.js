@@ -54,7 +54,9 @@ export function calcularMacros(dietaIn, ajustes = {}) {
   const g = gastoDiario(peso, dietaIn);
   const tmb = g.tmb, fator = ATIVIDADE_BASE, gasto = g.total;
 
-  const objetivo = meta < peso - 0.5 ? "perder" : meta > peso + 0.5 ? "ganhar" : "manter";
+  // `ajustes.objetivo` (07/11/2026): a simulação força "perder" até chegar à meta — sem isso,
+  // a 0,5 kg da meta o cálculo virava "manter" e a simulação parava a meio quilo do fim.
+  const objetivo = ajustes.objetivo || (meta < peso - 0.5 ? "perder" : meta > peso + 0.5 ? "ganhar" : "manter");
   const piso = Math.max(tmb, masc ? 1500 : 1200);
   const kgPedido = Number(ajustes.kgSemana) > 0 ? Number(ajustes.kgSemana) : null;
   const calPedida = Number(ajustes.cal) > 0 ? Number(ajustes.cal) : null;
