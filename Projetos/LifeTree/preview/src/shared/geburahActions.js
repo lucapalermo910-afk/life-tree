@@ -7,9 +7,9 @@
 // storage (ver GeburahModule.jsx, usePersisted com reloadSignal=coachSyncTick).
 
 import { notifyCoachDataUpdated } from "./coachSync.js";
-import { calcularMacros, dietaDoObjetivo } from "./macros.js";
+import { dietaDoObjetivo } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
-import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual } from "./planejamento.js";
+import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual, simularPlano, simularObjetivo } from "./planejamento.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -434,14 +434,14 @@ export function createGeburahObjective(a) {
   const treino = a.treino ? normalizarTreino(a.treino) : semana1 || null;
   if (a.dieta && treino) a.dieta = { ...a.dieta, treinos_semana: treino.treinos_semana };
   if (a.dieta) {
-    const m = calcularMacros(a.dieta);
+    // Metas de hoje pela simulação dia a dia (07/11/2026): etapas, cardio e queda do basal.
+    const m = simularPlano({ dieta: a.dieta, steps: plano?.steps || [], inicio: todayS(), prazo })?.atual || { ok: false };
     if (m.ok) {
       macros = m;
       writeJSON("metas", { ...readJSON("metas", {}), cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord });
       const perfil = readJSON("perfil", {});
       writeJSON("perfil", { ...perfil, peso: Number(a.dieta.peso_kg), altura: Number(a.dieta.altura_cm), idade: Number(a.dieta.idade),
-        sexo: String(a.dieta.sexo || perfil.sexo || "M").toUpperCase().startsWith("F") ? "F" : "M",
-        atividade: { 1.2: "sedentario", 1.375: "leve", 1.55: "moderado", 1.725: "intenso", 1.9: "muito_intenso" }[m.fator] });
+        sexo: String(a.dieta.sexo || perfil.sexo || "M").toUpperCase().startsWith("F") ? "F" : "M" });
     }
   }
   writeJSON("objetivos", [...objetivos, { id: "go" + uid(), title: titulo, xp: Number(a.xp) || 100, done: false, prazo, criado: todayS(), plano, krs, ...(a.descricao ? { descricao: String(a.descricao).trim() } : {}), ...(macros ? { macros, dieta: a.dieta } : {}), ...(treino ? { treino } : {}) }]);
@@ -546,7 +546,7 @@ export function updateGeburahObjective(a) {
     const perfil = readJSON("perfil", {});
     const dieta = { ...dietaDoObjetivo(n, perfil), ...(a.dieta || {}), ...(n.treino ? { treinos_semana: n.treino.treinos_semana } : {}) };
     const ajustes = a.ajustes ? { ...(n.ajustes || {}), ...a.ajustes } : n.ajustes || {};
-    const m = calcularMacros(dieta, ajustes);
+    const m = simularObjetivo({ ...n, dieta, ajustes, macros: n.macros || {} }, perfil)?.atual || { ok: false };
     if (m.ok) {
       n = { ...n, dieta, ajustes, macros: m };
       writeJSON("metas", { ...readJSON("metas", {}), cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord });

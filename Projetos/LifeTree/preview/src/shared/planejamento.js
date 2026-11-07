@@ -1,4 +1,5 @@
 import { normalizarTreino } from "./treino.js";
+import { calcularMacros, gastoDiario, dietaDoObjetivo } from "./macros.js";
 // Planejamento do objetivo (06/11/2026, pedido do usuário — hierarquia tipo OKR).
 // A aba Objetivos só PLANEJA: objetivo → resultados-chave (alvos) → metas da semana →
 // linha do tempo (fases, cada uma termina num marco) → rotina → impactos.
@@ -165,4 +166,64 @@ export function ajustarPrazo(o, novo) {
     }
   }
   return campos;
+}
+
+
+// ── Simulação dia a dia (07/11/2026, pedido do usuário: "estimar tudo o mais próximo do
+// comportamento real possível, considerando a queda do metabolismo basal") ─────────────
+// Em cada etapa as calorias são planejadas no início dela, com o peso esperado naquele dia e
+// a meta de treino/cardio da etapa. Dentro da etapa o peso cai dia a dia pelo déficit real
+// (gasto do dia, recalculado com o peso do dia, − calorias planejadas) ÷ 7.700. Depois da
+// última etapa, segue com a mesma rotina, replanejando a cada 4 semanas, até a meta.
+// Devolve: `atual` (metas de hoje, com chegada/pesoNoPrazo/semanas), `marcos[i]` (texto do
+// marco no fim da etapa i), `etapas[i]` (metas planejadas da etapa), `chegada`, `pesoNoPrazo`.
+const LIMITE_DIAS = 3 * 365;
+export function simularPlano({ dieta, ajustes = {}, steps = [], inicio, prazo, hoje = iso(new Date()) }) {
+  const peso0 = Number(dieta?.peso_kg), meta = Number(dieta?.peso_meta_kg);
+  if (!peso0 || !meta) return null;
+  const ini = ISO.test(inicio || "") ? inicio : hoje;
+  const semanaPadrao = { treinos_semana: Number(dieta.treinos_semana) || 0, cardio_min_semana: Number(dieta.cardio_min_semana) || 0 };
+  const lim = limitesDasFases(steps, ini, prazo);
+  const blocos = steps.map((s, i) => ({ i, ini: lim[i].inicio, fim: lim[i].fim, semana: s.semana || null })).filter((b) => b.fim && b.fim > b.ini);
+  let ultimaSemana = semanaPadrao;
+  blocos.forEach((b) => { b.semana = b.semana || ultimaSemana; ultimaSemana = b.semana; });
+  if (!blocos.length) blocos.push({ i: null, ini, fim: ISO.test(prazo || "") ? prazo : somaDias(ini, 7 * 26), semana: semanaPadrao });
+  const perder = meta < peso0, ganhar = meta > peso0;
+  const comSemana = (w, sem) => ({ ...dieta, peso_kg: Math.round(w * 10) / 10, treinos_semana: sem.treinos_semana, cardio_min_semana: sem.cardio_min_semana });
+
+  let w = peso0, d = ini, k = 0, plano = null, planoDesde = null, chegada = null, pesoNoPrazo = null, atual = null;
+  const etapas = [], pesoFim = {};
+  for (let n = 0; n <= LIMITE_DIAS; n++) {
+    while (k < blocos.length - 1 && d > blocos[k].fim) k++;
+    const b = blocos[k], depois = d > b.fim;
+    const sem = b.semana;
+    if (!plano || (planoDesde !== k && !depois) || (depois && n % 28 === 0)) {
+      plano = calcularMacros(comSemana(w, sem), { ...ajustes, objetivo: perder ? "perder" : ganhar ? "ganhar" : "manter" }); planoDesde = depois ? planoDesde : k;
+      if (!plano.ok) return null;
+      if (!depois && b.i != null) etapas[b.i] = { inicio: d, ...plano };
+    }
+    if (!atual && d >= hoje) atual = plano;
+    if (prazo && d === prazo) pesoNoPrazo = Math.round(w * 10) / 10;
+    if (b.i != null && d === b.fim) pesoFim[b.i] = Math.round(w * 10) / 10;
+    if (!chegada && ((perder && w <= meta + 0.05) || (ganhar && w >= meta - 0.05) || (!perder && !ganhar))) chegada = d;
+    if (chegada && (!prazo || d >= prazo) && d >= blocos[blocos.length - 1].fim) break;
+    const gasto = gastoDiario(w, comSemana(w, sem)).total;
+    w -= (gasto - plano.cal) / 7700;
+    if (perder) w = Math.max(meta, w); if (ganhar) w = Math.min(meta, w);
+    d = somaDias(d, 1);
+  }
+  if (!atual) atual = plano;
+  const semanas = chegada ? Math.max(0, Math.ceil((diaUTC(chegada) - diaUTC(hoje)) / (7 * 86400000))) : null;
+  const dataBR = (x) => x.slice(8, 10) + "/" + x.slice(5, 7);
+  const marcos = steps.map((s, i) => (pesoFim[i] != null && lim[i]?.fim ? "Marco: " + kgBR(pesoFim[i]) + " em " + dataBR(lim[i].fim) : null));
+  return { atual: { ...atual, chegada, pesoNoPrazo, semanas, simulado: true }, marcos, etapas, chegada, pesoNoPrazo, pesoFim };
+}
+
+// Dados de entrada da simulação para um objetivo salvo (dieta guardada ou reconstruída).
+export function simularObjetivo(o, perfil = {}) {
+  if (!o?.macros && !o?.dieta) return null;
+  const base = dietaDoObjetivo(o, perfil);
+  const semFases = !(o.plano?.steps || []).some((s) => s.semana);
+  const dieta = semFases && o.treino ? { ...base, treinos_semana: o.treino.treinos_semana, cardio_min_semana: o.treino.cardio_min_semana } : base;
+  return simularPlano({ dieta, ajustes: o.ajustes || {}, steps: o.plano?.steps || [], inicio: o.criado, prazo: o.prazo });
 }

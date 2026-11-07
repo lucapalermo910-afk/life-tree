@@ -15,11 +15,11 @@ import { Ico } from "./icons.jsx";
 import { fmt1, fmtKg } from "./helpers.js";
 import { GoalCard, PlanoCard, BotaoMais } from "../shared/ui.jsx";
 import { MacrosCard } from "../shared/MacrosCard.jsx";
-import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
+import { dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
 import { normalizarTreino, treinoDoObjetivo, hojeLocal } from "../shared/treino.js";
 import { ResultadosCard } from "../shared/ResultadosCard.jsx";
-import { normalizarResultados, marcosDoObjetivo, comRotina, treinoAtual, ajustarPrazo, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
+import { normalizarResultados, simularObjetivo, comRotina, treinoAtual, ajustarPrazo, totaisDasFases, limitesDasFases, execucaoDoPlano } from "../shared/planejamento.js";
 import { FaseDetalhe, FaseEditor } from "../shared/FaseSaude.jsx";
 import { planoParaMarkdown, compartilharArquivo, nomeArquivo } from "../shared/exportar.js";
 
@@ -59,7 +59,6 @@ function StatusAtual({ C, pesoHoje, pesoMeta, navyEstimate, trendKg }) {
 const dataBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "");
 const diasAte = (iso) => Math.ceil((new Date(iso + "T00:00:00") - new Date(new Date().toDateString())) / 86400000);
 
-const periodoDe = (title) => (String(title || "").match(/^([^:]{3,40}):/) || [])[1] || "";
 
 // Gauge do cartão (06/11/2026): % de tarefas das fases concluídas — marcadas no Controle.
 function linhaStatus(o) {
@@ -81,14 +80,16 @@ export function ObjetivosTab() {
   // Meta de treino em vigor: a da fase atual (fases executáveis) ou a do plano (objetivos antigos).
   const treinoVigente = (o) => treinoAtual(o) || treinoDoObjetivo(o, dietaDoObjetivo(o, perfil));
   const dietaVigente = (o, t = treinoVigente(o)) => (o.macros ? { ...dietaDoObjetivo(o, perfil), ...(t ? { treinos_semana: t.treinos_semana } : {}) } : null);
-  const macrosVigentes = (o) => { if (!o.macros) return null; const m = calcularMacros(dietaVigente(o), o.ajustes || {}); return m.ok ? m : o.macros; };
+  // Metas de hoje e marcos vêm da simulação dia a dia (07/11/2026, shared/planejamento.js).
+  const simulacao = (o) => simularObjetivo(o, perfil);
+  const macrosVigentes = (o) => (o.macros ? simulacao(o)?.atual || o.macros : null);
   // Grava e recalcula a dieta com o treino da fase atual; as metas diárias da Nutrição seguem.
   const gravarComDieta = (o, campos) => {
     const novo = { ...o, ...campos };
-    if (!novo.macros) { mudar(o.id, campos); return; }
-    const dieta = dietaVigente(novo);
-    const m = calcularMacros(dieta, novo.ajustes || {});
-    mudar(o.id, m.ok ? { ...campos, dieta, macros: m } : { ...campos, dieta });
+    if (!novo.macros && !campos.dieta) { mudar(o.id, campos); return; }
+    const dieta = { ...dietaDoObjetivo(novo, perfil) };
+    const m = simularObjetivo({ ...novo, dieta }, perfil)?.atual;
+    mudar(o.id, m?.ok ? { ...campos, dieta, macros: m } : { ...campos, dieta });
     if (m.ok && setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
   };
   // Ajustar uma meta recalcula todas (shared/macros.js) e o resultado vira as metas diárias
@@ -105,16 +106,13 @@ export function ObjetivosTab() {
     } else gravarComDieta(o, { treino, ...criado });
   };
   const mudarMacro = (o, k, v) => {
-    const dieta = { ...dietaVigente(o) };
+    const dieta = { ...dietaDoObjetivo(o, perfil) };
     const ajustes = { ...(o.ajustes || {}) };
     if (k === "kgSemana") { ajustes.kgSemana = v || undefined; delete ajustes.cal; }
     else if (k === "cal") { ajustes.cal = v || undefined; delete ajustes.kgSemana; }
     else if (k === "prot") ajustes.prot = v || undefined;
     else dieta[k] = v;
-    const m = calcularMacros(dieta, ajustes);
-    if (!m.ok) { mudar(o.id, { dieta, ajustes }); return; }
-    mudar(o.id, { dieta, ajustes, macros: m });
-    if (setMetas) setMetas((p) => ({ ...p, cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord }));
+    gravarComDieta(o, { dieta, ajustes });
   };
   // Vindo do Desejo: rola até o objetivo aberto.
   useEffect(() => { if (objetivoInicial) document.getElementById("obj-" + objetivoInicial)?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [objetivoInicial]);
@@ -130,7 +128,7 @@ export function ObjetivosTab() {
     const md = planoParaMarkdown(o, {
       area: "Saúde", krs: normalizarResultados(o.krs), dieta: dietaVigente(o), macros: macrosVigentes(o), treino: treinoVigente(o),
       totais: totaisDasFases(o.plano?.steps, inicio, o.prazo),
-      marco: marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio, prazo: o.prazo }),
+      marcoDaEtapa: (i) => simulacao(o)?.marcos[i] || null,
       fimDaEtapa: (i) => limitesDasFases(o.plano.steps, inicio, o.prazo)[i]?.fim,
     });
     compartilharArquivo(nomeArquivo(o.title, "md"), md);
@@ -168,8 +166,7 @@ export function ObjetivosTab() {
                     prazo={o.prazo || null} onPrazo={(v) => gravarComDieta(o, ajustarPrazo(o, v))}
                     tituloPassos="LINHA DO TEMPO" rotuloPasso="Etapa" onExportar={() => exportar(o)}
                     renderDetalhe={(s, i) => {
-                      const marco = marcosDoObjetivo({ dieta: dietaVigente(o), macros: macrosVigentes(o), inicio: o.criado || hojeLocal(), prazo: o.prazo });
-                      return <FaseDetalhe C={C} s={s} accent={ACCENT} marco={marco && marco(periodoDe(s.title))} fim={limitesDasFases(o.plano.steps, o.criado || hojeLocal(), o.prazo)[i]?.fim} />;
+                      return <FaseDetalhe C={C} s={s} accent={ACCENT} marco={simulacao(o)?.marcos[i] || null} fim={limitesDasFases(o.plano.steps, o.criado || hojeLocal(), o.prazo)[i]?.fim} />;
                     }}
                     renderEditor={(s, patch) => <FaseEditor C={C} s={s} accent={ACCENT} onPatch={(p) => patch(p.semana ? { ...p, semana: normalizarTreino(p.semana) } : p)} />}
                     passoFeito={(s) => (s.tarefas?.length ? s.tarefas.every((t) => t.done) : !!s.done)}
