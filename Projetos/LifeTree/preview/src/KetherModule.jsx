@@ -11,7 +11,7 @@ import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
 import { AREAS, sugerirArea } from "./shared/areaObjetivo.js";
 import { typeColor, typeLabel, phaseLabel } from "./hod/helpers.js";
 import { fmt } from "./yesod/constants.js";
-import { GoalCard, PlanoCard } from "./shared/ui.jsx";
+import { GoalCard, PlanoCard, BotaoMais } from "./shared/ui.jsx";
 import {
   readIfPlan,
   criarIfPlan as criarIfPlanShared,
@@ -379,10 +379,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>OBJETIVOS</div>
           {!criandoObj && (
-            <button onClick={() => setCriandoObj(true)} aria-label="Novo objetivo" title="Novo objetivo"
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 26, height: 26, background: ACCENT, border: "none", borderRadius: 8, cursor: "pointer", padding: 0 }}>
-              <Ico n="plus" size={13} color="#04222a" sw={2.4}/>
-            </button>
+            <BotaoMais onClick={() => setCriandoObj(true)} accent={ACCENT} cor="#04222a" />
           )}
         </div>
         {criandoObj && (

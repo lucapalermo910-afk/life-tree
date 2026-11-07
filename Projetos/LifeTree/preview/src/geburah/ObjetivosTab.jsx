@@ -10,10 +10,10 @@
 // read-only no Malkuth (GOAL_ACTIVITY_ADAPTERS).
 import { useContext, useEffect, useState } from "react";
 import { useGeburah } from "./context.js";
-import { ThemeCtx, ACCENT, GREEN, Btn } from "./theme.js";
+import { ThemeCtx, ACCENT, GREEN } from "./theme.js";
 import { Ico } from "./icons.jsx";
 import { fmt1, fmtKg } from "./helpers.js";
-import { GoalCard, PlanoCard } from "../shared/ui.jsx";
+import { GoalCard, PlanoCard, BotaoMais } from "../shared/ui.jsx";
 import { MacrosCard } from "../shared/MacrosCard.jsx";
 import { calcularMacros, dietaDoObjetivo } from "../shared/macros.js";
 import { TreinoCard } from "../shared/TreinoCard.jsx";
@@ -147,9 +147,7 @@ export function ObjetivosTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", margin: "4px 0 10px" }}>
         <div style={{ fontSize: 13, fontWeight: 800 }}>Objetivos</div>
         {abrirDesejo && (
-          <Btn sm full={false} color={ACCENT} onClick={abrirDesejo} aria-label="Novo objetivo" title="Novo objetivo" style={{ width: 26, height: 26, padding: 0, borderRadius: 8 }}>
-            <Ico n="plus" size={13} />
-          </Btn>
+          <BotaoMais onClick={abrirDesejo} accent={ACCENT} />
         )}
       </div>
 
