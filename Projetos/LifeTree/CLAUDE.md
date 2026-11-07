@@ -133,14 +133,13 @@ como você, capaz de fazer toda e qualquer modificação, exclusão ou input")**
   × (apagar) no canto. O círculo do passo continua só marcando. "+ Adicionar passo" e
   "+ Adicionar" ficam no fim de cada lista. No Desejo, o toque leva ao módulo de destino.
 - Metas vão para o `PlanoCard` como lista: `metas=[{ chave, titulo, render(editando), onApagar }]`.
-- Título dos quadros de meta sem "(calculadas pelo app)"; só "(ajustadas por você)" quando for o caso.
+- Título dos quadros de meta é só o nome ("METAS DE DIETA", "METAS DE TREINO"): sem "(calculadas pelo app)" nem "(ajustadas por você)" (pedido do usuário, 07/11/2026).
 - Ordem do plano: **O objetivo → metas da área → passo a passo → impactos**. Em Saúde, as
   metas são **treino (`TreinoCard`) e depois dieta (`MacrosCard`)**. Treino = treinos na semana,
   cardio na semana (min), totais até o prazo (treinos e minutos de cardio, do `criado` ao
   `prazo`, recalculados quando a meta semanal ou o prazo mudam) e tipo de treino (A, AB, ABC…, com a sequência da semana); sem
   duração, horário ou acompanhamento de execução. Treinos por semana têm **fonte única** no
-  quadro de treino: a dieta lê de lá e recalcula quando muda. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano. Meta
-  ajustada à mão fica marcada como "ajustada por você".
+  quadro de treino: a dieta lê de lá e recalcula quando muda. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano.
 - **Metas editáveis recalculam tudo.** Em edição, o quadro de metas vira calculadora: o
   usuário mexe nos dados e nas alavancas (ex: peso, peso-meta, treinos, perda por semana,
   calorias, proteína) e o código recalcula o resto (ex: carboidrato, gordura, semanas até a
@@ -171,6 +170,13 @@ mais próximo do comportamento real possível, considerando a queda do metabolis
   (média móvel), não o diário alimentar, que costuma subestimar o consumo; comida e treino
   registrados explicam a diferença. Recalibrar o gasto pelo ritmo real.
 - Nunca mostrar só a linha reta; números de energia sempre vindos dessas funções.
+- **A data é resultado do plano** (pedido do usuário, 07/11/2026: "o objetivo é bater 70 kg; a
+  data quem dá é o Coach"). Em objetivo com dieta, `alinharPrazoAoPlano` faz o prazo = data
+  estimada da simulação (tolerância de 2 dias) e ajusta a última etapa, a data e o peso-meta em
+  "O objetivo". O prazo não é editável na tela e o Coach não manda prazo para esses objetivos;
+  sem aviso de "depois do prazo". Para encurtar/alongar, o usuário pede ao Coach, que mostra as
+  `opcoes_de_ritmo` (`cenariosDoObjetivo`: padrão, suave, agressivo, máximo seguro + cardio,
+  cada uma com data e calorias calculadas pelo app) e só aplica a escolhida.
 
 **Exportar e backup (06/11/2026)**
 - Todo `PlanoCard` de objetivo salvo recebe `onExportar`: botão "↗ Exportar plano (.md)" no
