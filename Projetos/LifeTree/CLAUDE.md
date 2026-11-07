@@ -55,9 +55,9 @@ Autocuidado, Conhecimento, Relacionamentos). Ao levar o plano pelo Coach para um
 nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente variações.
 
 **Criação e roteamento**
-- Objetivo nasce pelo **Desejo (Kether)**, no botão **"+ Novo"**, ou pelo Coach dentro do
+- Objetivo nasce pelo **Desejo (Kether)**, no botão **"+"** (só o ícone; `aria-label` "Novo objetivo"), ou pelo Coach dentro do
   módulo. Onde quer que seja criado, mora no módulo de origem e **aparece no Desejo** (lido
-  pelos `GOAL_ADAPTERS`). A aba Objetivos dos módulos tem "+ Novo", que leva ao Desejo
+  pelos `GOAL_ADAPTERS`). A aba Objetivos dos módulos tem o mesmo botão "+", que leva ao Desejo
   (`abrirDesejo`). O plano não se edita no Desejo: o toque leva ao módulo.
 - Sem etiquetas de área na criação: a área é sugerida pelo texto (`shared/areaObjetivo.js`)
   e aparece como "Vai para: X (sugerido) · Trocar". Área sem plano pelo Coach = "em breve".

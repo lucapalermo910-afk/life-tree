@@ -379,8 +379,9 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1 }}>OBJETIVOS</div>
           {!criandoObj && (
-            <button onClick={() => setCriandoObj(true)} style={{ display: "flex", alignItems: "center", gap: 5, background: ACCENT, border: "none", borderRadius: 8, padding: "6px 12px", color: "#04222a", fontWeight: 800, fontSize: 11, cursor: "pointer" }}>
-              <Ico n="plus" size={11} color="#04222a" sw={2.2}/> Novo
+            <button onClick={() => setCriandoObj(true)} aria-label="Novo objetivo" title="Novo objetivo"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, background: ACCENT, border: "none", borderRadius: 10, cursor: "pointer", padding: 0 }}>
+              <Ico n="plus" size={16} color="#04222a" sw={2.4}/>
             </button>
           )}
         </div>
@@ -442,7 +443,7 @@ export default function KetherModule({ onBack, dark, setDark, askCoach, abrirObj
         )}
         {metas.length === 0 && (
           <div style={{ textAlign: "center", padding: "20px 0", color: C.muted, fontSize: 12 }}>
-            Nenhum objetivo ainda. Toque em "+ Objetivo" para criar o primeiro.
+            Nenhum objetivo ainda. Toque no + para criar o primeiro.
           </div>
         )}
         {metas.map(item => item.plano ? (
