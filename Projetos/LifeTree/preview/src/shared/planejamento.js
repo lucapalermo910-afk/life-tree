@@ -140,3 +140,29 @@ export function execucaoDoPlano(plano) {
   const feitas = ts.filter((t) => t.done).length;
   return { feitas, total: ts.length, pct: ts.length ? Math.round((feitas / ts.length) * 100) : 0 };
 }
+
+// ── Trocar o prazo (07/11/2026, pedido do usuário) ───────────────────────────────────
+// O prazo é o fim do plano: ao trocá-lo, a última etapa passa a terminar nele e a data
+// do prazo antigo escrita em "O objetivo" vira a nova. Devolve os campos a gravar.
+const br = (s) => s.slice(8, 10) + "/" + s.slice(5, 7) + "/" + s.slice(0, 4);
+export function ajustarPrazo(o, novo) {
+  if (!ISO.test(novo || "")) return { prazo: novo || null };
+  const campos = { prazo: novo };
+  if (o.prazo && o.descricao && o.descricao.includes(br(o.prazo))) campos.descricao = o.descricao.split(br(o.prazo)).join(br(novo));
+  const steps = o.plano?.steps || [];
+  const ult = steps[steps.length - 1];
+  if (ult) {
+    const m = String(ult.title || "").match(/^([^:]{3,40}):([\s\S]*)$/);
+    const periodo = m ? m[1] : "";
+    const datas = [...periodo.matchAll(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g)];
+    // Início da última etapa: a 1ª data escrita no período (ou o fim da etapa anterior).
+    const lim = limitesDasFases(steps, o.criado, o.prazo);
+    const inicioUlt = datas.length >= 2 ? fimDaFase(datas[0][0], o.criado, o.prazo) : lim[lim.length - 1]?.inicio;
+    if (datas.length && (!inicioUlt || novo > inicioUlt)) {
+      const d = datas[datas.length - 1];
+      const novoPeriodo = periodo.slice(0, d.index) + br(novo) + periodo.slice(d.index + d[0].length);
+      campos.plano = { ...o.plano, steps: steps.map((s, i) => (i === steps.length - 1 ? { ...s, title: novoPeriodo + ":" + m[2] } : s)) };
+    }
+  }
+  return campos;
+}

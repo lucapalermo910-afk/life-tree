@@ -7,9 +7,9 @@
 // storage (ver GeburahModule.jsx, usePersisted com reloadSignal=coachSyncTick).
 
 import { notifyCoachDataUpdated } from "./coachSync.js";
-import { calcularMacros } from "./macros.js";
+import { calcularMacros, dietaDoObjetivo } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
-import { normalizarResultados, normalizarFase } from "./planejamento.js";
+import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual } from "./planejamento.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -462,6 +462,113 @@ export function toggleGeburahTarefa(a) {
   return { ok: true, message: "Tarefa '" + achou.texto + "' " + (achou.done ? "concluída." : "reaberta.") };
 }
 
+// ── Editar e apagar objetivo pelo Coach (07/11/2026, pedido do usuário: "o Coach precisa
+// ser capaz de fazer toda e qualquer modificação, exclusão ou input") ──────────────────
+// update_objective aplica, de uma vez, qualquer combinação de mudanças. Números de etapa
+// ("etapa": 1, 2…) se referem à numeração ANTES da mudança. Depois recalcula treino da etapa
+// atual, dieta/macros e as metas diárias da Nutrição, como a tela faz.
+const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "");
+function acharObjetivo(objetivos, ref) {
+  if (!ref) return objetivos.length === 1 ? objetivos[0] : null;
+  return objetivos.find(o => o.id === ref) || objetivos.find(o => norm(o.title) === norm(ref)) ||
+    objetivos.find(o => norm(o.title).includes(norm(ref)) || norm(ref).includes(norm(o.title))) || null;
+}
+const listaTexto = (v) => (Array.isArray(v) ? v.map(x => String(x || "").trim()).filter(Boolean) : null);
+
+export function updateGeburahObjective(a) {
+  const objetivos = readJSON("objetivos", []);
+  const o = acharObjetivo(objetivos, a.objetivo || a.id || a.match);
+  if (!o) return { ok: false, message: "Não achei o objetivo '" + (a.objetivo || "") + "'." };
+  const feito = [];
+  let n = { ...o, plano: o.plano ? { ...o.plano, steps: [...(o.plano.steps || [])] } : { steps: [], impactoPositivo: [], impactoNegativo: [] } };
+
+  if (a.titulo) { n.title = String(a.titulo).trim(); feito.push("nome"); }
+  if (a.prazo !== undefined) {
+    if (a.prazo && !/^\d{4}-\d{2}-\d{2}$/.test(a.prazo)) return { ok: false, message: "Prazo inválido (use AAAA-MM-DD)." };
+    n = { ...n, ...ajustarPrazo(n, a.prazo || null) }; feito.push("prazo");
+  }
+  if (a.descricao !== undefined) { n.descricao = String(a.descricao || "").trim() || null; feito.push("objetivo"); }
+
+  // Etapas: mapeia número → id antes de mexer.
+  const ids = n.plano.steps.map(s => s.id);
+  const idDa = (k) => ids[Number(k) - 1];
+  for (const op of Array.isArray(a.etapas) ? a.etapas : []) {
+    const tipo = op.op || "editar";
+    if (tipo === "apagar") {
+      const id = idDa(op.etapa); if (!id) continue;
+      n.plano.steps = n.plano.steps.filter(s => s.id !== id); feito.push("etapa " + op.etapa + " apagada");
+    } else if (tipo === "incluir") {
+      const nova = normalizarFase(op);
+      const depois = op.depois_de != null ? n.plano.steps.findIndex(s => s.id === idDa(op.depois_de)) : n.plano.steps.length - 1;
+      n.plano.steps.splice(depois + 1, 0, nova); feito.push("etapa nova");
+    } else {
+      const id = idDa(op.etapa); if (!id) continue;
+      n.plano.steps = n.plano.steps.map(s => {
+        if (s.id !== id) return s;
+        const m = String(s.title || "").match(/^([^:]{3,40}):\s*([\s\S]*)$/);
+        const periodo = op.periodo ?? (m ? m[1].trim() : ""), nome = op.titulo ?? (m ? m[2].trim() : s.title);
+        return { ...s, title: periodo ? periodo + ": " + nome : nome,
+          ...(op.semana ? { semana: normalizarTreino({ ...(s.semana || {}), ...op.semana }) } : {}),
+          ...(op.revisao !== undefined ? { revisao: String(op.revisao || "").trim() || undefined } : {}) };
+      });
+      feito.push("etapa " + op.etapa);
+    }
+  }
+  // Tarefas: incluir (na etapa N), editar ou apagar (pelo id do resumo).
+  for (const op of Array.isArray(a.tarefas) ? a.tarefas : []) {
+    const tipo = op.op || "editar";
+    if (tipo === "incluir") {
+      const id = idDa(op.etapa) || n.plano.steps[n.plano.steps.length - 1]?.id;
+      const t = normalizarTarefa({ texto: op.texto, ate: op.ate });
+      if (!t.texto || !id) continue;
+      n.plano.steps = n.plano.steps.map(s => (s.id === id ? { ...s, tarefas: [...(s.tarefas || []), t] } : s)); feito.push("tarefa nova");
+    } else {
+      n.plano.steps = n.plano.steps.map(s => ({ ...s, tarefas: (s.tarefas || []).flatMap(t => {
+        if (t.id !== op.id) return [t];
+        if (tipo === "apagar") { feito.push("tarefa apagada"); return []; }
+        feito.push("tarefa editada");
+        return [{ ...t, ...(op.texto ? { texto: String(op.texto).trim() } : {}), ...(op.ate !== undefined ? { ate: /^\d{4}-\d{2}-\d{2}$/.test(op.ate || "") ? op.ate : null } : {}),
+          ...(op.feita !== undefined ? { done: !!op.feita } : {}) }];
+      }) }));
+    }
+  }
+  for (const k of ["rotina", "impactoPositivo", "impactoNegativo"]) {
+    const l = listaTexto(a[k]); if (l) { n.plano[k] = l; feito.push(k === "rotina" ? "rotina" : "impactos"); }
+  }
+  if (a.resultados) { n.krs = normalizarResultados({ ...(n.krs || {}), ...a.resultados }); feito.push("resultados-chave"); }
+  if (a.semTreino !== undefined) n.semTreino = !!a.semTreino;
+
+  // Dieta e treino: guarda os dados de entrada e recalcula com o treino da etapa atual.
+  const t = treinoAtual(n);
+  if (t) n.treino = { treinos_semana: t.treinos_semana, cardio_min_semana: t.cardio_min_semana, divisao: t.divisao };
+  let msgMacros = "";
+  if (n.macros || a.dieta) {
+    const perfil = readJSON("perfil", {});
+    const dieta = { ...dietaDoObjetivo(n, perfil), ...(a.dieta || {}), ...(n.treino ? { treinos_semana: n.treino.treinos_semana } : {}) };
+    const ajustes = a.ajustes ? { ...(n.ajustes || {}), ...a.ajustes } : n.ajustes || {};
+    const m = calcularMacros(dieta, ajustes);
+    if (m.ok) {
+      n = { ...n, dieta, ajustes, macros: m };
+      writeJSON("metas", { ...readJSON("metas", {}), cal: m.cal, prot: m.prot, carb: m.carb, gord: m.gord });
+      if (a.dieta || a.ajustes) feito.push("dieta");
+      msgMacros = " Dieta: " + m.cal + " kcal, " + m.prot + " g de proteína.";
+    }
+  }
+  if (!feito.length) return { ok: false, message: "Nada para mudar no objetivo." };
+  writeJSON("objetivos", objetivos.map(x => (x.id === o.id ? n : x)));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Objetivo '" + n.title + "' atualizado (" + [...new Set(feito)].join(", ") + ")." + msgMacros };
+}
+
+export function deleteGeburahObjective(a) {
+  const objetivos = readJSON("objetivos", []);
+  const o = acharObjetivo(objetivos, a.objetivo || a.id || a.match);
+  if (!o) return { ok: false, message: "Não achei o objetivo '" + (a.objetivo || "") + "'." };
+  writeJSON("objetivos", objetivos.filter(x => x.id !== o.id));
+  notifyGeburahUpdated();
+  return { ok: true, message: "Objetivo '" + o.title + "' apagado." };
+}
+
 export function toggleGeburahObjective(a) {
   const objetivos = readJSON("objetivos", []);
   const alvo = objetivos.find(o => o.title === a.match || o.id === a.id);
@@ -474,6 +581,8 @@ export function toggleGeburahObjective(a) {
 export const GEBURAH_ACTION_HANDLERS = {
   toggle_tarefa_objetivo: toggleGeburahTarefa,
   create_objective: createGeburahObjective,
+  update_objective: updateGeburahObjective,
+  delete_objective: deleteGeburahObjective,
   toggle_objective: toggleGeburahObjective,
   register_weight: registerGeburahWeight,
   register_meal: registerGeburahMeal,
