@@ -14,6 +14,7 @@ import { PlanejamentoTab, PlanRefeicaoSheet } from "./geburah/PlanejamentoTab.js
 import { MedidasTab, RegistrarPesoSheet, EditMetaPesoSheet, AddMedidasSheet } from "./geburah/MedidasTab.jsx";
 import { ObjetivosTab } from "./geburah/ObjetivosTab.jsx";
 import { simularObjetivo, alinharPrazoAoPlano } from "./shared/planejamento.js";
+import { FeedbackCoach } from "./shared/FeedbackCoach.jsx";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
@@ -389,6 +390,8 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
         {page?.type==="logTreino"
           ? <LogTreinoPage/>
           : <>
+            {(tab==="geb"||tab==="medidas"||tab==="treino"||tab==="nutri")&&<FeedbackCoach C={C} max={tab==="geb"?3:1}
+              dados={{objetivos,pesagens,logTreino,logDieta,alimentos,metas,agua,rotinasTreino,perfil,pesosMeta}}/>}
             {tab==="geb"    &&GebTab()}
             {tab==="treino" &&<TreinoTab/>}
             {tab==="nutri"  &&<NutriTab/>}

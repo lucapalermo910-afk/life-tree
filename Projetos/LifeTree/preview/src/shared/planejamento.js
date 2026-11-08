@@ -192,7 +192,7 @@ export function simularPlano({ dieta, ajustes = {}, steps = [], inicio, prazo, h
   const comSemana = (w, sem) => ({ ...dieta, peso_kg: Math.round(w * 10) / 10, treinos_semana: sem.treinos_semana, cardio_min_semana: sem.cardio_min_semana });
 
   let w = peso0, d = ini, k = 0, plano = null, planoDesde = null, chegada = null, pesoNoPrazo = null, atual = null;
-  const etapas = [], pesoFim = {};
+  const etapas = [], pesoFim = {}, pesoEm = {};
   for (let n = 0; n <= LIMITE_DIAS; n++) {
     while (k < blocos.length - 1 && d > blocos[k].fim) k++;
     const b = blocos[k], depois = d > b.fim;
@@ -203,6 +203,7 @@ export function simularPlano({ dieta, ajustes = {}, steps = [], inicio, prazo, h
       if (!depois && b.i != null) etapas[b.i] = { inicio: d, ...plano };
     }
     if (!atual && d >= hoje) atual = plano;
+    pesoEm[d] = Math.round(w * 10) / 10;
     if (prazo && d === prazo) pesoNoPrazo = Math.round(w * 10) / 10;
     if (b.i != null && d === b.fim) pesoFim[b.i] = Math.round(w * 10) / 10;
     if (!chegada && ((perder && w <= meta + 0.05) || (ganhar && w >= meta - 0.05) || (!perder && !ganhar))) chegada = d;
@@ -216,7 +217,7 @@ export function simularPlano({ dieta, ajustes = {}, steps = [], inicio, prazo, h
   const semanas = chegada ? Math.max(0, Math.ceil((diaUTC(chegada) - diaUTC(hoje)) / (7 * 86400000))) : null;
   const dataBR = (x) => x.slice(8, 10) + "/" + x.slice(5, 7);
   const marcos = steps.map((s, i) => (pesoFim[i] != null && lim[i]?.fim ? "Marco: " + kgBR(pesoFim[i]) + " em " + dataBR(lim[i].fim) : null));
-  return { atual: { ...atual, chegada, pesoNoPrazo, semanas, simulado: true }, marcos, etapas, chegada, pesoNoPrazo, pesoFim };
+  return { atual: { ...atual, chegada, pesoNoPrazo, semanas, simulado: true }, marcos, etapas, chegada, pesoNoPrazo, pesoFim, pesoEm };
 }
 
 // Dados de entrada da simulação para um objetivo salvo (dieta guardada ou reconstruída).
@@ -275,4 +276,105 @@ export function cenariosDoObjetivo(o, perfil = {}) {
     const s = simularObjetivo({ ...o, ajustes: aj, plano: { ...o.plano, steps: c.steps || steps } }, perfil);
     return { nome: c.nome, data_estimada: s?.chegada || null, calorias_hoje: s?.atual?.cal ?? null, no_minimo_seguro: !!s?.atual?.limitadoPeloPiso, mudancas: c.mud };
   });
+}
+
+
+// ── Verificação dos dados registrados × plano (08/11/2026, pedido do usuário: o Coach "precisa
+// ser capaz de verificar os dados imputados") ─────────────────────────────────────────────
+// Tudo calculado aqui; o Coach só lê e explica. `d` = dados do módulo Saúde:
+// { pesagens [{data,peso}], logTreino [{data,horaFim}], logDieta [{data,alimentoId,qtd}],
+//   alimentos [{id,cal100,prot}], metas {cal,prot}, agua {meta}, rotinasTreino [], perfil, pesosMeta }.
+const diasEntre = (a, b) => Math.round((diaUTC(b) - diaUTC(a)) / 86400000);
+const r1 = (x) => Math.round(x * 10) / 10;
+export function verificarObjetivo(o, d, hoje = iso(new Date())) {
+  const alertas = [];
+  const sim = simularObjetivo(o, d.perfil || {});
+  const dieta = o.macros || o.dieta ? dietaDoObjetivo(o, d.perfil || {}) : null;
+  const inicio = o.criado || hoje;
+  const steps = o.plano?.steps || [];
+  const lim = limitesDasFases(steps, inicio, o.prazo);
+  const iAtual = indiceFaseAtual(steps, inicio, o.prazo, hoje);
+  const semanaAtual = steps[iAtual]?.semana || o.treino || null;
+
+  // Pesagens: ponto de partida, tendência real e comparação com o esperado pela simulação.
+  const pes = [...(d.pesagens || [])].filter((p) => p?.data && Number(p.peso)).sort((a, b) => a.data.localeCompare(b.data));
+  const ult = pes[pes.length - 1] || null;
+  const desde = (dias) => pes.filter((p) => diasEntre(p.data, hoje) <= dias);
+  const media7 = desde(7).length ? r1(desde(7).reduce((s, p) => s + Number(p.peso), 0) / desde(7).length) : null;
+  let ritmoReal = null;
+  const j = desde(28);
+  if (j.length >= 2 && diasEntre(j[0].data, j[j.length - 1].data) >= 7) {
+    const xs = j.map((p) => diasEntre(j[0].data, p.data)), ys = j.map((p) => Number(p.peso));
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const inc = xs.reduce((s, x, k) => s + (x - mx) * (ys[k] - my), 0) / xs.reduce((s, x) => s + (x - mx) ** 2, 0);
+    ritmoReal = Math.round(-inc * 7 * 100) / 100; // kg perdidos por semana (positivo = perdendo)
+  }
+  const esperadoHoje = sim?.pesoEm?.[hoje] ?? null;
+  const pesagens = { registros: pes.length, ultima: ult ? { data: ult.data, peso: Number(ult.peso) } : null, media_7_dias: media7,
+    ritmo_real_kg_semana: ritmoReal, ritmo_planejado_kg_semana: sim?.atual?.kgSemana ?? null, peso_esperado_hoje: esperadoHoje,
+    diferenca_para_o_esperado: media7 != null && esperadoHoje != null ? r1(media7 - esperadoHoje) : null };
+  if (!pes.length) alertas.push("Nenhuma pesagem registrada: o plano parte de " + (dieta?.peso_kg ?? "?") + " kg sem confirmação, e os marcos não têm referência real.");
+  else if (dieta && Math.abs(Number(pes.find((p) => p.data >= inicio)?.peso ?? ult.peso) - Number(dieta.peso_kg)) >= 1)
+    alertas.push("Ponto de partida diferente: o plano usa " + dieta.peso_kg + " kg e a primeira pesagem desde o início é " + (pes.find((p) => p.data >= inicio)?.peso ?? ult.peso) + " kg.");
+  if (ult && diasEntre(ult.data, hoje) > 10) alertas.push("Última pesagem há " + diasEntre(ult.data, hoje) + " dias.");
+  if (pesagens.diferenca_para_o_esperado != null && Math.abs(pesagens.diferenca_para_o_esperado) >= 1)
+    alertas.push("Peso (média de 7 dias) " + (pesagens.diferenca_para_o_esperado > 0 ? "acima" : "abaixo") + " do esperado em " + Math.abs(pesagens.diferenca_para_o_esperado) + " kg.");
+
+  // Treinos: feitos × planejados na etapa atual e nas últimas 4 semanas.
+  const feitos = (d.logTreino || []).filter((l) => l?.data && l.horaFim);
+  const abertos = (d.logTreino || []).filter((l) => l?.data && !l.horaFim && l.data < hoje).length;
+  const iniEtapa = lim[iAtual]?.inicio || inicio;
+  const nEtapa = feitos.filter((l) => l.data >= iniEtapa && l.data <= hoje).length;
+  const diasEtapa = Math.max(1, diasEntre(iniEtapa, hoje) + 1);
+  const planejadosEtapa = semanaAtual ? r1((semanaAtual.treinos_semana * diasEtapa) / 7) : null;
+  const n28 = feitos.filter((l) => diasEntre(l.data, hoje) < 28 && l.data <= hoje).length;
+  const treinos = { na_etapa_atual: nEtapa, planejados_ate_hoje_na_etapa: planejadosEtapa,
+    aderencia_pct: planejadosEtapa ? Math.round((nEtapa / Math.max(planejadosEtapa, 1)) * 100) : null, ultimos_28_dias: n28,
+    alvo_pct: o.krs?.treino_pct ?? null, rotinas_cadastradas: (d.rotinasTreino || []).length, tipo_de_treino: semanaAtual?.divisao || null,
+    cardio: "o app ainda não registra minutos de cardio separados" };
+  if (semanaAtual && treinos.aderencia_pct != null && diasEtapa >= 7 && treinos.aderencia_pct < (o.krs?.treino_pct ?? 85))
+    alertas.push("Treinos na etapa atual: " + nEtapa + " de ~" + planejadosEtapa + " planejados (" + treinos.aderencia_pct + "%), abaixo do alvo de " + (o.krs?.treino_pct ?? 85) + "%.");
+  if (semanaAtual && (d.rotinasTreino || []).length < semanaAtual.divisao.length)
+    alertas.push("Tipo de treino " + semanaAtual.divisao + " pede " + semanaAtual.divisao.length + " rotinas, e há " + (d.rotinasTreino || []).length + " cadastradas.");
+  if (abertos) alertas.push(abertos + " treino(s) de dias anteriores ficaram sem finalizar.");
+
+  // Dieta: últimos 14 dias do diário contra as metas.
+  const al = new Map((d.alimentos || []).map((a) => [a.id, a]));
+  const porDia = {};
+  (d.logDieta || []).forEach((l) => {
+    if (!l?.data || diasEntre(l.data, hoje) >= 14 || l.data > hoje) return;
+    const a = al.get(l.alimentoId); if (!a) return;
+    const x = (porDia[l.data] ||= { cal: 0, prot: 0 });
+    x.cal += ((Number(a.cal100) || 0) * (Number(l.qtd) || 0)) / 100; x.prot += ((Number(a.prot) || 0) * (Number(l.qtd) || 0)) / 100;
+  });
+  const metaCal = d.metas?.cal || sim?.atual?.cal, metaProt = d.metas?.prot || sim?.atual?.prot;
+  const diasReg = Object.values(porDia);
+  const dentro = diasReg.filter((x) => metaCal && Math.abs(x.cal - metaCal) <= metaCal * 0.1 && (!metaProt || x.prot >= metaProt * 0.9)).length;
+  const dietaV = { dias_com_registro_14d: diasReg.length, dias_dentro_da_meta_14d: dentro,
+    media_kcal_registrada: diasReg.length ? Math.round(diasReg.reduce((s, x) => s + x.cal, 0) / diasReg.length) : null,
+    media_prot_registrada_g: diasReg.length ? Math.round(diasReg.reduce((s, x) => s + x.prot, 0) / diasReg.length) : null,
+    meta_kcal: metaCal ?? null, meta_prot_g: metaProt ?? null, alvo_pct: o.krs?.dieta_pct ?? null,
+    observacao: "diário alimentar costuma subestimar o consumo; a tendência do peso é o dado mais confiável" };
+  if (o.macros && diasEntre(inicio, hoje) >= 3 && diasReg.length < Math.min(7, diasEntre(inicio, hoje)))
+    alertas.push("Alimentação registrada em " + diasReg.length + " dos últimos " + Math.min(14, diasEntre(inicio, hoje) + 1) + " dias: não dá para medir a dieta.");
+  if (!(Number(d.agua?.meta) > 0)) alertas.push("Meta de água está em 0 ml.");
+
+  // Tarefas do plano.
+  const ts = steps.flatMap((s, i) => (s.tarefas || []).map((t) => ({ ...t, etapa: i + 1 })));
+  const atrasadas = ts.filter((t) => !t.done && t.ate && t.ate < hoje).map((t) => ({ etapa: t.etapa, texto: t.texto, ate: t.ate }));
+  const proximas = ts.filter((t) => !t.done && t.ate && t.ate >= hoje && diasEntre(hoje, t.ate) <= 7).map((t) => ({ etapa: t.etapa, texto: t.texto, ate: t.ate }));
+  if (atrasadas.length) alertas.push(atrasadas.length + " tarefa(s) atrasada(s): " + atrasadas.map((t) => t.texto).join("; ") + ".");
+
+  // Consistência entre o que foi digitado em lugares diferentes.
+  const pf = d.perfil || {};
+  if (dieta && pf.altura && Number(pf.altura) !== Number(dieta.altura_cm)) alertas.push("Altura diferente no perfil (" + pf.altura + ") e no plano (" + dieta.altura_cm + ").");
+  if (dieta && pf.idade && Number(pf.idade) !== Number(dieta.idade)) alertas.push("Idade diferente no perfil (" + pf.idade + ") e no plano (" + dieta.idade + ").");
+  if (dieta && d.pesosMeta?.pesoMeta && Number(d.pesosMeta.pesoMeta) !== Number(dieta.peso_meta_kg))
+    alertas.push("Peso-meta da aba de medidas (" + d.pesosMeta.pesoMeta + " kg) diferente do objetivo (" + dieta.peso_meta_kg + " kg).");
+  (o.plano?.rotina || []).forEach((r) => { if (/\d+\s?(g|kcal|kg)\b/i.test(r)) alertas.push("Rotina com número fixo que pode ficar desatualizado: \"" + r + "\"."); });
+  if ((o.plano?.rotina || []).some((r) => /pes\w*[^.]*1x por semana|pes\w*[^.]*semanal/i.test(r)))
+    alertas.push("A rotina diz pesar 1x por semana; com pesagem diária o app compara a média de 7 dias e avisa quando sair do plano.");
+
+  return { hoje, etapa_atual: iAtual + 1, pesagens, treinos, dieta: dietaV, tarefas: { atrasadas, proximas_7_dias: proximas,
+    feitas: ts.filter((t) => t.done).length, total: ts.length }, alertas };
 }

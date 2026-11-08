@@ -729,7 +729,7 @@ export default function App() {
       const data=await callCoachAPI({
         system:systemPrompt,
         messages:mensagens,
-        maxTokens:3000,
+        maxTokens:4096, // teto do servidor (api/_lib/rateLimit.js); avaliação do plano passava de 3000
       });
       const cortada=data.stop_reason==="max_tokens";
       let text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
@@ -788,6 +788,14 @@ export default function App() {
     setCoachBubbleClosed(false);
     setCoachLoading(false);
   };
+  // Aviso do Coach → "Conversar com o Coach" (08/11/2026, shared/feedback.js): abre a conversa
+  // em tela cheia e já envia a pergunta montada pelo aviso para a skill da área.
+  const sendToCoachRef=useRef(null); sendToCoachRef.current=sendToCoach;
+  useEffect(()=>{
+    const h=(e)=>{ const d=e.detail||{}; if(!d.texto) return; setCoachBubbleClosed(false); setCoachExpanded(true); sendToCoachRef.current?.(d.texto,d.skill); };
+    window.addEventListener("lifetree:coach",h); return()=>window.removeEventListener("lifetree:coach",h);
+  },[]);
+
 
   // Bolha de erro do Coach some sozinha depois de alguns segundos — diferente de uma
   // resposta normal (que fica até o usuário fechar ou mandar outra pergunta, porque pode
