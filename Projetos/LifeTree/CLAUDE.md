@@ -121,6 +121,13 @@ como você, capaz de fazer toda e qualquer modificação, exclusão ou input")**
   módulo dono, mesmo do Desejo/Controle; dentro do módulo dono, falar de objetivo/etapa/
   tarefa não troca de Coach por palavra de outro módulo.
 - Área nova com plano: dar ao Coach dela o mesmo resumo completo e as mesmas duas ações.
+- **Avaliar/verificar o plano** (08/11/2026): o resumo traz `verificacao` (`verificarObjetivo` em
+  planejamento.js) — pesagens (última, média de 7 dias, ritmo real × planejado, peso esperado
+  hoje pela simulação), treinos feitos × planejados na etapa, diário dos últimos 14 dias contra
+  as metas, tarefas atrasadas/próximas, consistência perfil × plano × aba de medidas, e
+  `alertas` prontos. O prompt manda: só esses números, riscos primeiro (máx. 5), até 3 mudanças
+  aplicáveis e perguntar antes de aplicar, ~250 palavras. Datas ao usuário em DD/MM/AAAA.
+  Rotina nunca leva número calculado (g, kcal, kg). Respostas do Coach com até 4.096 tokens.
 - **Trocar o prazo** (na tela ou pelo Coach) passa por `ajustarPrazo`: a última etapa passa a
   terminar no novo prazo e a data antiga em "O objetivo" vira a nova.
 
