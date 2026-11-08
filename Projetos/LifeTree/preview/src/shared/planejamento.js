@@ -372,6 +372,8 @@ export function verificarObjetivo(o, d, hoje = iso(new Date())) {
   if (dieta && d.pesosMeta?.pesoMeta && Number(d.pesosMeta.pesoMeta) !== Number(dieta.peso_meta_kg))
     alertas.push("Peso-meta da aba de medidas (" + d.pesosMeta.pesoMeta + " kg) diferente do objetivo (" + dieta.peso_meta_kg + " kg).");
   (o.plano?.rotina || []).forEach((r) => { if (/\d+\s?(g|kcal|kg)\b/i.test(r)) alertas.push("Rotina com número fixo que pode ficar desatualizado: \"" + r + "\"."); });
+  if ((o.plano?.rotina || []).some((r) => /pes\w*[^.]*1x por semana|pes\w*[^.]*semanal/i.test(r)))
+    alertas.push("A rotina diz pesar 1x por semana; com pesagem diária o app compara a média de 7 dias e avisa quando sair do plano.");
 
   return { hoje, etapa_atual: iAtual + 1, pesagens, treinos, dieta: dietaV, tarefas: { atrasadas, proximas_7_dias: proximas,
     feitas: ts.filter((t) => t.done).length, total: ts.length }, alertas };

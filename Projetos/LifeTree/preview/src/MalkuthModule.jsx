@@ -8,6 +8,8 @@ import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
 import { execucaoDoPlano } from "./shared/planejamento.js";
+import { FeedbackCoach } from "./shared/FeedbackCoach.jsx";
+import { lerDadosSaude } from "./shared/feedback.js";
 import { GoalCard } from "./shared/ui.jsx";
 import { fmt } from "./yesod/constants.js";
 
@@ -187,6 +189,8 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
       </div>
 
       <div style={{ padding: "14px 16px 100px" }}>
+        <FeedbackCoach C={C} dados={lerDadosSaude()} />
+
         {tarefas.length > 0 && (
           <>
             <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: 1, marginBottom: 10 }}>TAREFAS DOS OBJETIVOS</div>

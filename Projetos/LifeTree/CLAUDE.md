@@ -185,6 +185,19 @@ mais próximo do comportamento real possível, considerando a queda do metabolis
   `opcoes_de_ritmo` (`cenariosDoObjetivo`: padrão, suave, agressivo, máximo seguro + cardio,
   cada uma com data e calorias calculadas pelo app) e só aplica a escolhida.
 
+**Avisos automáticos do Coach (08/11/2026, pedido do usuário)**
+- `shared/feedback.js` (regras) + `shared/FeedbackCoach.jsx` (cartões) no topo da Saúde (até 3 na
+  aba principal, 1 nas outras) e do Controle. O CÓDIGO decide quando falar; a mensagem é
+  montada sem chamar a API; "Conversar com o Coach" abre a conversa da Saúde com a pergunta
+  (evento `lifetree:coach`, escutado no App). × dispensa até o fim do dia.
+- Peso só pela **média de 7 dias** (≥ 3 pesagens) × esperado da simulação (±1 kg acima, −1,5 kg
+  abaixo); pesagem isolada acima vira "variação normal". Correção sempre de execução (treino,
+  cardio, registrar, proteína) — nunca mandar comer menos (calorias podem estar no mínimo).
+  Rotina padrão: pesar todo dia em jejum.
+- Próximo passo combinado: notificação no celular pelo caminho "resumo no servidor + envio
+  agendado" (plano Hobby da Vercel: tarefas agendadas no máximo 1x por dia cada, ±59 min;
+  iPhone só com o app na tela inicial), reaproveitando estas regras.
+
 **Exportar e backup (06/11/2026)**
 - Todo `PlanoCard` de objetivo salvo recebe `onExportar`: botão "↗ Exportar plano (.md)" no
   fim, que gera o Markdown (`shared/exportar.js` → `planoParaMarkdown`) e abre o Compartilhar
