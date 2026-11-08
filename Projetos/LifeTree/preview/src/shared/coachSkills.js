@@ -963,6 +963,8 @@ REGRAS GERAIS:
     keywords: [
       "treino", "treinar", "academia", "peso", "dieta", "caloria", "proteína", "proteina",
       "água", "agua", "exercício", "exercicio", "rotina de treino", "medida corporal", "musculação", "musculacao",
+      // 08/11/2026: registros ditos de forma natural no Controle/Desejo caíam no Coach geral.
+      "pesei", "pesagem", " kg", "cardio", "cintura", "comi ", "almocei", "jantei", "refeição", "refeicao",
     ],
     actions: true,
     buildContext: () => buildGeburahContext(),

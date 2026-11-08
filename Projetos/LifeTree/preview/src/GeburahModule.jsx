@@ -13,7 +13,7 @@ import { NutriTab, AddAlimentoSheet, AddRefeicaoSheet, AddReceitaSheet, EditRece
 import { PlanejamentoTab, PlanRefeicaoSheet } from "./geburah/PlanejamentoTab.jsx";
 import { MedidasTab, RegistrarPesoSheet, EditMetaPesoSheet, AddMedidasSheet } from "./geburah/MedidasTab.jsx";
 import { ObjetivosTab } from "./geburah/ObjetivosTab.jsx";
-import { simularObjetivo, alinharPrazoAoPlano } from "./shared/planejamento.js";
+import { simularObjetivo, alinharPrazoAoPlano, autoConcluirTarefas } from "./shared/planejamento.js";
 import { FeedbackCoach } from "./shared/FeedbackCoach.jsx";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
@@ -68,6 +68,12 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
   // Metas de dieta seguem o plano (07/11/2026): a simulação replaneja as calorias a cada
   // etapa (peso esperado + treino/cardio da etapa). Ao abrir o módulo — e na virada de etapa —
   // as metas diárias da Nutrição e o objetivo ficam com os valores de hoje.
+  // Tarefas que se completam sozinhas (08/11/2026): pesagem, medidas, rotinas cadastradas.
+  useEffect(()=>{
+    const novos=autoConcluirTarefas(objetivos,{pesagens,medidasCorp,rotinasTreino});
+    if(novos!==objetivos) setObjetivos(novos);
+  },[objetivos,pesagens,medidasCorp,rotinasTreino]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(()=>{
     const o=objetivos.find(x=>x.macros&&!x.done); if(!o) return;
     const al=alinharPrazoAoPlano(o,perfil);
