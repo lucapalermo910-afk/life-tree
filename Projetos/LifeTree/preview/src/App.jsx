@@ -540,6 +540,9 @@ export default function App() {
   // Objetivos com aquele plano aberto. Consumido uma vez pelo módulo e limpo em seguida.
   const [destinoObjetivo, setDestinoObjetivo] = useState(null); // { moduleId, id, editar } | null
   const abrirObjetivo=(moduleId,id,editar=false)=>{ setDestinoObjetivo({moduleId,id,editar}); setActiveModule(moduleId); };
+  // Tarefa do Controle → tela onde ela se executa (08/11/2026): { moduleId, tab, abrir }.
+  const [destinoTela, setDestinoTela] = useState(null);
+  const abrirTela=(d)=>{ if(!d?.moduleId) return; setDestinoTela(d); setActiveModule(d.moduleId); };
   // Sair do módulo também destrava (a conversa de criação ficou para trás).
   useEffect(()=>{ setCoachSkillTravada(null); },[activeModule]);
   const [coachLoading,  setCoachLoading]  = useState(false);
@@ -1009,7 +1012,8 @@ export default function App() {
       )}
       {activeModule==="geburah"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} editarDestino={!!destinoObjetivo?.editar} limparDestino={()=>setDestinoObjetivo(null)}/>
+          <GeburahModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} askCoach={sendToCoach} abrirDesejo={()=>setActiveModule("kether")} destinoObjetivo={destinoObjetivo?.moduleId==="geburah"?destinoObjetivo.id:null} editarDestino={!!destinoObjetivo?.editar} limparDestino={()=>setDestinoObjetivo(null)}
+            destinoTela={destinoTela?.moduleId==="geburah"?destinoTela:null} limparTela={()=>setDestinoTela(null)}/>
         </div>
       )}
       {activeModule==="chesed"&&(
@@ -1034,7 +1038,7 @@ export default function App() {
       )}
       {activeModule==="malkuth"&&(
         <div style={{position:"fixed",inset:0,zIndex:100,overflowY:"auto"}}>
-          <MalkuthModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark}/>
+          <MalkuthModule onBack={()=>setActiveModule(null)} dark={dark} setDark={setDark} abrirTela={abrirTela} abrirObjetivo={abrirObjetivo}/>
         </div>
       )}
       {activeModule==="kether"&&(

@@ -428,3 +428,23 @@ export function autoConcluirTarefas(objetivos, d) {
   });
   return mudou ? novos : objetivos;
 }
+
+// ── Tarefa leva ao lugar de executá-la (08/11/2026, pedido do usuário) ─────────────────
+// Tocar na tarefa no Controle abre a tela onde ela se faz. Sem lugar no app: agenda (Google
+// Agenda com o evento preenchido) ou a etapa no plano.
+export function destinoDaTarefa(t) {
+  const x = String(t?.texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const tipos = tiposAutomaticos(t?.texto);
+  if (tipos.includes("pesagem")) return { moduleId: "geburah", tab: "medidas", abrir: "registrarPeso", rotulo: "Registrar peso" };
+  if (tipos.includes("medidas")) return { moduleId: "geburah", tab: "medidas", rotulo: "Registrar medidas" };
+  if (tipos.includes("rotinas")) return { moduleId: "geburah", tab: "treino", abrir: "addRotina", rotulo: "Criar rotina" };
+  if (/\b(agenda|agendar|horario|fixar|consulta|medico|marcar)\b/.test(x)) {
+    const d = (t.ate || iso(new Date())).replace(/-/g, ""), d2 = somaDias(t.ate || iso(new Date()), 1).replace(/-/g, "");
+    return { agenda: true, rotulo: "Pôr na agenda",
+      url: "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(t.texto) + "&dates=" + d + "/" + d2 + "&details=" + encodeURIComponent("Tarefa do plano no LifeTree") };
+  }
+  if (/\b(treino|treinos|cargas?|divisao|cardio|exercicio)\b/.test(x)) return { moduleId: "geburah", tab: "treino", rotulo: "Abrir treinos" };
+  if (/\b(cardapio|alimentacao|refeic|proteina|dieta|comida|festas)\b/.test(x)) return { moduleId: "geburah", tab: "nutri", rotulo: "Abrir nutrição" };
+  if (/\bpeso\b/.test(x)) return { moduleId: "geburah", tab: "medidas", rotulo: "Ver peso" };
+  return { moduleId: "geburah", objetivo: true, rotulo: "Ver no plano" };
+}

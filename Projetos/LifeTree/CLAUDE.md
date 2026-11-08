@@ -106,6 +106,13 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
   no máximo 7 dias antes do "até"; tarefa que cita dois tipos precisa dos dois. Nunca desmarca;
   guarda `auto` e o Controle mostra "feita automaticamente (…)". Roda na Saúde, no Controle e
   quando o Coach registra pesagem/medidas.
+- **Tarefa leva ao lugar de executá-la** (`destinoDaTarefa`, 08/11/2026): no Controle, o quadrado
+  marca; tocar no texto abre: pesagem → Saúde/Medidas com "Registrar Peso" aberto; medidas →
+  Medidas; montar/criar treinos → Treino com "Nova Rotina" aberta; treino/cardio/cargas → Treino;
+  alimentação/proteína → Nutrição; peso → Medidas; agenda/horário/consulta/médico → Google
+  Agenda com o evento preenchido na data da tarefa; resto → a etapa no plano. Cada tarefa
+  pendente mostra o rótulo do destino ("Registrar peso →"). Navegação: `abrirTela` no App →
+  `destinoTela {tab, abrir}` no módulo.
 - **Gauge do objetivo = % de tarefas feitas** (`execucaoDoPlano`), igual na Saúde, no Desejo e
   no Controle, com "N de M tarefas · faltam N dias".
 - **Rotina** (`plano.rotina`): 3–5 hábitos recorrentes, editáveis como os impactos. O antigo
