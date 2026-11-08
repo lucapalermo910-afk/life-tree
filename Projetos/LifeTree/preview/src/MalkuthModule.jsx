@@ -7,7 +7,7 @@ import { NETZACH_ACTION_HANDLERS } from "./shared/netzachActions.js";
 import { TIPHARETH_ACTION_HANDLERS } from "./shared/tipharethActions.js";
 import { CHOKMAH_ACTION_HANDLERS } from "./shared/chokmahActions.js";
 import { GEBURAH_ACTION_HANDLERS } from "./shared/geburahActions.js";
-import { execucaoDoPlano, autoConcluirTarefas } from "./shared/planejamento.js";
+import { execucaoDoPlano, autoConcluirTarefas, destinoDaTarefa } from "./shared/planejamento.js";
 import { FeedbackCoach } from "./shared/FeedbackCoach.jsx";
 import { lerDadosSaude } from "./shared/feedback.js";
 import { GoalCard } from "./shared/ui.jsx";
@@ -139,7 +139,7 @@ function tarefasDosObjetivos() {
     .sort((a, b) => (a.done - b.done) || (a.ate || "9999").localeCompare(b.ate || "9999"));
 }
 
-export default function MalkuthModule({ onBack, dark, setDark }) {
+export default function MalkuthModule({ onBack, dark, setDark, abrirTela, abrirObjetivo }) {
   const C = dark ? DARK : LIGHT;
   const [, bump] = useState(0);
   const refresh = () => bump(n => n + 1);
@@ -171,6 +171,13 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
     if (novos !== objs) { try { localStorage.setItem("lifetree_geb_objetivos", JSON.stringify(novos)); } catch { /* sem armazenamento */ } notifyCoachDataUpdated("geburah"); }
   }, []);
   const tarefas = tarefasDosObjetivos();
+  // Tocar na tarefa leva ao lugar de executá-la (08/11/2026); o quadrado continua marcando.
+  const irPara = (t) => {
+    const d = destinoDaTarefa(t);
+    if (d.agenda) { window.open(d.url, "_blank", "noopener"); return; }
+    if (d.objetivo) { abrirObjetivo && abrirObjetivo("geburah", t.objetivoId); return; }
+    abrirTela && abrirTela(d);
+  };
   const hoje = todayS();
 
   return (
@@ -210,11 +217,13 @@ export default function MalkuthModule({ onBack, dark, setDark }) {
                       background: t.done ? "#ef4444" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                     {t.done && <Ico n="check" size={11} color="#fff" sw={2.5}/>}
                   </button>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div role="button" tabIndex={0} aria-label={"Abrir: " + t.texto} style={{ flex: 1, minWidth: 0, cursor: "pointer" }}
+                    onClick={() => irPara(t)} onKeyDown={(e) => e.key === "Enter" && irPara(t)}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: t.done ? C.muted : C.text, textDecoration: t.done ? "line-through" : "none" }}>{t.texto}</div>
                     <div style={{ fontSize: 9, color: atrasada ? "#ef4444" : "#ef4444aa", fontWeight: atrasada ? 800 : 500 }}>
                       Saúde · {t.objetivo} · Etapa {t.fase}{t.auto ? " · feita automaticamente (" + ({ pesagem: "pesagem registrada", medidas: "medidas registradas", rotinas: "rotinas cadastradas" }[t.auto] || t.auto) + ")" : t.ate ? " · " + (atrasada ? "atrasada, era até " : "até ") + dataCurta(t.ate) : ""}
                     </div>
+                    {!t.done && <div style={{ fontSize: 10, fontWeight: 800, color: "#ef4444", marginTop: 3 }}>{destinoDaTarefa(t).rotulo} →</div>}
                   </div>
                 </div>
               );

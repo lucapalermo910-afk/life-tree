@@ -18,14 +18,14 @@ import { FeedbackCoach } from "./shared/FeedbackCoach.jsx";
 import { ConfigTab, EditMetasSheet, EditPerfilSheet, EditAguaSheet } from "./geburah/ConfigTab.jsx";
 
 // ── APP ROOT ──────────────────────────────────────────────────────────────────
-export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, editarDestino, limparDestino }) {
+export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDesejo, destinoObjetivo, editarDestino, limparDestino, destinoTela, limparTela }) {
   // Correto: const local, não variável global mutável (bug corrigido em 12/08/2026 —
   // ver [[04 Bugs Conhecidos]] → "Tema global mutável (C)"). Sheet/FI/FTA/FS/Card/Bar
   // (agora em geburah/theme.js) recebem esse valor via ThemeCtx.
   const C = dark ? DARK : LIGHT;
 
   // Vindo do Desejo com um objetivo escolhido: abre direto na aba Objetivos (05/11/2026).
-  const [tab,  setTab]  = useState(destinoObjetivo ? "objetivos" : "geb");
+  const [tab,  setTab]  = useState(destinoObjetivo ? "objetivos" : destinoTela?.tab || "geb");
   const [objetivoInicial] = useState(destinoObjetivo || null);
   const [editarInicial] = useState(!!editarDestino);
   useEffect(() => { if (destinoObjetivo && limparDestino) limparDestino(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -118,6 +118,13 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
   const sortedPes    = [...pesagens].sort((a,b)=>a.data.localeCompare(b.data));
   const ultimaPes    = sortedPes[sortedPes.length-1];
   const pesoHoje     = ultimaPes?.peso || pesosMeta.pesoAtual;
+  // Chegou de uma tarefa do Controle (08/11/2026): abre a janela de registro correspondente.
+  useEffect(()=>{
+    if(!destinoTela) return;
+    if(destinoTela.abrir==="registrarPeso") openSh("registrarPeso",{peso:pesoHoje,data:todayS()});
+    if(destinoTela.abrir==="addRotina") openSh("addRotina",{name:"",dia:"Segunda"});
+    limparTela&&limparTela();
+  },[]); // eslint-disable-line react-hooks/exhaustive-deps
   const pesoMeta     = pesosMeta.pesoMeta;
   const diasPass     = Math.max(1,Math.round((new Date(todayS())-new Date(pesosMeta.iniciou))/(86400000)));
   const perdaTotal   = pesosMeta.pesoAtual - pesoHoje;
