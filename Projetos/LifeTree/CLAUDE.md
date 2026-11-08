@@ -136,7 +136,7 @@ como você, capaz de fazer toda e qualquer modificação, exclusão ou input")**
 - Título dos quadros de meta é só o nome ("METAS DE DIETA", "METAS DE TREINO"): sem "(calculadas pelo app)" nem "(ajustadas por você)" (pedido do usuário, 07/11/2026).
 - Ordem do plano: **O objetivo → metas da área → passo a passo → impactos**. Em Saúde, as
   metas são **treino (`TreinoCard`) e depois dieta (`MacrosCard`)**. Treino = treinos na semana,
-  cardio na semana (min), totais até o prazo (treinos e minutos de cardio, do `criado` ao
+  cardio na semana (min), totais até a meta ("Treinos até a meta", "Cardio até a meta" em horas; do `criado` ao
   `prazo`, recalculados quando a meta semanal ou o prazo mudam) e tipo de treino (A, AB, ABC…, com a sequência da semana); sem
   duração, horário ou acompanhamento de execução. Treinos por semana têm **fonte única** no
   quadro de treino: a dieta lê de lá e recalcula quando muda. Metas entram pela prop `metas` do `PlanoCard`, nunca abaixo do plano.
