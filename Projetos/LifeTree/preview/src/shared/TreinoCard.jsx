@@ -10,8 +10,6 @@ export function TreinoCard({ C, t, accent = "#ef4444", editando = false, onChang
   const ed = editando && onChange;
   const seq = sequenciaDaSemana(t);
   const tot = totais || totaisAteFim(t, inicio, prazo);
-  const fim = prazo ? prazo.slice(8, 10) + "/" + prazo.slice(5, 7) + "/" + prazo.slice(0, 4) : "";
-  const horas = (min) => (min >= 60 ? " · " + (Math.round((min / 60) * 10) / 10).toLocaleString("pt-BR") + " h" : "");
   const caixa = { flex: 1, minWidth: 0, background: C.surface || C.card, borderRadius: 10, padding: "8px 6px", textAlign: "center" };
   const valor = (rot, val, un) => (
     <div style={caixa}>
@@ -40,8 +38,9 @@ export function TreinoCard({ C, t, accent = "#ef4444", editando = false, onChang
       </div>
       {tot && (
         <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-          {valor("Total de treinos até " + fim, tot.treinos.toLocaleString("pt-BR"), "")}
-          {valor("Total de cardio até " + fim + horas(tot.cardio), tot.cardio.toLocaleString("pt-BR"), "min")}
+          {/* Rótulos curtos (08/11/2026, pedido do usuário): a data já está em "O objetivo". */}
+          {valor("Treinos até a meta", tot.treinos.toLocaleString("pt-BR"), "")}
+          {valor("Cardio até a meta", Math.round(tot.cardio / 60).toLocaleString("pt-BR"), "h")}
         </div>
       )}
 
