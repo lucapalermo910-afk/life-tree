@@ -7,7 +7,7 @@
 // netzachActions.js/chokmahActions.js/binahActions.js) — todos seguem o mesmo
 // mecanismo de refresh via evento (coachSync.js).
 
-import { simularObjetivo, limitesDasFases, execucaoDoPlano, cenariosDoObjetivo } from "./planejamento.js";
+import { simularObjetivo, limitesDasFases, execucaoDoPlano, cenariosDoObjetivo, verificarObjetivo } from "./planejamento.js";
 import { dietaDoObjetivo } from "./macros.js";
 
 function readJSON(key, fallback) {
@@ -448,6 +448,12 @@ function resumoObjetivoSaude(o, perfil) {
     }),
     // Opções com a data já calculada pelo app (para quando o usuário pedir para encurtar/alongar).
     opcoes_de_ritmo: cenariosDoObjetivo(o, perfil),
+    // Registros × plano (pesagens, treinos, diário, tarefas, consistência) — calculado em código.
+    verificacao: verificarObjetivo(o, {
+      pesagens: readJSON("lifetree_geb_pesagens", []), logTreino: readJSON("lifetree_geb_logTreino", []),
+      logDieta: readJSON("lifetree_geb_logDieta", []), alimentos: readJSON("lifetree_geb_alimentos", []),
+      metas: readJSON("lifetree_geb_metas", {}), agua: readJSON("lifetree_geb_agua", {}), rotinasTreino: readJSON("lifetree_geb_rotinasTreino", []),
+      perfil, pesosMeta: readJSON("lifetree_geb_pesosMeta", {}) }),
     rotina: o.plano?.rotina || (o.plano?.habitoSugerido ? [o.plano.habitoSugerido] : []),
     impactoPositivo: o.plano?.impactoPositivo || [], impactoNegativo: o.plano?.impactoNegativo || [],
   };
@@ -1018,6 +1024,15 @@ OBJETIVO COM PLANO
 26. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":[{"periodo":"06/11 a 30/11/2026","titulo":"Adaptação","semana":{"treinos_semana":3,"cardio_min_semana":60,"divisao":"ABC"},"tarefas":[{"texto":"Pesar e medir a cintura","ate":"2026-11-08"},{"texto":"Fixar 3 horários de treino na agenda","ate":"2026-11-08"}],"revisao":"Se o peso ficar mais de 1 kg acima do marco, ajustar o ritmo da dieta"},{"periodo":"01/12 a 31/01/2027","titulo":"Progressão", ...}],"rotina":["Treinar conforme o programa da semana","Registrar a alimentação todo dia","Pesar 1x por semana, mesmo dia e horário"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."]},"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","peso_meta_kg":75,"duracao_treino_min":60}}
    "dieta" e "resultados" são opcionais. A meta de treino vai em "semana" DENTRO de cada fase (não mande bloco "treino" separado). "dieta": inclua quando o objetivo envolver peso, gordura ou massa muscular (os treinos por semana da dieta vêm da fase atual).
 
+AVALIAR / VERIFICAR O PLANO (quando o usuário pedir "avalia", "verifica", "como estou", "está funcionando?")
+- Use SÓ os números do resumo: "verificacao" (pesagens, treinos, dieta, tarefas, alertas — calculados pelo app), "dieta", "etapas", "opcoes_de_ritmo". Nunca calcule nem estime à mão.
+- Formato (curto, até ~250 palavras, para não cortar): 1) Veredito em 1 frase. 2) Riscos e problemas, os mais graves primeiro (máx. 5), começando pelos "alertas" e pelo que os dados registrados mostram contra o plano (peso real × esperado, treinos feitos × planejados, dias de dieta registrados). 3) O que está bom (máx. 2 itens curtos). 4) Até 3 mudanças numeradas e concretas, cada uma aplicável por update_objective (ex: etapa 1 com 3 treinos; corrigir rotina; trocar opção de ritmo com a data do resumo). Pergunte qual aplicar — só mande <ACTION> depois da escolha.
+- Sem dados registrados, diga que a avaliação é só do papel e que o primeiro passo é registrar (pesagem, treinos, alimentação).
+- Lembre que a data é resultado do plano: atraso não "estoura prazo", empurra a data.
+- Não seja condescendente: se o plano não cabe na rotina informada, diga.
+
+DATAS no texto ao usuário: sempre DD/MM/AAAA (nunca AAAA-MM-DD).
+
 EDITAR E APAGAR OBJETIVO (o resumo traz em "objetivos" o plano completo: id, etapas numeradas, tarefas com id, metas e marcos calculados)
 27. {"action":"update_objective","objetivo":"id do resumo","titulo":"...","descricao":"...","prazo":"YYYY-MM-DD","etapas":[{"op":"editar","etapa":4,"periodo":"01/02 a 31/03/2027","titulo":"...","semana":{"treinos_semana":5,"cardio_min_semana":210,"divisao":"ABCD"},"revisao":"..."},{"op":"incluir","depois_de":4,"periodo":"...","titulo":"...","semana":{...},"tarefas":[{"texto":"...","ate":"YYYY-MM-DD"}],"revisao":"..."},{"op":"apagar","etapa":2}],"tarefas":[{"op":"incluir","etapa":1,"texto":"...","ate":"YYYY-MM-DD"},{"op":"editar","id":"tf...","texto":"...","ate":"YYYY-MM-DD","feita":true},{"op":"apagar","id":"tf..."}],"rotina":["lista completa nova"],"impactoPositivo":["lista completa"],"impactoNegativo":["lista completa"],"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_meta_kg":75},"ajustes":{"kgSemana":0.7}}
    Mande SÓ os campos que mudam; tudo numa ação só, mesmo que sejam muitas mudanças. Números de "etapa" e "depois_de" são os do resumo ANTES da mudança. Tarefas por "id" do resumo. "rotina"/"impactos" substituem a lista inteira. "ajustes": kgSemana (perda por semana), cal ou prot fixados pelo usuário; o app recalcula o resto.
@@ -1039,6 +1054,7 @@ PROTOCOLO "OBJETIVO COM PLANO" (toda vez que o usuário disser "quero criar o ob
    - "tarefas": 2 a 5 AÇÕES PONTUAIS com data ("ate": "AAAA-MM-DD", dentro da fase), no imperativo, que alguém consegue marcar como feitas (ex: "Pesar e medir a cintura", "Montar os treinos A, B e C com o professor", "Montar o cardápio base com a proteína do dia", "Trocar a divisão para AB"). NÃO são hábitos repetidos (esses vão em "rotina") nem metas vagas ("focar na dieta"). Elas aparecem no Controle para o usuário marcar.
    - "revisao": UMA regra de decisão para o fim da fase (ex: "Se o peso ficar mais de 1 kg acima do marco, reduzir 150 kcal").
    NÃO escreva pesos-alvo nas fases: o APP calcula o marco de peso no fim de cada fase pelo ritmo da dieta e mostra junto.
+   ROTINA sem números calculados (nada de "135 g de proteína" ou kcal): escreva "Bater a proteína do dia" — o número fica nas metas e muda com o plano.
    FORMATO OBRIGATÓRIO: cada item de "steps" é um OBJETO com periodo, titulo, semana, tarefas e revisao — nunca uma string solta, mesmo que mensagens antigas da conversa tenham usado outro formato. Sem tarefas, as etapas não aparecem no Controle.
 4b. "rotina": 3 a 5 hábitos recorrentes curtos que sustentam o plano (ex: treinar conforme o programa, registrar a alimentação, bater a proteína do dia, pesar 1x por semana, horário de sono). Sem números de calorias ou macros.
 4c. "resultados" (resultados-chave = como saber que deu certo): "treino_pct" e "dieta_pct" = % mínima de treinos feitos e de dias dentro da dieta (85 é um bom padrão; menos se a rotina for apertada). "gordura_pct" só se o resumo tiver medidas corporais e o objetivo for composição; senão null. O peso-alvo já vem do bloco "dieta".

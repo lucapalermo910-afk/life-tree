@@ -729,7 +729,7 @@ export default function App() {
       const data=await callCoachAPI({
         system:systemPrompt,
         messages:mensagens,
-        maxTokens:3000,
+        maxTokens:4096, // teto do servidor (api/_lib/rateLimit.js); avaliação do plano passava de 3000
       });
       const cortada=data.stop_reason==="max_tokens";
       let text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
