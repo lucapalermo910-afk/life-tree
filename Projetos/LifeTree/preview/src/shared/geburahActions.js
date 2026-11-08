@@ -9,7 +9,7 @@
 import { notifyCoachDataUpdated } from "./coachSync.js";
 import { dietaDoObjetivo } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
-import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual, simularPlano, simularObjetivo, alinharPrazoAoPlano } from "./planejamento.js";
+import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual, simularPlano, simularObjetivo, alinharPrazoAoPlano, autoConcluirTarefas } from "./planejamento.js";
 import { CATS_AL, GRUPOS } from "../geburah/constants.js";
 
 const PFX = "lifetree_geb_";
@@ -79,8 +79,9 @@ export function registerGeburahWeight(a) {
   // por dia; registrar de novo no mesmo dia substitui, não duplica).
   const entry = { id: "ps" + uid(), data, peso, ...(a.gordura ? { gordura: Number(a.gordura) } : {}) };
   writeJSON("pesagens", [...pesagens.filter(x => x.data !== data), entry]);
+  concluirAutomaticas();
   notifyGeburahUpdated();
-  return { ok: true, message: "Peso de " + peso + "kg registrado em " + data + "." };
+  return { ok: true, message: "Peso de " + peso + "kg registrado em " + data.split("-").reverse().join("/") + "." };
 }
 
 // ── REFEIÇÃO ─────────────────────────────────────────────────────────────────
@@ -133,6 +134,7 @@ export function registerGeburahMeasurement(a) {
   const existing = medidasCorp.find(x => x.data === data);
   const merged = existing ? { ...existing.medidas, ...cleaned } : cleaned;
   writeJSON("medidasCorp", [...medidasCorp.filter(x => x.data !== data), { id: existing?.id || "mc" + uid(), data, medidas: merged }]);
+  concluirAutomaticas();
   notifyGeburahUpdated();
   return { ok: true, message: Object.keys(cleaned).length + " medida(s) registrada(s) em " + data + "." };
 }
@@ -449,6 +451,13 @@ export function createGeburahObjective(a) {
   writeJSON("objetivos", [...objetivos, novo]);
   notifyGeburahUpdated();
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
+}
+
+// Registros feitos pelo Coach também concluem as tarefas reconhecíveis (08/11/2026).
+function concluirAutomaticas() {
+  const objetivos = readJSON("objetivos", []);
+  const novos = autoConcluirTarefas(objetivos, { pesagens: readJSON("pesagens", []), medidasCorp: readJSON("medidasCorp", []), rotinasTreino: readJSON("rotinasTreino", []) });
+  if (novos !== objetivos) writeJSON("objetivos", novos);
 }
 
 // Tarefa de uma fase do plano (06/11/2026): marcada no Controle (Malkuth), que é onde a

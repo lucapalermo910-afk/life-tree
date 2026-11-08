@@ -100,6 +100,12 @@ nova, ou ao mexer em qualquer tela de objetivo, siga isto — não invente varia
 - **Tarefas: criadas no módulo de origem** (editor da etapa), **marcadas no Controle**. O
   Malkuth lista "TAREFAS DOS OBJETIVOS" (pendentes primeiro, por
   data, atrasadas em destaque) e marca via `GEBURAH_ACTION_HANDLERS.toggle_tarefa_objetivo`.
+- **Tarefas que se completam sozinhas** (`autoConcluirTarefas`, 08/11/2026): texto com pesar/
+  pesagem → pesagem registrada; medir/medidas/cintura → medidas; montar/criar/cadastrar treinos
+  ou rotinas → rotinas cadastradas ≥ treinos do tipo de treino. Janela: desde o início da etapa,
+  no máximo 7 dias antes do "até"; tarefa que cita dois tipos precisa dos dois. Nunca desmarca;
+  guarda `auto` e o Controle mostra "feita automaticamente (…)". Roda na Saúde, no Controle e
+  quando o Coach registra pesagem/medidas.
 - **Gauge do objetivo = % de tarefas feitas** (`execucaoDoPlano`), igual na Saúde, no Desejo e
   no Controle, com "N de M tarefas · faltam N dias".
 - **Rotina** (`plano.rotina`): 3–5 hábitos recorrentes, editáveis como os impactos. O antigo
