@@ -917,15 +917,22 @@ export default function App() {
     }
   };
   const doExportArquivo=()=>compartilharArquivo("lifetree-backup-"+new Date().toISOString().slice(0,10)+".json",buildBackup(),"application/json");
+  // Abrir arquivo (14/11/2026, "só funciona colando o texto"): sem filtro de tipo — no Android o
+  // filtro .json/application/json deixava o arquivo baixado cinza/indisponível no seletor —,
+  // e ao escolher o arquivo a restauração já começa (antes só preenchia a caixa de texto).
   const abrirArquivoBackup=(e)=>{
-    const f=e.target.files?.[0]; if(!f) return;
-    f.text().then(t=>setImportText(t)); e.target.value="";
+    const f=e.target.files?.[0]; e.target.value=""; if(!f) return;
+    setImportError("");
+    const leitor=new FileReader();
+    leitor.onload=()=>{ const t=String(leitor.result||"").replace(/^\uFEFF/,""); setImportText(t); doImport(t); };
+    leitor.onerror=()=>setImportError("Não consegui ler o arquivo. Tente de novo ou cole o texto.");
+    leitor.readAsText(f);
   };
 
-  const doImport=()=>{
+  const doImport=(texto)=>{
     setImportError("");
     try{
-      const d=JSON.parse(importText);
+      const d=JSON.parse(typeof texto==="string"?texto:importText);
       // Backup v5: grava os dados dos módulos e recarrega, para cada módulo ler do zero.
       if(d.modulos){
         if(!window.confirm("Restaurar o backup de "+(d._ts?new Date(d._ts).toLocaleString("pt-BR"):"data desconhecida")+"? O app vai ficar IGUAL ao arquivo: tudo o que existe aqui e não está no backup será apagado.")) return;
@@ -942,7 +949,7 @@ export default function App() {
       toast_("Backup restaurado!","#34d399");
       setMBackup(false); setImportText("");
     }catch(e){
-      setImportError("JSON inválido — verifique o texto copiado");
+      setImportError("Arquivo ou texto inválido — não é um backup do LifeTree.");
     }
   };
 
@@ -1442,12 +1449,12 @@ export default function App() {
               style={{width:"100%",minHeight:90,background:C.bg,border:"1px solid "+C.b2,borderRadius:9,
                 padding:"9px 12px",color:C.text,fontSize:11,outline:"none",resize:"vertical",
                 fontFamily:"monospace",boxSizing:"border-box",display:"block"}}/>
-            <label style={{display:"block",marginTop:6,fontSize:11,fontWeight:700,color:C.muted,cursor:"pointer",textAlign:"center"}}>
-              Abrir arquivo de backup (.json)
-              <input type="file" accept=".json,application/json" onChange={abrirArquivoBackup} style={{display:"none"}} aria-label="Abrir arquivo de backup"/>
+            <label style={{display:"block",marginTop:8,padding:"10px",borderRadius:9,border:"1.5px solid #818cf8",fontSize:12,fontWeight:800,color:"#818cf8",cursor:"pointer",textAlign:"center"}}>
+              Abrir arquivo de backup
+              <input type="file" onChange={abrirArquivoBackup} style={{display:"none"}} aria-label="Abrir arquivo de backup"/>
             </label>
             {importError&&<div style={{fontSize:10,color:"#ef4444",marginTop:5}}>{importError}</div>}
-            <PBtn color="#818cf8" onClick={doImport} style={{marginTop:8}}>
+            <PBtn color="#818cf8" onClick={()=>doImport()} style={{marginTop:8}}>
               <Icon name="upload" size={13} color="#fff"/>
               <span style={{marginLeft:4}}>Restaurar dados</span>
             </PBtn>
