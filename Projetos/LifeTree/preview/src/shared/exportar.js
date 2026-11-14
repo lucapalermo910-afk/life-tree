@@ -102,8 +102,20 @@ export function lerModulos() {
   return out;
 }
 
+// Restaurar = espelho (14/11/2026, pedido do usuário: "igualar as bases" dos dois endereços).
+// Apaga as chaves lifetree_* que não estão no arquivo antes de gravar — senão o que existia
+// só no destino ficava para trás (ex: o objetivo antigo de Autocuidado). Preferências do
+// próprio aparelho (avisos dispensados) ficam.
+const MANTER_NO_APARELHO = ["lifetree_feedback_dispensados"];
 export function restaurarModulos(modulos) {
   let n = 0;
+  const doArquivo = new Set(Object.keys(modulos || {}));
+  const apagar = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith("lifetree_") && !doArquivo.has(k) && !MANTER_NO_APARELHO.includes(k)) apagar.push(k);
+  }
+  apagar.forEach((k) => localStorage.removeItem(k));
   Object.entries(modulos || {}).forEach(([k, v]) => {
     if (k.startsWith("lifetree_") && typeof v === "string") { localStorage.setItem(k, v); n++; }
   });

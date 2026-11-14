@@ -928,7 +928,7 @@ export default function App() {
       const d=JSON.parse(importText);
       // Backup v5: grava os dados dos módulos e recarrega, para cada módulo ler do zero.
       if(d.modulos){
-        if(!window.confirm("Restaurar o backup de "+(d._ts?new Date(d._ts).toLocaleString("pt-BR"):"data desconhecida")+"? Os dados atuais dos módulos serão substituídos pelos do backup.")) return;
+        if(!window.confirm("Restaurar o backup de "+(d._ts?new Date(d._ts).toLocaleString("pt-BR"):"data desconhecida")+"? O app vai ficar IGUAL ao arquivo: tudo o que existe aqui e não está no backup será apagado.")) return;
         restaurarModulos(d.modulos);
         toast_("Backup restaurado! Recarregando…","#34d399");
         setTimeout(()=>window.location.reload(),700);
