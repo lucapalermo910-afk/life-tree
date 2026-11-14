@@ -217,7 +217,9 @@ mais próximo do comportamento real possível, considerando a queda do metabolis
   do celular (ou baixa o arquivo). Área nova com plano: passar os extras calculados da área.
 - Backup (Configurações → Backup) **v5 inclui todas as chaves `lifetree_*`** (objetivos,
   planos, metas, perfil, dados dos módulos). Salva como arquivo .json (ou copia como texto);
-  restaurar aceita colar ou abrir o arquivo, pede confirmação e recarrega o app. Dado novo de
+  restaurar aceita colar ou abrir o arquivo, pede confirmação e recarrega o app. **Restaurar é
+  espelho** (14/11/2026): apaga as chaves `lifetree_*` que não estão no arquivo (exceto
+  `lifetree_feedback_dispensados`), para o app ficar igual ao backup. Dado novo de
   módulo deve morar numa chave `lifetree_*` para entrar no backup.
 
 **Fluxo de trabalho**
