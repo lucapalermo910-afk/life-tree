@@ -378,3 +378,73 @@ export function verificarObjetivo(o, d, hoje = iso(new Date())) {
   return { hoje, etapa_atual: iAtual + 1, pesagens, treinos, dieta: dietaV, tarefas: { atrasadas, proximas_7_dias: proximas,
     feitas: ts.filter((t) => t.done).length, total: ts.length }, alertas };
 }
+
+// ── Tarefas que se completam sozinhas (08/11/2026, pedido do usuário) ─────────────────
+// Tarefa reconhecível pelo texto é marcada quando o registro correspondente aparece a partir
+// do início da etapa dela: pesagem → "pesar/pesagem"; medidas → "medir/medida/cintura";
+// rotinas cadastradas ≥ treinos do tipo de treino → "montar/criar/cadastrar … treino(s)/rotina".
+// Nunca desmarca. Marca `auto` com o motivo, para o Controle mostrar "feita automaticamente".
+const REGRAS_AUTO = [
+  { tipo: "pesagem", re: /\b(pes(ar|e|agem|agens)|registrar (o )?peso)\b/i },
+  { tipo: "medidas", re: /\b(medir|medidas?|cintura)\b/i },
+  { tipo: "rotinas", re: /\b(montar|criar|cadastrar)\b[^.]*\b(treinos?|rotinas?)\b/i },
+];
+// Todos os tipos que a tarefa cita ("Pesagem e medidas finais" → pesagem + medidas: precisa dos dois).
+export function tiposAutomaticos(texto) { return REGRAS_AUTO.filter((r) => r.re.test(String(texto || ""))).map((r) => r.tipo); }
+export const tipoAutomatico = (texto) => tiposAutomaticos(texto)[0] || null;
+
+export function autoConcluirTarefas(objetivos, d) {
+  let mudou = false;
+  const pes = (d.pesagens || []).filter((p) => p?.data), med = (d.medidasCorp || []).filter((m) => m?.data);
+  const nRotinas = (d.rotinasTreino || []).length;
+  const novos = (objetivos || []).map((o) => {
+    const steps = o.plano?.steps || [];
+    if (!steps.some((s) => s.tarefas?.length)) return o;
+    const lim = limitesDasFases(steps, o.criado, o.prazo);
+    let mudouO = false;
+    const st = steps.map((s, i) => {
+      if (!s.tarefas?.length) return s;
+      const ini = lim[i]?.inicio || o.criado || "0000-00-00";
+      const precisa = (s.semana?.divisao || "").length || 1;
+      const ts = s.tarefas.map((t) => {
+        if (t.done) return t;
+        const tipos = tiposAutomaticos(t.texto);
+        if (!tipos.length) return t;
+        // Janela: desde o início da etapa, mas no máximo 7 dias antes do "até" — assim
+        // "pesagem final" (até 31/03) não se completa com a pesagem de 01/02.
+        let desde = ini;
+        if (t.ate && ISO.test(t.ate)) { const j = somaDias(t.ate, -7); if (j > desde) desde = j; }
+        const ok = tipos.every((tipo) => (tipo === "pesagem" ? pes.some((p) => p.data >= desde)
+          : tipo === "medidas" ? med.some((m) => m.data >= desde) : nRotinas >= precisa));
+        if (!ok) return t;
+        mudouO = true;
+        return { ...t, done: true, auto: tipos[0] };
+      });
+      return mudouO ? { ...s, tarefas: ts } : s;
+    });
+    if (!mudouO) return o;
+    mudou = true;
+    return { ...o, plano: { ...o.plano, steps: st } };
+  });
+  return mudou ? novos : objetivos;
+}
+
+// ── Tarefa leva ao lugar de executá-la (08/11/2026, pedido do usuário) ─────────────────
+// Tocar na tarefa no Controle abre a tela onde ela se faz. Sem lugar no app: agenda (Google
+// Agenda com o evento preenchido) ou a etapa no plano.
+export function destinoDaTarefa(t) {
+  const x = String(t?.texto || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const tipos = tiposAutomaticos(t?.texto);
+  if (tipos.includes("pesagem")) return { moduleId: "geburah", tab: "medidas", abrir: "registrarPeso", rotulo: "Registrar peso" };
+  if (tipos.includes("medidas")) return { moduleId: "geburah", tab: "medidas", rotulo: "Registrar medidas" };
+  if (tipos.includes("rotinas")) return { moduleId: "geburah", tab: "treino", abrir: "addRotina", rotulo: "Criar rotina" };
+  if (/\b(agenda|agendar|horario|fixar|consulta|medico|marcar)\b/.test(x)) {
+    const d = (t.ate || iso(new Date())).replace(/-/g, ""), d2 = somaDias(t.ate || iso(new Date()), 1).replace(/-/g, "");
+    return { agenda: true, rotulo: "Pôr na agenda",
+      url: "https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + encodeURIComponent(t.texto) + "&dates=" + d + "/" + d2 + "&details=" + encodeURIComponent("Tarefa do plano no LifeTree") };
+  }
+  if (/\b(treino|treinos|cargas?|divisao|cardio|exercicio)\b/.test(x)) return { moduleId: "geburah", tab: "treino", rotulo: "Abrir treinos" };
+  if (/\b(cardapio|alimentacao|refeic|proteina|dieta|comida|festas)\b/.test(x)) return { moduleId: "geburah", tab: "nutri", rotulo: "Abrir nutrição" };
+  if (/\bpeso\b/.test(x)) return { moduleId: "geburah", tab: "medidas", rotulo: "Ver peso" };
+  return { moduleId: "geburah", objetivo: true, rotulo: "Ver no plano" };
+}
