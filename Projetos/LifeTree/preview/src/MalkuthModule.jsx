@@ -167,7 +167,7 @@ export default function MalkuthModule({ onBack, dark, setDark, abrirTela, abrirO
   // Tarefas reconhecíveis concluídas pelos registros (08/11/2026) — também ao abrir o Controle.
   useEffect(() => {
     const objs = readOtherModule("lifetree_geb_objetivos", []);
-    const novos = autoConcluirTarefas(objs, { pesagens: readOtherModule("lifetree_geb_pesagens", []), medidasCorp: readOtherModule("lifetree_geb_medidasCorp", []), rotinasTreino: readOtherModule("lifetree_geb_rotinasTreino", []) });
+    const novos = autoConcluirTarefas(objs, { pesagens: readOtherModule("lifetree_geb_pesagens", []), medidasCorp: readOtherModule("lifetree_geb_medidasCorp", []), rotinasTreino: readOtherModule("lifetree_geb_rotinasTreino", []), logCardio: readOtherModule("lifetree_geb_logCardio", []) });
     if (novos !== objs) { try { localStorage.setItem("lifetree_geb_objetivos", JSON.stringify(novos)); } catch { /* sem armazenamento */ } notifyCoachDataUpdated("geburah"); }
   }, []);
   const tarefas = tarefasDosObjetivos();

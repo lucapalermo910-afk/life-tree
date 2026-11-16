@@ -10,7 +10,9 @@ import { notifyCoachDataUpdated } from "./coachSync.js";
 import { dietaDoObjetivo } from "./macros.js";
 import { normalizarTreino } from "./treino.js";
 import { normalizarResultados, normalizarFase, normalizarTarefa, ajustarPrazo, treinoAtual, simularPlano, simularObjetivo, alinharPrazoAoPlano, autoConcluirTarefas } from "./planejamento.js";
-import { CATS_AL, GRUPOS } from "../geburah/constants.js";
+import { CATS_AL, GRUPOS, REFEICOES } from "../geburah/constants.js";
+import { D_AL } from "../geburah/foodLibrary.js";
+import { totaisDoDia, proximosDias, TIPOS_CARDIO, cardioDaSemana } from "./cardapio.js";
 
 const PFX = "lifetree_geb_";
 const uid = () => Math.random().toString(36).slice(2, 8);
@@ -61,10 +63,13 @@ function findByField(list, field, text) {
   const norm = list.map(x => ({ item: x, n: normalize(x[field] || "") }));
   let hit = norm.find(x => x.n === q);
   if (!hit) hit = norm.find(x => x.n.startsWith(q));
-  if (!hit) hit = norm.find(x => x.n.includes(q));
+  // Entre vários candidatos parciais, o nome mais curto é o mais próximo ("ovo cozido" →
+  // "Ovo inteiro cozido", não "Ovo de codorna cozido") — 16/11/2026.
+  const menor = (xs) => xs.sort((a, b) => a.n.length - b.n.length)[0];
+  if (!hit) hit = menor(norm.filter(x => x.n.includes(q)));
   if (!hit) {
     const words = q.split(/\s+/).filter(Boolean);
-    hit = norm.find(x => words.every(w => x.n.includes(w)));
+    hit = menor(norm.filter(x => words.every(w => x.n.includes(w))));
   }
   return hit ? hit.item : null;
 }
@@ -86,7 +91,7 @@ export function registerGeburahWeight(a) {
 
 // ── REFEIÇÃO ─────────────────────────────────────────────────────────────────
 export function registerGeburahMeal(a) {
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "' no banco." };
   let qtd = Number(a.qtd);
@@ -196,7 +201,7 @@ export function adjustGeburahGoals(a) {
 // dia; com "refeicao" restringe antes, pra não remover o item errado se o mesmo alimento
 // foi lançado em duas refeições no mesmo dia.
 export function deleteGeburahMealItem(a) {
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
   const logDieta = readJSON("logDieta", []);
@@ -216,7 +221,7 @@ export function deleteGeburahMealItem(a) {
 // ── ALIMENTOS (biblioteca) ───────────────────────────────────────────────────
 export function createGeburahFood(a) {
   if (!a.nome) return { ok: false, message: "Nome do alimento não informado." };
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const cat = CATS_AL.includes(a.categoria) ? a.categoria : CATS_AL[0];
   const porcao = (a.porcaoLabel && Number(a.porcaoGramas) > 0) ? { label: a.porcaoLabel, gramas: Number(a.porcaoGramas) } : null;
   const novo = {
@@ -230,7 +235,7 @@ export function createGeburahFood(a) {
   return { ok: true, message: "Alimento '" + novo.name + "' criado em " + cat + "." };
 }
 export function editGeburahFood(a) {
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
   const patch = {};
@@ -244,7 +249,7 @@ export function editGeburahFood(a) {
   return { ok: true, message: "Alimento '" + al.name + "' atualizado." };
 }
 export function deleteGeburahFood(a) {
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
   writeJSON("alimentos", alimentos.filter(x => x.id !== al.id));
@@ -252,7 +257,7 @@ export function deleteGeburahFood(a) {
   return { ok: true, message: "Alimento '" + al.name + "' excluído." };
 }
 export function setGeburahFoodFavorite(a) {
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
   const favorito = a.favorito != null ? !!a.favorito : !al.favorito;
@@ -294,7 +299,7 @@ export function addGeburahRecipeIngredient(a) {
   const receitas = readJSON("receitas", []);
   const rec = findByField(receitas, "name", a.receitaNome);
   if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
   let qtd = Number(a.qtd);
@@ -309,7 +314,7 @@ export function removeGeburahRecipeIngredient(a) {
   const receitas = readJSON("receitas", []);
   const rec = findByField(receitas, "name", a.receitaNome);
   if (!rec) return { ok: false, message: "Não encontrei a receita '" + a.receitaNome + "'." };
-  const alimentos = readJSON("alimentos", []);
+  const alimentos = readJSON("alimentos", D_AL);
   const al = findByField(alimentos, "name", a.alimentoNome);
   if (!al) return { ok: false, message: "Não encontrei o alimento '" + a.alimentoNome + "'." };
   const idx = rec.ingredientes.findIndex(ing => ing.alimentoId === al.id);
@@ -453,10 +458,75 @@ export function createGeburahObjective(a) {
   return { ok: true, message: "Objetivo '" + titulo + "' criado" + (plano ? " com plano" : "") + (macros ? " e metas de dieta: " + macros.cal + " kcal, " + macros.prot + " g de proteína" : "") + "." };
 }
 
+// ── CARDÁPIO PLANEJADO e CARDIO (16/11/2026 — camada 2, plano aterrissado) ─────────────
+// plan_meal: { data | datas:[...] | semana:true, refeicao + itens  OU  refeicoes:{ "Almoço":[...] },
+//              itens:[{ alimento:"nome", qtd (g) | porcoes }], modo:"substituir"|"adicionar",
+//              copiar_de:"AAAA-MM-DD" (copia o dia inteiro para as datas) }
+const diasAlvo = (a) => (a.semana ? proximosDias(7) : Array.isArray(a.datas) ? a.datas : [a.data || todayS()]).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+export function planGeburahMeal(a) {
+  const alimentos = readJSON("alimentos", D_AL);
+  const planSem = { ...readJSON("planSem", {}) };
+  const datas = diasAlvo(a);
+  if (!datas.length) return { ok: false, message: "Diga para quais dias planejar." };
+  if (a.copiar_de) {
+    const origem = REFEICOES.map(r => [r, planSem[a.copiar_de + "_" + r]]).filter(([, v]) => v?.length);
+    if (!origem.length) return { ok: false, message: "Não há nada planejado em " + a.copiar_de.split("-").reverse().join("/") + " para copiar." };
+    datas.filter(d => d !== a.copiar_de).forEach(d => origem.forEach(([r, v]) => { planSem[d + "_" + r] = v.map(x => (typeof x === "string" ? { id: x, qtd: 100 } : { ...x })); }));
+    writeJSON("planSem", planSem); notifyGeburahUpdated();
+    return { ok: true, message: "Cardápio de " + a.copiar_de.split("-").reverse().join("/") + " copiado para " + datas.length + " dia(s)." };
+  }
+  const blocos = a.refeicoes ? Object.entries(a.refeicoes) : [[a.refeicao, a.itens]];
+  const faltam = [];
+  for (const [ref, itens] of blocos) {
+    if (!REFEICOES.includes(ref)) return { ok: false, message: "Refeição inválida: '" + ref + "'. Use: " + REFEICOES.join(", ") + "." };
+    const resolvidos = (itens || []).map(it => {
+      const nome = it.alimento || it.alimentoNome || it.nome;
+      const al = nome ? findByField(alimentos, "name", nome) : null;
+      if (!al) { faltam.push(nome || "(sem nome)"); return null; }
+      const qtd = Number(it.qtd) || (Number(it.porcoes) && al.porcao?.gramas ? Number(it.porcoes) * al.porcao.gramas : al.porcao?.gramas || 100);
+      return { id: al.id, qtd: Math.round(qtd) };
+    }).filter(Boolean);
+    datas.forEach(d => {
+      const k = d + "_" + ref;
+      planSem[k] = a.modo === "adicionar" ? [...(planSem[k] || []), ...resolvidos] : resolvidos;
+    });
+  }
+  if (faltam.length) return { ok: false, message: "Não encontrei no banco: " + [...new Set(faltam)].join(", ") + ". Cadastre esses alimentos primeiro (create_food) e tente de novo." };
+  writeJSON("planSem", planSem); notifyGeburahUpdated();
+  const metas = readJSON("metas", {});
+  const tot = totaisDoDia(planSem, datas[0], alimentos, REFEICOES);
+  return { ok: true, message: "Cardápio planejado em " + datas.length + " dia(s). " + datas[0].split("-").reverse().join("/") + ": " + tot.cal + " de " + (metas.cal || "?") + " kcal, " + tot.prot + " de " + (metas.prot || "?") + " g de proteína." };
+}
+export function clearGeburahMealPlan(a) {
+  const planSem = { ...readJSON("planSem", {}) };
+  const datas = diasAlvo(a);
+  let n = 0;
+  datas.forEach(d => (a.refeicao ? [a.refeicao] : REFEICOES).forEach(r => { if (planSem[d + "_" + r]) { delete planSem[d + "_" + r]; n++; } }));
+  writeJSON("planSem", planSem); notifyGeburahUpdated();
+  return { ok: true, message: n ? "Planejamento limpo (" + n + " refeição(ões))." : "Não havia nada planejado nesses dias." };
+}
+export function registerGeburahCardio(a) {
+  const min = Math.round(Number(a.min || a.minutos));
+  if (!min || min <= 0) return { ok: false, message: "Quantos minutos de cardio?" };
+  const tipo = TIPOS_CARDIO.find(t => t.toLowerCase() === String(a.tipo || "").toLowerCase()) || (a.tipo ? "Outro" : "Esteira");
+  const data = a.data || todayS();
+  writeJSON("logCardio", [...readJSON("logCardio", []), { id: "cd" + uid(), data, tipo, min }]);
+  concluirAutomaticas(); notifyGeburahUpdated();
+  const s = cardioDaSemana(readJSON("logCardio", []), todayS());
+  return { ok: true, message: min + " min de " + tipo.toLowerCase() + " registrados em " + data.split("-").reverse().join("/") + ". Últimos 7 dias: " + s.minutos_7_dias + " min." };
+}
+export function deleteGeburahCardio(a) {
+  const log = readJSON("logCardio", []);
+  const alvo = a.id ? log.find(c => c.id === a.id) : [...log].reverse().find(c => c.data === (a.data || todayS()) && (!a.tipo || c.tipo.toLowerCase() === String(a.tipo).toLowerCase()));
+  if (!alvo) return { ok: false, message: "Não achei esse registro de cardio." };
+  writeJSON("logCardio", log.filter(c => c.id !== alvo.id)); notifyGeburahUpdated();
+  return { ok: true, message: "Cardio apagado (" + alvo.tipo + ", " + alvo.min + " min)." };
+}
+
 // Registros feitos pelo Coach também concluem as tarefas reconhecíveis (08/11/2026).
 function concluirAutomaticas() {
   const objetivos = readJSON("objetivos", []);
-  const novos = autoConcluirTarefas(objetivos, { pesagens: readJSON("pesagens", []), medidasCorp: readJSON("medidasCorp", []), rotinasTreino: readJSON("rotinasTreino", []) });
+  const novos = autoConcluirTarefas(objetivos, { pesagens: readJSON("pesagens", []), medidasCorp: readJSON("medidasCorp", []), rotinasTreino: readJSON("rotinasTreino", []), logCardio: readJSON("logCardio", []) });
   if (novos !== objetivos) writeJSON("objetivos", novos);
 }
 
@@ -598,6 +668,10 @@ export function toggleGeburahObjective(a) {
 }
 
 export const GEBURAH_ACTION_HANDLERS = {
+  plan_meal: planGeburahMeal,
+  clear_meal_plan: clearGeburahMealPlan,
+  register_cardio: registerGeburahCardio,
+  delete_cardio: deleteGeburahCardio,
   toggle_tarefa_objetivo: toggleGeburahTarefa,
   create_objective: createGeburahObjective,
   update_objective: updateGeburahObjective,

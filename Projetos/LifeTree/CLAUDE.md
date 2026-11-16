@@ -198,6 +198,22 @@ mais próximo do comportamento real possível, considerando a queda do metabolis
   `opcoes_de_ritmo` (`cenariosDoObjetivo`: padrão, suave, agressivo, máximo seguro + cardio,
   cada uma com data e calorias calculadas pelo app) e só aplica a escolhida.
 
+**Cardápio da semana e cardio (16/11/2026 — camada 2, "plano aterrissado")**
+- O **Cardápio da semana** (`PlanejamentoTab`, chave `planSem` = `{ "AAAA-MM-DD_Refeição": [{id,qtd}] }`)
+  é sub-aba da Nutrição ("Hoje | Cardápio da semana"); a aba não tinha entrada na tela antes.
+  Cada dia mostra "X de META kcal · Y de Z g prot" contra as metas de hoje (`avaliarDia`: ok com
+  calorias ±10% e proteína ≥ 90%). Datas sempre com `dataLocal` (nunca `toISOString`, que vira UTC).
+- **Cardio** é registro próprio (`logCardio` = `[{id,data,tipo,min}]`, `CardioCard` no topo do Treino),
+  conta em `verificarObjetivo` (`treinos.cardio`), no aviso "cardio" (< 70% da meta da etapa após
+  6 dias) e conclui tarefas tipo "escolher/fazer cardio". Tipos em `TIPOS_CARDIO` (shared/cardapio.js).
+- Coach: `plan_meal` (semana/datas/data, `refeicoes:{Ref:[{alimento,qtd|porcoes}]}`, `modo`,
+  `copiar_de`), `clear_meal_plan`, `register_cardio`, `delete_cardio`. O resumo traz
+  `cardapio_proximos_7_dias`, `cardio_registrado` e `banco_alimentos_por_100g` (compacto) — o Coach
+  só planeja com nomes que existem no banco; item sem nome ou inexistente recusa a ação inteira.
+- **Banco de alimentos padrão**: quando `lifetree_geb_alimentos` não existe no aparelho a tela usa
+  `D_AL`; todo leitor fora do React (ações, contexto, avisos) também cai em `D_AL`, senão o Coach
+  enxerga um banco vazio. `findByField` prefere o nome mais curto entre os parciais.
+
 **Avisos automáticos do Coach (08/11/2026, pedido do usuário)**
 - `shared/feedback.js` (regras) + `shared/FeedbackCoach.jsx` (cartões) no topo da Saúde (até 3 na
   aba principal, 1 nas outras) e do Controle. O CÓDIGO decide quando falar; a mensagem é

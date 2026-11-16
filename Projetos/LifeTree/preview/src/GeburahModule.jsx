@@ -63,16 +63,17 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
   const [agua,      setAgua]      = usePersisted("agua",     {meta:3000,copos:[]}, coachSyncTick);  // copos: [{id,data,ml}]
   // Objetivos com plano (04/11/2026) — criados pelo Coach (create_objective), editados na aba Objetivos.
   const [objetivos, setObjetivos] = usePersisted("objetivos", [], coachSyncTick);
-  const [planSem,   setPlanSem]   = usePersisted("planSem",  {}); // {YYYY-MM-DD_refeicao: [alimentoId,...]}
+  const [planSem,   setPlanSem]   = usePersisted("planSem",  {}, coachSyncTick); // {YYYY-MM-DD_refeicao: [{id,qtd}] (antigo: [alimentoId])}
+  const [logCardio, setLogCardio] = usePersisted("logCardio", [], coachSyncTick); // [{id,data,tipo,min}] — 16/11/2026
 
   // Metas de dieta seguem o plano (07/11/2026): a simulação replaneja as calorias a cada
   // etapa (peso esperado + treino/cardio da etapa). Ao abrir o módulo — e na virada de etapa —
   // as metas diárias da Nutrição e o objetivo ficam com os valores de hoje.
   // Tarefas que se completam sozinhas (08/11/2026): pesagem, medidas, rotinas cadastradas.
   useEffect(()=>{
-    const novos=autoConcluirTarefas(objetivos,{pesagens,medidasCorp,rotinasTreino});
+    const novos=autoConcluirTarefas(objetivos,{pesagens,medidasCorp,rotinasTreino,logCardio});
     if(novos!==objetivos) setObjetivos(novos);
-  },[objetivos,pesagens,medidasCorp,rotinasTreino]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[objetivos,pesagens,medidasCorp,rotinasTreino,logCardio]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(()=>{
     const o=objetivos.find(x=>x.macros&&!x.done); if(!o) return;
@@ -361,7 +362,7 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
     agua, setAgua, aguaHoje, aguaPct, metas, setMetas, tdee,
     medidasCorp, setMedidasCorp, pesoHoje, navyEstimate, pesosMeta, setPesosMeta, pesoMeta, pesoScore, perdaTotal, faltaPerder, diasRest,
     sortedPes, pesagens, setPesagens, objetivos, setObjetivos, askCoach, abrirDesejo, objetivoInicial, editarInicial,
-    planSem, setPlanSem,
+    planSem, setPlanSem, logCardio, setLogCardio,
     gebScore, treinoScore, dietaScore, streak, treinos7d,
   };
 
@@ -404,9 +405,15 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
           ? <LogTreinoPage/>
           : <>
             {(tab==="geb"||tab==="medidas"||tab==="treino"||tab==="nutri")&&<FeedbackCoach C={C} max={tab==="geb"?3:1}
-              dados={{objetivos,pesagens,logTreino,logDieta,alimentos,metas,agua,rotinasTreino,perfil,pesosMeta}}/>}
+              dados={{objetivos,pesagens,logTreino,logDieta,alimentos,metas,agua,rotinasTreino,perfil,pesosMeta,logCardio}}/>}
             {tab==="geb"    &&GebTab()}
             {tab==="treino" &&<TreinoTab/>}
+            {/* 16/11/2026: o Planejamento da semana não tinha entrada na tela — fica como sub-aba da Nutrição. */}
+            {(tab==="nutri"||tab==="planejamento")&&<div style={{display:"flex",gap:4,background:C.card,border:"1px solid "+C.b1,borderRadius:10,padding:3,marginBottom:10}}>
+              {[["nutri","Hoje"],["planejamento","Cardápio da semana"]].map(([id,l])=>(
+                <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"7px 0",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:tab===id?ACCENT+"22":"transparent",color:tab===id?ACCENT:C.muted}}>{l}</button>
+              ))}
+            </div>}
             {tab==="nutri"  &&<NutriTab/>}
             {tab==="planejamento"&&<PlanejamentoTab/>}
             {tab==="objetivos"&&<ObjetivosTab/>}
@@ -419,7 +426,7 @@ export default function GeburahModule({ onBack, dark, setDark, askCoach, abrirDe
       {/* Nav */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:430,background:C.nav,borderTop:"1px solid "+C.b1,zIndex:50,padding:"6px 0 12px",display:"flex"}}>
         {TABS.map(t=>{
-          const a=tab===t.id&&!page;
+          const a=(tab===t.id||(t.id==="nutri"&&tab==="planejamento"))&&!page;
           return(<button key={t.id} onClick={()=>{setTab(t.id);setPage(null);}} style={{flex:1,background:"none",border:"none",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 0"}}>
             <div style={{width:32,height:28,borderRadius:8,background:a?ACCENT+"13":"transparent",border:a?"1px solid "+ACCENT+"28":"1px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
               <Ico n={t.icon} size={13} color={a?ACCENT:C.muted}/>
