@@ -8,6 +8,7 @@
 // - Correção é de EXECUÇÃO (treino, cardio, registrar, proteína). Nunca mandar comer menos:
 //   as calorias do plano podem já estar no mínimo seguro.
 // - No máximo 3 avisos; cada um pode ser dispensado até o fim do dia.
+import { D_AL } from "../geburah/foodLibrary.js";
 import { verificarObjetivo } from "./planejamento.js";
 
 const CHAVE_DISPENSADOS = "lifetree_feedback_dispensados";
@@ -19,8 +20,8 @@ const ler = (k, f) => { try { const v = localStorage.getItem(k); return v ? JSON
 export function lerDadosSaude() {
   const g = (k, f) => ler("lifetree_geb_" + k, f);
   return { objetivos: g("objetivos", []), pesagens: g("pesagens", []), logTreino: g("logTreino", []), logDieta: g("logDieta", []),
-    alimentos: g("alimentos", []), metas: g("metas", {}), agua: g("agua", {}), rotinasTreino: g("rotinasTreino", []),
-    perfil: g("perfil", {}), pesosMeta: g("pesosMeta", {}) };
+    alimentos: g("alimentos", D_AL), metas: g("metas", {}), agua: g("agua", {}), rotinasTreino: g("rotinasTreino", []),
+    perfil: g("perfil", {}), pesosMeta: g("pesosMeta", {}), logCardio: g("logCardio", []), planSem: g("planSem", {}) };
 }
 
 export function feedbacksDaSaude(d, hoje = hojeISO()) {
@@ -59,6 +60,12 @@ export function feedbacksDaSaude(d, hoje = hojeISO()) {
     out.push({ id: "treinos", nivel: "alerta", titulo: "Treinos abaixo do ritmo",
       texto: "Na etapa " + v.etapa_atual + ": " + tr.na_etapa_atual + " de ~" + Math.round(tr.planejados_ate_hoje_na_etapa) + " treinos planejados até hoje (" + tr.aderencia_pct + "%). Dá para recuperar hoje?",
       pergunta: "Estou com " + tr.aderencia_pct + "% dos treinos da etapa. Como recupero esta semana sem exagerar?" });
+  }
+  const ca = v.treinos.cardio;
+  if (ca?.pct != null && ca.pct < 70 && (Date.parse(hoje) - Date.parse(o.criado || hoje)) / 86400000 >= 6) {
+    out.push({ id: "cardio", nivel: "alerta", titulo: "Cardio abaixo da meta",
+      texto: "Últimos 7 dias: " + ca.minutos_7_dias + " de " + ca.meta_semana + " min de cardio (" + ca.pct + "%). Registre na aba Treino ao fazer.",
+      pergunta: "Estou com " + ca.pct + "% do cardio da semana. Como encaixo o que falta sem atrapalhar os treinos?" });
   }
   if (o.macros && v.dieta.dias_com_registro_14d === 0 && (Date.parse(hoje) - Date.parse(o.criado || hoje)) / 86400000 >= 2) {
     out.push({ id: "dieta_registro", nivel: "info", titulo: "Alimentação sem registro",

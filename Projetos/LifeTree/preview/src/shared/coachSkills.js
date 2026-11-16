@@ -9,6 +9,9 @@
 
 import { simularObjetivo, limitesDasFases, execucaoDoPlano, cenariosDoObjetivo, verificarObjetivo } from "./planejamento.js";
 import { dietaDoObjetivo } from "./macros.js";
+import { resumoCardapio, cardioDaSemana } from "./cardapio.js";
+import { REFEICOES } from "../geburah/constants.js";
+import { D_AL } from "../geburah/foodLibrary.js";
 
 function readJSON(key, fallback) {
   try {
@@ -451,9 +454,9 @@ function resumoObjetivoSaude(o, perfil) {
     // Registros × plano (pesagens, treinos, diário, tarefas, consistência) — calculado em código.
     verificacao: verificarObjetivo(o, {
       pesagens: readJSON("lifetree_geb_pesagens", []), logTreino: readJSON("lifetree_geb_logTreino", []),
-      logDieta: readJSON("lifetree_geb_logDieta", []), alimentos: readJSON("lifetree_geb_alimentos", []),
+      logDieta: readJSON("lifetree_geb_logDieta", []), alimentos: readJSON("lifetree_geb_alimentos", D_AL),
       metas: readJSON("lifetree_geb_metas", {}), agua: readJSON("lifetree_geb_agua", {}), rotinasTreino: readJSON("lifetree_geb_rotinasTreino", []),
-      perfil, pesosMeta: readJSON("lifetree_geb_pesosMeta", {}) }),
+      perfil, pesosMeta: readJSON("lifetree_geb_pesosMeta", {}), logCardio: readJSON("lifetree_geb_logCardio", []) }),
     rotina: o.plano?.rotina || (o.plano?.habitoSugerido ? [o.plano.habitoSugerido] : []),
     impactoPositivo: o.plano?.impactoPositivo || [], impactoNegativo: o.plano?.impactoNegativo || [],
   };
@@ -463,7 +466,7 @@ export function buildGeburahContext() {
   const pesosMeta = readJSON("lifetree_geb_pesosMeta", {});
   const pesagens = readJSON("lifetree_geb_pesagens", []);
   const logDieta = readJSON("lifetree_geb_logDieta", []);
-  const alimentos = readJSON("lifetree_geb_alimentos", []);
+  const alimentos = readJSON("lifetree_geb_alimentos", D_AL);
   const metas = readJSON("lifetree_geb_metas", {});
   const agua = readJSON("lifetree_geb_agua", { meta: 0, copos: [] });
   const logTreino = readJSON("lifetree_geb_logTreino", []);
@@ -505,6 +508,11 @@ export function buildGeburahContext() {
   const emAndamento = logTreino.find(l => l.data === today && !l.horaFim);
 
   return {
+    // 16/11/2026: cardápio planejado dos próximos 7 dias × metas, e cardio registrado.
+    cardapio_proximos_7_dias: resumoCardapio(readJSON("lifetree_geb_planSem", {}), readJSON("lifetree_geb_alimentos", D_AL), readJSON("lifetree_geb_metas", {}), REFEICOES),
+    // Banco de alimentos compacto (por 100 g) — o Coach só pode planejar com nomes que existem aqui.
+    banco_alimentos_por_100g: readJSON("lifetree_geb_alimentos", D_AL).map(x => x.name + " " + Math.round(x.cal100) + "kcal " + x.prot + "p").join("; "),
+    cardio_registrado: { ...cardioDaSemana(readJSON("lifetree_geb_logCardio", [])), ultimos: readJSON("lifetree_geb_logCardio", []).slice(-5) },
     peso_hoje: pesoHoje,
     peso_meta: pesosMeta.pesoMeta ?? null,
     calorias_hoje: Math.round(calcMacro("cal100")),
@@ -964,7 +972,7 @@ REGRAS GERAIS:
       "treino", "treinar", "academia", "peso", "dieta", "caloria", "proteína", "proteina",
       "água", "agua", "exercício", "exercicio", "rotina de treino", "medida corporal", "musculação", "musculacao",
       // 08/11/2026: registros ditos de forma natural no Controle/Desejo caíam no Coach geral.
-      "pesei", "pesagem", " kg", "cardio", "cintura", "comi ", "almocei", "jantei", "refeição", "refeicao",
+      "pesei", "pesagem", " kg", "cardio", "cintura", "comi ", "almocei", "jantei", "refeição", "refeicao", "cardápio", "cardapio", "planejamento de refei", "esteira", "bike",
     ],
     actions: true,
     buildContext: () => buildGeburahContext(),
@@ -1025,6 +1033,12 @@ ROTINA DE TREINO E EXERCÍCIO (grupos musculares válidos: Peito, Costas, Ombros
 OBJETIVO COM PLANO
 26. {"action":"create_objective","titulo":"nome curto","descricao":"resultado e data, uma linha","prazo":"YYYY-MM-DD","xp":100,"plano":{"steps":[{"periodo":"06/11 a 30/11/2026","titulo":"Adaptação","semana":{"treinos_semana":3,"cardio_min_semana":60,"divisao":"ABC"},"tarefas":[{"texto":"Pesar e medir a cintura","ate":"2026-11-08"},{"texto":"Fixar 3 horários de treino na agenda","ate":"2026-11-08"}],"revisao":"Se o peso ficar mais de 1 kg acima do marco, ajustar o ritmo da dieta"},{"periodo":"01/12 a 31/01/2027","titulo":"Progressão", ...}],"rotina":["Treinar conforme o programa da semana","Registrar a alimentação todo dia","Pesar todo dia em jejum (o app usa a média de 7 dias)"],"impactoPositivo":["...","..."],"impactoNegativo":["...","..."]},"resultados":{"treino_pct":85,"dieta_pct":85,"gordura_pct":null},"dieta":{"peso_kg":87,"altura_cm":164,"idade":35,"sexo":"M"|"F","peso_meta_kg":75,"duracao_treino_min":60}}
    "dieta" e "resultados" são opcionais. A meta de treino vai em "semana" DENTRO de cada fase (não mande bloco "treino" separado). "dieta": inclua quando o objetivo envolver peso, gordura ou massa muscular (os treinos por semana da dieta vêm da fase atual).
+
+CARDÁPIO E CARDIO (16/11/2026)
+29. {"action":"plan_meal","semana":true|"datas":["AAAA-MM-DD"]|"data":"AAAA-MM-DD","refeicoes":{"Café da manhã":[{"alimento":"nome exato do banco","qtd":80}],"Almoço":[...]},"modo":"substituir"|"adicionar"} — monta o planejamento semanal (aba Planejamento). Refeições válidas: Café da manhã, Lanche, Almoço, Lanche tarde, Jantar, Ceia. Também: {"action":"plan_meal","copiar_de":"AAAA-MM-DD","semana":true} copia um dia inteiro.
+   Monte o cardápio para bater as METAS DE HOJE do resumo (calorias ±10% e proteína ≥ 90%): some você mesmo por "banco_alimentos_por_100g" antes de propor, e depois confira "cardapio_proximos_7_dias" (calculado pelo app). Use só alimentos que existem no banco; se faltar algum, cadastre antes com create_food (uma ação por vez) ou troque por um equivalente.
+30. {"action":"clear_meal_plan","semana":true|"data":"AAAA-MM-DD","refeicao":"Almoço"?} — limpa o planejamento.
+31. {"action":"register_cardio","min":45,"tipo":"Esteira|Bike|Caminhada|Elíptico|Escada|Corrida|Natação|Outro","data":"AAAA-MM-DD"?} — registra cardio. 32. {"action":"delete_cardio","id":"..."} ou {"data","tipo"} — apaga.
 
 AVALIAR / VERIFICAR O PLANO (quando o usuário pedir "avalia", "verifica", "como estou", "está funcionando?")
 - Use SÓ os números do resumo: "verificacao" (pesagens, treinos, dieta, tarefas, alertas — calculados pelo app), "dieta", "etapas", "opcoes_de_ritmo". Nunca calcule nem estime à mão.

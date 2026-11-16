@@ -7,6 +7,7 @@ import { useState, useRef, useEffect, useContext } from "react";
 import { useGeburah } from "./context.js";
 import { ThemeCtx, ACCENT, AMBER, GREEN, Sheet, FI, FTA, FS, Card, Btn, Badge, Bar } from "./theme.js";
 import { Ico } from "./icons.jsx";
+import { CardioCard } from "./CardioCard.jsx";
 import { GRUPOS, DIAS_SEMANA } from "./constants.js";
 import { uid, todayS, kcalMinExercicio, logTipoDe, logTipoUnidade, FATOR_MET_ARTE, FATOR_MET_MUSC, diaSemanaDe, fmtDDMMAA, rotuloDia } from "./helpers.js";
 
@@ -207,6 +208,7 @@ export function TreinoTab(){
   const [bibNivel,setBibNivel] = useState("Todos");
   return(
     <div style={{animation:"slideUp .3s ease"}}>
+      <CardioCard/>
       <div style={{display:"flex",gap:6,marginBottom:14}}>
         {[{id:"rotinas",l:"Rotinas"},{id:"biblioteca",l:"Exercícios"}].map(s=>(
           <button key={s.id} onClick={()=>setSv(s.id)} style={{flex:1,padding:"7px",borderRadius:8,cursor:"pointer",fontWeight:700,fontSize:11,background:sv===s.id?"linear-gradient(135deg,"+ACCENT+"dd,"+ACCENT+"88)":C.b1,border:"none",color:sv===s.id?"#fff":C.muted}}>{s.l}</button>

@@ -331,7 +331,14 @@ export function verificarObjetivo(o, d, hoje = iso(new Date())) {
   const treinos = { na_etapa_atual: nEtapa, planejados_ate_hoje_na_etapa: planejadosEtapa,
     aderencia_pct: planejadosEtapa ? Math.round((nEtapa / Math.max(planejadosEtapa, 1)) * 100) : null, ultimos_28_dias: n28,
     alvo_pct: o.krs?.treino_pct ?? null, rotinas_cadastradas: (d.rotinasTreino || []).length, tipo_de_treino: semanaAtual?.divisao || null,
-    cardio: "o app ainda não registra minutos de cardio separados" };
+    cardio: (() => { // 16/11/2026: registro de cardio na aba Treino
+      const ini7 = somaDias(hoje, -6);
+      const min7 = (d.logCardio || []).filter((c) => c?.data >= ini7 && c.data <= hoje).reduce((s, c) => s + (Number(c.min) || 0), 0);
+      return { minutos_7_dias: min7, meta_semana: semanaAtual?.cardio_min_semana ?? null,
+        pct: semanaAtual?.cardio_min_semana ? Math.round((min7 / semanaAtual.cardio_min_semana) * 100) : null };
+    })() };
+  if (treinos.cardio.pct != null && diasEntre(inicio, hoje) >= 6 && treinos.cardio.pct < 70)
+    alertas.push("Cardio nos últimos 7 dias: " + treinos.cardio.minutos_7_dias + " de " + treinos.cardio.meta_semana + " min (" + treinos.cardio.pct + "%).");
   if (semanaAtual && treinos.aderencia_pct != null && diasEtapa >= 7 && treinos.aderencia_pct < (o.krs?.treino_pct ?? 85))
     alertas.push("Treinos na etapa atual: " + nEtapa + " de ~" + planejadosEtapa + " planejados (" + treinos.aderencia_pct + "%), abaixo do alvo de " + (o.krs?.treino_pct ?? 85) + "%.");
   if (semanaAtual && (d.rotinasTreino || []).length < semanaAtual.divisao.length)
@@ -388,6 +395,7 @@ const REGRAS_AUTO = [
   { tipo: "pesagem", re: /\b(pes(ar|e|agem|agens)|registrar (o )?peso)\b/i },
   { tipo: "medidas", re: /\b(medir|medidas?|cintura)\b/i },
   { tipo: "rotinas", re: /\b(montar|criar|cadastrar)\b[^.]*\b(treinos?|rotinas?)\b/i },
+  { tipo: "cardio", re: /\b(escolher|definir|comecar|começar|fazer)\b[^.]*\bcardio\b/i },
 ];
 // Todos os tipos que a tarefa cita ("Pesagem e medidas finais" → pesagem + medidas: precisa dos dois).
 export function tiposAutomaticos(texto) { return REGRAS_AUTO.filter((r) => r.re.test(String(texto || ""))).map((r) => r.tipo); }
@@ -397,6 +405,7 @@ export function autoConcluirTarefas(objetivos, d) {
   let mudou = false;
   const pes = (d.pesagens || []).filter((p) => p?.data), med = (d.medidasCorp || []).filter((m) => m?.data);
   const nRotinas = (d.rotinasTreino || []).length;
+  const cardios = (d.logCardio || []).filter((c) => c?.data);
   const novos = (objetivos || []).map((o) => {
     const steps = o.plano?.steps || [];
     if (!steps.some((s) => s.tarefas?.length)) return o;
@@ -415,7 +424,8 @@ export function autoConcluirTarefas(objetivos, d) {
         let desde = ini;
         if (t.ate && ISO.test(t.ate)) { const j = somaDias(t.ate, -7); if (j > desde) desde = j; }
         const ok = tipos.every((tipo) => (tipo === "pesagem" ? pes.some((p) => p.data >= desde)
-          : tipo === "medidas" ? med.some((m) => m.data >= desde) : nRotinas >= precisa));
+          : tipo === "medidas" ? med.some((m) => m.data >= desde)
+          : tipo === "cardio" ? cardios.some((c) => c.data >= desde) : nRotinas >= precisa));
         if (!ok) return t;
         mudouO = true;
         return { ...t, done: true, auto: tipos[0] };
@@ -438,6 +448,7 @@ export function destinoDaTarefa(t) {
   if (tipos.includes("pesagem")) return { moduleId: "geburah", tab: "medidas", abrir: "registrarPeso", rotulo: "Registrar peso" };
   if (tipos.includes("medidas")) return { moduleId: "geburah", tab: "medidas", rotulo: "Registrar medidas" };
   if (tipos.includes("rotinas")) return { moduleId: "geburah", tab: "treino", abrir: "addRotina", rotulo: "Criar rotina" };
+  if (tipos.includes("cardio")) return { moduleId: "geburah", tab: "treino", rotulo: "Registrar cardio" };
   if (/\b(agenda|agendar|horario|fixar|consulta|medico|marcar)\b/.test(x)) {
     const d = (t.ate || iso(new Date())).replace(/-/g, ""), d2 = somaDias(t.ate || iso(new Date()), 1).replace(/-/g, "");
     return { agenda: true, rotulo: "Pôr na agenda",
